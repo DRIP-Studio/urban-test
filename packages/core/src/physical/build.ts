@@ -10,7 +10,7 @@ import { MetricCache, vehicularArms } from './topology';
 export type SurfaceKind =
   | 'carriageway' | 'bus' | 'median' | 'cycle' | 'parking' | 'sidewalk' | 'furniture' | 'green' | 'shoulder' | 'curb'
   | 'junction' | 'corner' | 'footpath'
-  | 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter';
+  | 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter' | 'area';
 
 export type MarkKind = 'lane_line' | 'edge_line' | 'center_line' | 'stop_line' | 'give_way' | 'zebra' | 'arrow' | 'ring_line';
 
@@ -23,6 +23,8 @@ export interface PhysPolygon {
   readonly holes?: readonly (readonly LngLat[])[];
   readonly roadId?: string;
   readonly nodeId?: string;
+  readonly areaId?: string;
+  readonly areaKind?: string;
   readonly state: PhysState;
   readonly material: string;
   /** Draw order inside the road stack (higher on top). */
@@ -143,6 +145,29 @@ export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalMo
 
   // 5. Pedestrian crossings: existing OSM crossings + authored junction crossings.
   addCrossings(net, opts.features ?? {}, metric, setbacks, markings, toLL);
+
+  // 6. Authored areas: public space, green infrastructure, parking bays, painted crossings.
+  for (const area of Object.values(net.areas)) {
+    if (area.state === 'removed') continue;
+    const state: PhysState = area.state === 'project' ? 'project' : 'existing';
+    if (area.kind === 'crossing') {
+      const [a, b] = area.polygon.map((q) => frame.toMetric(q) as V);
+      if (!a || !b) continue;
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      // Stripes run along traffic: build them on a short axis perpendicular to the crossing line.
+      const mid: V = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const dir: V = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+      const axis: V[] = [add(mid, mul(leftNormal(dir), -1)), add(mid, mul(leftNormal(dir), 1))];
+      zebra(axis, 1, len / 2, -len / 2, area.depthM ?? MARKING.zebraDepthM).forEach((r, i) =>
+        markings.push({ id: `ar:${area.id}:${i}`, kind: 'zebra', ring: toLL(r), areaId: area.id, state, material: 'road_marking_white', z: 10, heightM: 0 }));
+      continue;
+    }
+    const raised = area.kind === 'green' || area.kind === 'median_green' || area.kind === 'plaza' || area.kind === 'tree_pit' || area.kind === 'rain_garden';
+    surfaces.push({
+      id: `ar:${area.id}`, kind: 'area', areaKind: area.kind, areaId: area.id, ring: area.polygon, state, material: area.material,
+      z: area.kind === 'parking' ? 5 : 7, heightM: raised ? 0.15 : 0,
+    });
+  }
 
   const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   return {

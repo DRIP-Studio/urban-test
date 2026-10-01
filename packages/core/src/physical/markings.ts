@@ -86,10 +86,10 @@ export function arrowStations(laneLength: number, spacing = 45, margin = 8): num
 }
 
 /** Zebra crossing stripes across a carriageway, centred at `along` on the axis. */
-export function zebra(axis: readonly V[], along: number, left: number, right: number): V[][] {
+export function zebra(axis: readonly V[], along: number, left: number, right: number, depthM: number = MARKING.zebraDepthM): V[][] {
   const { p, t } = sampleAt(axis, along);
   const n = leftNormal(t);
-  const half = MARKING.zebraDepthM / 2;
+  const half = depthM / 2;
   const out: V[][] = [];
   const width = left - right;
   const period = MARKING.zebraStripeM + MARKING.zebraGapM;

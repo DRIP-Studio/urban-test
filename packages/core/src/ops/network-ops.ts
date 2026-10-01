@@ -1,7 +1,7 @@
 import { LocalFrame } from '../geo/projection';
 import { add, dist, lengthOf, mul, project, slice, sub, type V } from '../geo/polyline';
 import type {
-  JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, Zone,
+  Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, Zone,
 } from '../model/types';
 import { defineOperation, type Issue } from './registry';
 import { makeLanes } from './road-factory';
@@ -392,8 +392,9 @@ function validateRoundabout(net: Network, rb: Roundabout, replacing = false): Is
   if (!replacing && net.roundabouts[rb.id]) issues.push(err('rb.duplicateId', `Id già in uso: ${rb.id}`));
   if (!rb.replacedNodeId || (!replacing && !net.nodes[rb.replacedNodeId])) issues.push(err('rb.node', 'La rotatoria si inserisce su un incrocio esistente'));
   const D = rb.outerDiameterM;
-  const min = rb.type === 'mini' ? 13 : rb.type === 'compact' ? 25 : 26;
-  const max = rb.type === 'mini' ? 25 : 70;
+  // DM 19/04/2006: mini 14–25 m, compatta 25–40 m, convenzionale > 40 m.
+  const min = rb.type === 'mini' ? 14 : rb.type === 'compact' ? 25 : 40;
+  const max = rb.type === 'mini' ? 25 : rb.type === 'compact' ? 40 : 70;
   if (D < min || D > max) issues.push(err('rb.diameter', `Diametro esterno ${D} m fuori intervallo per il tipo (${min}–${max} m, DM 19/04/2006)`));
   if (rb.circulatoryWidthM < 6 || rb.circulatoryWidthM > 12) issues.push(err('rb.width', 'Larghezza anello 6–12 m'));
   if (rb.circulatoryWidthM + rb.apronWidthM >= D / 2 - 0.5 && rb.type !== 'mini') issues.push(err('rb.island', 'Isola centrale troppo piccola per anello e fascia sormontabile'));
@@ -430,3 +431,35 @@ export const roundaboutRemove = defineOperation<{ readonly roundaboutId: string 
   apply: (net, p) => extractRoundabout(net, p.roundaboutId),
 });
 
+
+// ---------------------------------------------------------------- areas
+
+export const areaSet = defineOperation<{ readonly area: Area }>({
+  type: 'area.set',
+  label: (p) => `${p.area.name ?? p.area.kind}`,
+  validate(_net, p) {
+    const min = p.area.kind === 'crossing' ? 2 : 3;
+    if (p.area.polygon.length < min || !p.area.polygon.every(okLL)) return [err('area.polygon', `Geometria non valida (minimo ${min} vertici)`)];
+    if (p.area.kind === 'crossing' && !(p.area.depthM && p.area.depthM >= 2 && p.area.depthM <= 8)) return [err('area.depth', 'Profondità attraversamento 2–8 m')];
+    return [];
+  },
+  apply: (net, p) => ({ ...net, areas: { ...net.areas, [p.area.id]: p.area } }),
+});
+
+export const areaRemove = defineOperation<{ readonly areaIds: readonly string[] }>({
+  type: 'area.remove',
+  label: (p) => (p.areaIds.length === 1 ? 'Elimina superficie' : `Elimina ${p.areaIds.length} superfici`),
+  validate(net, p) {
+    const missing = p.areaIds.filter((id) => !net.areas[id]);
+    return missing.length ? [err('area.missing', `Superfici inesistenti: ${missing.join(', ')}`)] : [];
+  },
+  apply(net, p) {
+    const areas = { ...net.areas };
+    for (const id of p.areaIds) {
+      const a = areas[id]!;
+      if (a.state === 'existing') areas[id] = { ...a, state: 'removed' };
+      else delete areas[id];
+    }
+    return { ...net, areas };
+  },
+});

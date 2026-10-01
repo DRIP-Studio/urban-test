@@ -277,6 +277,25 @@ export interface Zone {
   readonly speedKmh?: number;
 }
 
+export type AreaKind =
+  | 'plaza' | 'green' | 'tree_pit' | 'rain_garden' | 'bioswale' | 'permeable' | 'parking' | 'median_green'
+  | 'crossing' | 'hatch' | 'playground' | 'building_footprint';
+
+/** Authored surface: public space, green infrastructure, parking bay, painted crossing… */
+export interface Area {
+  readonly id: string;
+  readonly kind: AreaKind;
+  readonly name?: string;
+  /** Closed ring (first point not repeated). For 'crossing': the two-point line across the road. */
+  readonly polygon: readonly LngLat[];
+  readonly material: string;
+  readonly state: AssetState;
+  /** crossing: depth of the stripes along traffic, metres. */
+  readonly depthM?: number;
+  readonly properties: Readonly<Record<string, unknown>>;
+  readonly provenance: Provenance;
+}
+
 /** The editable, derived state of one scenario: baseline + operations replayed. */
 export interface Network {
   readonly nodes: Readonly<Record<string, RoadNode>>;
@@ -286,4 +305,5 @@ export interface Network {
   readonly roundabouts: Readonly<Record<string, Roundabout>>;
   readonly signalPlans: Readonly<Record<string, SignalPlan>>;
   readonly zones: Readonly<Record<string, Zone>>;
+  readonly areas: Readonly<Record<string, Area>>;
 }
