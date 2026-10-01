@@ -192,9 +192,98 @@ export interface ProjectMeta {
   readonly activeScenarioId: string;
 }
 
+export type JunctionControl = 'uncontrolled' | 'priority' | 'stop' | 'signal' | 'roundabout';
+
+/** Authored properties of a junction (a node with ≥ 3 road ends). Absent = defaults. */
+export interface JunctionSpec {
+  readonly nodeId: string;
+  readonly control: JunctionControl;
+  /** Kerb radius used for the corner fillets, metres. */
+  readonly cornerRadiusM: number;
+  /** Approaches (road ids) that must yield when control is 'priority' or 'stop'. */
+  readonly minorRoadIds: readonly string[];
+  /** Pedestrian crossings on these approaches (road ids). */
+  readonly crossingRoadIds: readonly string[];
+  /** Manual lane connection overrides: "fromLaneId>toLaneId" → allowed. */
+  readonly laneConnections?: Readonly<Record<string, boolean>>;
+}
+
+export type RoundaboutType = 'mini' | 'compact' | 'standard' | 'elliptical' | 'turbo';
+
+export interface RoundaboutArmSpec {
+  readonly roadId: string;
+  readonly entryRadiusM: number;
+  readonly exitRadiusM: number;
+  readonly splitter: boolean;
+  readonly splitterLengthM: number;
+  readonly splitterWidthM: number;
+  readonly crossing: boolean;
+}
+
+export interface Roundabout {
+  readonly id: string;
+  readonly name: string;
+  readonly type: RoundaboutType;
+  readonly center: LngLat;
+  /** Node ids of the original junction replaced by this roundabout. */
+  readonly replacedNodeId?: string;
+  readonly outerDiameterM: number;
+  /** Elliptical only: minor/major ratio (0.5–1). */
+  readonly aspect: number;
+  readonly orientationDeg: number;
+  readonly circulatoryWidthM: number;
+  readonly lanes: 1 | 2;
+  readonly apronWidthM: number;
+  readonly islandMaterial: string;
+  readonly control: 'yield' | 'signalized' | 'metered' | 'part_time';
+  readonly speedKmh: number;
+  readonly arms: readonly RoundaboutArmSpec[];
+}
+
+export interface SignalPhase {
+  readonly id: string;
+  readonly name: string;
+  /** Lane group ids that are green in this phase. */
+  readonly greenGroups: readonly string[];
+  readonly greenS: number;
+  readonly yellowS: number;
+  readonly allRedS: number;
+  /** Pedestrian crossings (road ids) with walk signal in this phase. */
+  readonly pedestrianRoadIds: readonly string[];
+}
+
+export interface SignalPlan {
+  readonly id: string;
+  readonly nodeId: string;
+  readonly name: string;
+  readonly mode: 'fixed_time' | 'actuated' | 'adaptive' | 'green_wave';
+  readonly cycleS: number;
+  readonly offsetS: number;
+  readonly phases: readonly SignalPhase[];
+  readonly actuation?: { readonly minGreenS: number; readonly maxGreenS: number; readonly gapOutS: number; readonly extensionS: number };
+}
+
+export type ZoneKind = 'ztl' | 'pedestrian' | 'school' | 'zone30' | 'low_emission' | 'parking' | 'work';
+
+export interface Zone {
+  readonly id: string;
+  readonly kind: ZoneKind;
+  readonly name: string;
+  readonly polygon: readonly LngLat[];
+  /** Vehicle classes allowed inside (ZTL / pedestrian). */
+  readonly allowedModes: readonly TravelMode[];
+  /** Weekly schedule; absent = always active. Hours are local (Europe/Rome). */
+  readonly schedule?: readonly { readonly days: readonly number[]; readonly from: string; readonly to: string }[];
+  readonly speedKmh?: number;
+}
+
 /** The editable, derived state of one scenario: baseline + operations replayed. */
 export interface Network {
   readonly nodes: Readonly<Record<string, RoadNode>>;
   readonly roads: Readonly<Record<string, Road>>;
   readonly assets: Readonly<Record<string, Asset>>;
+  readonly junctions: Readonly<Record<string, JunctionSpec>>;
+  readonly roundabouts: Readonly<Record<string, Roundabout>>;
+  readonly signalPlans: Readonly<Record<string, SignalPlan>>;
+  readonly zones: Readonly<Record<string, Zone>>;
 }

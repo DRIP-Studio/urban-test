@@ -1,6 +1,11 @@
 export * from './model/types';
 export * from './geo/projection';
+export * as geom from './geo/polyline';
 export * from './ops/registry';
 export * from './ops/replay';
 export * from './ops/builtin';
+export * from './ops/network-ops';
+export * from './ops/road-factory';
 export * from './history/scenario-history';
+export * from './physical/section';
+export * from './physical/build';

@@ -1,0 +1,265 @@
+import { LocalFrame } from '../geo/projection';
+import { add, band, leftNormal, lengthOf, mul, offset, project, sampleAt, slice, type V } from '../geo/polyline';
+import type { CityFeature, JunctionSpec, LngLat, Network, ProvenanceKind, Road } from '../model/types';
+import { armKey, buildJunction, type JunctionGeometry } from './junction';
+import { arrowRing, arrowStations, dashFor, dashes, hasEdgeLines, MARKING, solid, zebra } from './markings';
+import { buildRoundabouts } from './roundabout';
+import { layoutSection } from './section';
+import { MetricCache, vehicularArms } from './topology';
+
+export type SurfaceKind =
+  | 'carriageway' | 'bus' | 'median' | 'cycle' | 'parking' | 'sidewalk' | 'furniture' | 'green' | 'shoulder' | 'curb'
+  | 'junction' | 'corner' | 'footpath'
+  | 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter';
+
+export type MarkKind = 'lane_line' | 'edge_line' | 'center_line' | 'stop_line' | 'give_way' | 'zebra' | 'arrow' | 'ring_line';
+
+export type PhysState = 'existing' | 'project';
+
+export interface PhysPolygon {
+  readonly id: string;
+  readonly kind: SurfaceKind | MarkKind;
+  readonly ring: readonly LngLat[];
+  readonly holes?: readonly (readonly LngLat[])[];
+  readonly roadId?: string;
+  readonly nodeId?: string;
+  readonly state: PhysState;
+  readonly material: string;
+  /** Draw order inside the road stack (higher on top). */
+  readonly z: number;
+  /** Physical height above the road surface, metres (kerbs, islands) — used by the Twin. */
+  readonly heightM: number;
+}
+
+export interface PhysLine {
+  readonly id: string;
+  readonly kind: 'kerb' | 'axis';
+  readonly line: readonly LngLat[];
+  readonly roadId?: string;
+  readonly nodeId?: string;
+  readonly state: PhysState;
+}
+
+export interface PhysicalModel {
+  readonly surfaces: PhysPolygon[];
+  readonly markings: PhysPolygon[];
+  readonly lines: PhysLine[];
+  readonly stats: { roads: number; junctions: number; roundabouts: number; markings: number; ms: number };
+}
+
+const DEFAULT_MATERIAL: Record<string, string> = {
+  carriageway: 'asphalt', junction: 'asphalt', bus: 'asphalt_red', median: 'concrete', cycle: 'cycle_pavement',
+  parking: 'asphalt', sidewalk: 'concrete_pavers', corner: 'concrete_pavers', furniture: 'stone', green: 'grass',
+  shoulder: 'asphalt', curb: 'granite', footpath: 'concrete_pavers', roundabout_ring: 'asphalt',
+  roundabout_island: 'grass', roundabout_apron: 'porphyry', splitter: 'granite',
+};
+const Z: Record<string, number> = {
+  footpath: 0, sidewalk: 1, corner: 1, furniture: 1, green: 1, curb: 1, shoulder: 2, parking: 2, cycle: 3,
+  carriageway: 4, bus: 5, median: 6, junction: 4, roundabout_ring: 4, roundabout_apron: 5, roundabout_island: 6, splitter: 6,
+};
+const HEIGHT: Record<string, number> = { sidewalk: 0.15, corner: 0.15, furniture: 0.15, green: 0.15, median: 0.15, curb: 0.15, roundabout_island: 0.2, roundabout_apron: 0.05, splitter: 0.15 };
+
+const PROJECT: ProvenanceKind = 'project';
+export function roadState(road: Road): PhysState {
+  return Object.values(road.provenance).some((p) => p.kind === PROJECT) ? 'project' : 'existing';
+}
+
+export interface BuildOptions {
+  readonly origin: LngLat;
+  /** Baseline context: existing crossings from OSM etc. */
+  readonly features?: Readonly<Record<string, CityFeature>>;
+  readonly defaultCornerRadiusM?: number;
+}
+
+export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalModel {
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const frame = new LocalFrame(opts.origin);
+  const metric = new MetricCache(frame);
+  const toLL = (ring: readonly V[]): LngLat[] => ring.map((p) => frame.toLngLat(p));
+  const surfaces: PhysPolygon[] = [];
+  const markings: PhysPolygon[] = [];
+  const lines: PhysLine[] = [];
+
+  // 1. Roundabouts own their nodes: arms meeting a ring are shaped there.
+  const rb = buildRoundabouts(net, metric);
+  for (const p of rb.polygons) surfaces.push({ ...p, ring: toLL(p.ring), ...(p.holes ? { holes: p.holes.map(toLL) } : {}) });
+  for (const p of rb.markings) markings.push({ ...p, ring: toLL(p.ring) });
+
+  // 2. Junctions at every node with ≥ 2 vehicular arms (not owned by a roundabout).
+  const setbacks = new Map<string, number>(rb.setbacks);
+  const junctionGeom = new Map<string, JunctionGeometry>();
+  const roadIdsAtNodes = new Set<string>();
+  for (const road of Object.values(net.roads)) { roadIdsAtNodes.add(road.from); roadIdsAtNodes.add(road.to); }
+  for (const nodeId of roadIdsAtNodes) {
+    if (rb.ownedNodes.has(nodeId)) continue;
+    const node = net.nodes[nodeId];
+    if (!node) continue;
+    const arms = vehicularArms(net, nodeId, metric);
+    if (arms.length < 2) continue;
+    const spec = net.junctions[nodeId];
+    const g = buildJunction(nodeId, frame.toMetric(node.at) as V, arms, spec?.cornerRadiusM ?? opts.defaultCornerRadiusM ?? 4);
+    if (!g) continue;
+    junctionGeom.set(nodeId, g);
+    for (const [k, v] of g.setbacks) setbacks.set(k, v);
+    const state: PhysState = spec || arms.some((a) => roadState(a.road) === 'project') ? 'project' : 'existing';
+    if (arms.length >= 2) {
+      surfaces.push({ id: `j:${nodeId}`, kind: 'junction', ring: toLL(g.surface), nodeId, state, material: 'asphalt', z: Z.junction!, heightM: 0 });
+    }
+    g.corners.forEach((c, i) => surfaces.push({ id: `jc:${nodeId}:${i}`, kind: 'corner', ring: toLL(c), nodeId, state, material: DEFAULT_MATERIAL.corner!, z: Z.corner!, heightM: HEIGHT.corner! }));
+    g.kerbs.forEach((k, i) => lines.push({ id: `jk:${nodeId}:${i}`, kind: 'kerb', line: toLL(k), nodeId, state }));
+  }
+
+  // 3. Road strips, trimmed at both ends by the junction setbacks.
+  for (const road of Object.values(net.roads)) {
+    if (rb.ringRoadIds.has(road.id)) continue;
+    const axis = metric.axis(road);
+    const L = lengthOf(axis);
+    const s0 = setbacks.get(`${road.id}|s`) ?? 0;
+    const s1 = setbacks.get(`${road.id}|e`) ?? 0;
+    if (L - s0 - s1 < 0.3) continue;
+    const trimmed = slice(axis, s0, L - s1);
+    if (trimmed.length < 2) continue;
+    const layout = layoutSection(road);
+    const state = roadState(road);
+    for (const pe of layout.elements) {
+      const kind: SurfaceKind = layout.pedestrianOnly ? 'footpath' : pe.el.kind === 'lane' ? 'carriageway' : (pe.el.kind as SurfaceKind);
+      surfaces.push({
+        id: `s:${pe.el.id}`, kind, ring: toLL(band(trimmed, pe.left, pe.right)), roadId: road.id, state,
+        material: pe.el.material ?? DEFAULT_MATERIAL[kind] ?? 'asphalt', z: Z[kind] ?? 4, heightM: HEIGHT[kind] ?? 0,
+      });
+    }
+    if (layout.pedestrianOnly) continue;
+    lines.push({ id: `k:${road.id}:l`, kind: 'kerb', line: toLL(offset(trimmed, layout.cwLeft)), roadId: road.id, state });
+    lines.push({ id: `k:${road.id}:r`, kind: 'kerb', line: toLL(offset(trimmed, layout.cwRight)), roadId: road.id, state });
+    addRoadMarkings(road, trimmed, layout, state, markings, toLL);
+  }
+
+  // 4. Junction approach control lines (only where the junction has an explicit control).
+  for (const [nodeId, g] of junctionGeom) {
+    const spec = net.junctions[nodeId];
+    if (!spec || spec.control === 'uncontrolled' || spec.control === 'roundabout') continue;
+    addApproachLines(net, nodeId, spec, metric, setbacks, markings, toLL);
+  }
+
+  // 5. Pedestrian crossings: existing OSM crossings + authored junction crossings.
+  addCrossings(net, opts.features ?? {}, metric, setbacks, markings, toLL);
+
+  const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  return {
+    surfaces, markings, lines,
+    stats: { roads: Object.keys(net.roads).length, junctions: junctionGeom.size, roundabouts: Object.keys(net.roundabouts).length, markings: markings.length, ms: Math.round(t1 - t0) },
+  };
+}
+
+function addRoadMarkings(
+  road: Road, axis: readonly V[], layout: ReturnType<typeof layoutSection>, state: PhysState,
+  out: PhysPolygon[], toLL: (r: readonly V[]) => LngLat[],
+): void {
+  const lanes = layout.elements.filter((e) => e.el.kind === 'lane' || e.el.kind === 'bus');
+  const laneById = new Map(road.lanes.map((l) => [l.id, l]));
+  const dash = dashFor(road);
+  let k = 0;
+  const push = (kind: PhysPolygon['kind'], ring: V[]) =>
+    out.push({ id: `m:${road.id}:${k++}`, kind, ring: toLL(ring), roadId: road.id, state, material: 'road_marking_white', z: 10, heightM: 0 });
+
+  // Lines between adjacent lanes.
+  for (let i = 1; i < lanes.length; i++) {
+    const a = lanes[i - 1]!, b = lanes[i]!;
+    const off = a.right;
+    const line = offset(axis, off);
+    const da = laneById.get(a.el.laneId ?? '')?.direction, db = laneById.get(b.el.laneId ?? '')?.direction;
+    const opposite = da && db && da !== db;
+    if (a.el.kind === 'bus' || b.el.kind === 'bus') {
+      push('lane_line', solid(line, 0.3));
+    } else {
+      for (const r of dashes(line, dash)) push(opposite ? 'center_line' : 'lane_line', r);
+    }
+  }
+  if (hasEdgeLines(road) && lanes.length) {
+    push('edge_line', solid(offset(axis, layout.cwLeft - 0.25), MARKING.edgeWidthM));
+    push('edge_line', solid(offset(axis, layout.cwRight + 0.25), MARKING.edgeWidthM));
+  }
+  // Direction arrows on one-way roads (every lane), always derived from the lane model.
+  if (road.oneway !== 'no') {
+    const L = lengthOf(axis);
+    for (const pe of lanes) {
+      const lane = laneById.get(pe.el.laneId ?? '');
+      if (!lane) continue;
+      const centre = (pe.left + pe.right) / 2;
+      const forward = lane.direction !== 'backward';
+      for (const st of arrowStations(L)) {
+        const d = forward ? st : L - st;
+        const { p, t } = sampleAt(axis, d);
+        const tail = add(p, mul(leftNormal(t), centre));
+        push('arrow', arrowRing(tail, forward ? t : mul(t, -1)));
+      }
+    }
+  }
+}
+
+function addApproachLines(
+  net: Network, nodeId: string, spec: JunctionSpec, metric: MetricCache,
+  setbacks: Map<string, number>, out: PhysPolygon[], toLL: (r: readonly V[]) => LngLat[],
+): void {
+  for (const arm of vehicularArms(net, nodeId, metric)) {
+    const minor = spec.minorRoadIds.includes(arm.road.id);
+    const kind = spec.control === 'signal' ? 'stop_line' : spec.control === 'stop' && minor ? 'stop_line' : spec.control === 'priority' && minor ? 'give_way' : null;
+    if (!kind) continue;
+    const S = (setbacks.get(armKey(arm)) ?? 0) + (spec.crossingRoadIds.includes(arm.road.id) ? MARKING.zebraDepthM + 1.5 : 0.5);
+    // Inbound half of the carriageway: in the arm frame, traffic towards the node drives on the arm's left.
+    const layout = layoutSection(arm.road);
+    const inbound = arm.road.lanes.filter((l) => (arm.atStart ? l.direction === 'backward' : l.direction !== 'backward'));
+    if (!inbound.length) continue;
+    const els = layout.elements.filter((e) => inbound.some((l) => l.id === e.el.laneId));
+    const offs = els.flatMap((e) => (arm.atStart ? [e.left, e.right] : [-e.left, -e.right]));
+    const lo = Math.min(...offs), hi = Math.max(...offs);
+    const { p, t } = sampleAt(arm.axis, S);
+    const n = leftNormal(t);
+    const line = [add(p, mul(n, lo)), add(p, mul(n, hi))];
+    const rings = kind === 'stop_line' ? [solid(line, MARKING.stopWidthM)] : dashes(line, MARKING.giveWayDash);
+    rings.forEach((r, i) => out.push({ id: `a:${nodeId}:${arm.road.id}:${i}`, kind, ring: toLL(r), nodeId, roadId: arm.road.id, state: 'project', material: 'road_marking_white', z: 10, heightM: 0 }));
+  }
+}
+
+function addCrossings(
+  net: Network, features: Readonly<Record<string, CityFeature>>, metric: MetricCache,
+  setbacks: Map<string, number>, out: PhysPolygon[], toLL: (r: readonly V[]) => LngLat[],
+): void {
+  const roads = Object.values(net.roads).filter((r) => !layoutSection(r).pedestrianOnly);
+  // Authored junction crossings.
+  for (const spec of Object.values(net.junctions)) {
+    for (const rid of spec.crossingRoadIds) {
+      const road = net.roads[rid];
+      if (!road) continue;
+      const atStart = road.from === spec.nodeId;
+      const axis = metric.axis(road);
+      const L = lengthOf(axis);
+      const S = setbacks.get(`${rid}|${atStart ? 's' : 'e'}`) ?? 0;
+      const along = atStart ? S + MARKING.zebraDepthM / 2 + 0.5 : L - S - MARKING.zebraDepthM / 2 - 0.5;
+      const lay = layoutSection(road);
+      zebra(axis, along, lay.cwLeft, lay.cwRight).forEach((r, i) =>
+        out.push({ id: `z:${spec.nodeId}:${rid}:${i}`, kind: 'zebra', ring: toLL(r), roadId: rid, nodeId: spec.nodeId, state: 'project', material: 'road_marking_white', z: 10, heightM: 0 }));
+    }
+  }
+  // Existing crossings from OSM, snapped to the nearest carriageway within 6 m.
+  for (const f of Object.values(features)) {
+    if (f.kind !== 'crossing' || f.geometry !== 'point') continue;
+    const p = metric.frame.toMetric(f.coords[0]!) as V;
+    let best: { road: Road; along: number; d: number } | null = null;
+    for (const road of roads) {
+      const axis = metric.axis(road);
+      const pr = project(axis, p);
+      if (pr.d < 6 && (!best || pr.d < best.d)) best = { road, along: pr.along, d: pr.d };
+    }
+    if (!best) continue;
+    const axis = metric.axis(best.road);
+    const L = lengthOf(axis);
+    const s0 = setbacks.get(`${best.road.id}|s`) ?? 0, s1 = setbacks.get(`${best.road.id}|e`) ?? 0;
+    const half = MARKING.zebraDepthM / 2 + 0.3;
+    const along = Math.min(Math.max(best.along, s0 + half), L - s1 - half);
+    if (L - s0 - s1 < MARKING.zebraDepthM + 0.6) continue;
+    const lay = layoutSection(best.road);
+    zebra(axis, along, lay.cwLeft, lay.cwRight).forEach((r, i) =>
+      out.push({ id: `z:${f.id}:${i}`, kind: 'zebra', ring: toLL(r), roadId: best!.road.id, state: 'existing', material: 'road_marking_white', z: 10, heightM: 0 }));
+  }
+}

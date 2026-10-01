@@ -2,7 +2,7 @@ import type { CityBaseline, Network, Operation } from '../model/types';
 import { applyOperation, type Issue } from './registry';
 
 export function baselineNetwork(baseline: CityBaseline): Network {
-  return { nodes: baseline.nodes, roads: baseline.roads, assets: baseline.assets };
+  return { nodes: baseline.nodes, roads: baseline.roads, assets: baseline.assets, junctions: {}, roundabouts: {}, signalPlans: {}, zones: {} };
 }
 
 export interface ReplayResult {
