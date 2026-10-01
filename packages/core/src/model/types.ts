@@ -1,0 +1,200 @@
+/**
+ * Canonical DRIP Urban domain model.
+ *
+ * Only Baseline + Scenario operations are persisted. The effective network,
+ * the physical model and every view are derived from them.
+ *
+ * Coordinate spaces are explicit:
+ *  - LngLat: WGS84 degrees [lon, lat] — the only space stored on disk.
+ *  - Local metres (east, north) relative to a project origin — see geo/projection.
+ *  - Screen pixels — owned exclusively by the map adapters, never stored.
+ */
+
+export type LngLat = readonly [lon: number, lat: number];
+
+export type ProvenanceKind =
+  | 'existing'   // surveyed / official record of the current state
+  | 'osm'        // OpenStreetMap contributors
+  | 'measured'   // sensor or field measurement
+  | 'derived'    // computed from other sourced values (e.g. width from lanes)
+  | 'estimated'  // model estimate, explicitly not measured
+  | 'project'    // authored by a designer in a scenario
+  | 'simulated'  // output of a simulation run
+  | 'live';      // real-time provider feed
+
+export interface Provenance {
+  readonly kind: ProvenanceKind;
+  /** Human-readable source, e.g. "OpenStreetMap contributors (ODbL)". */
+  readonly source: string;
+  readonly acquiredAt?: string;
+  readonly url?: string;
+  readonly uncertaintyM?: number;
+}
+
+export type TravelMode = 'car' | 'truck' | 'bus' | 'bike' | 'walk' | 'emergency' | 'tram';
+
+export type TurnKind = 'left' | 'through' | 'right' | 'uturn';
+
+export type LaneDirection = 'forward' | 'backward' | 'reversible';
+
+export interface Lane {
+  readonly id: string;
+  /** 0 = rightmost lane in the forward direction of the axis. */
+  readonly index: number;
+  readonly direction: LaneDirection;
+  readonly widthM: number;
+  readonly modes: readonly TravelMode[];
+  readonly turns: readonly TurnKind[];
+  readonly speedKmh?: number;
+  readonly priority?: 'normal' | 'transit' | 'emergency';
+  readonly restriction?: 'none' | 'bus_only' | 'bike_only' | 'closed';
+}
+
+export type CrossSectionElementKind =
+  | 'sidewalk' | 'furniture' | 'parking' | 'cycle' | 'bus' | 'lane'
+  | 'median' | 'green' | 'shoulder' | 'curb';
+
+export interface CrossSectionElement {
+  readonly id: string;
+  readonly kind: CrossSectionElementKind;
+  readonly widthM: number;
+  /** For 'lane' elements: the lane id in Road.lanes. */
+  readonly laneId?: string;
+  readonly material?: string;
+}
+
+/** Ordered left → right looking along the axis direction. */
+export interface CrossSection {
+  readonly elements: readonly CrossSectionElement[];
+}
+
+export type Oneway = 'no' | 'forward' | 'backward';
+
+export interface RoadNode {
+  readonly id: string;
+  readonly at: LngLat;
+}
+
+export interface Road {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
+  readonly name: string;
+  readonly roadClass: string;
+  /** Axis polyline, ≥ 2 points, first = node `from`, last = node `to`. */
+  readonly axis: readonly LngLat[];
+  readonly oneway: Oneway;
+  readonly speedKmh: number;
+  readonly lanes: readonly Lane[];
+  readonly section: CrossSection;
+  readonly surface?: string;
+  /** Provenance per attribute name; `geometry` and `width` are always present. */
+  readonly provenance: Readonly<Record<string, Provenance>>;
+  readonly tags?: Readonly<Record<string, string>>;
+}
+
+export interface Building {
+  readonly id: string;
+  readonly footprint: readonly LngLat[];
+  readonly heightM: number;
+  readonly minHeightM: number;
+  readonly name?: string;
+  readonly provenance: Provenance;
+}
+
+export interface CityFeature {
+  readonly id: string;
+  readonly kind: string;
+  readonly category?: string;
+  readonly geometry: 'point' | 'line' | 'polygon';
+  readonly coords: readonly LngLat[];
+  readonly name?: string;
+  readonly properties: Readonly<Record<string, unknown>>;
+  readonly provenance: Provenance;
+}
+
+export type AssetState = 'existing' | 'project' | 'removed';
+
+/** Anything placed in the city: sign pole, signal head, tree, bench, shelter… */
+export interface Asset {
+  readonly id: string;
+  /** Catalogue id (packages/assets), e.g. "it.sign.II.36" or "furniture.bench.linear". */
+  readonly type: string;
+  readonly at: LngLat;
+  readonly elevationM?: number;
+  /** Degrees clockwise from north. */
+  readonly rotationDeg: number;
+  readonly state: AssetState;
+  readonly material?: string;
+  readonly attachedTo?: { readonly kind: 'road' | 'curb' | 'pole' | 'junction'; readonly id: string };
+  readonly properties: Readonly<Record<string, unknown>>;
+  readonly provenance: Provenance;
+}
+
+export interface CityBaseline {
+  readonly id: string;
+  readonly name: string;
+  /** [west, south, east, north] */
+  readonly bbox: readonly [number, number, number, number];
+  readonly origin: LngLat;
+  readonly nodes: Readonly<Record<string, RoadNode>>;
+  readonly roads: Readonly<Record<string, Road>>;
+  readonly buildings: Readonly<Record<string, Building>>;
+  readonly features: Readonly<Record<string, CityFeature>>;
+  readonly assets: Readonly<Record<string, Asset>>;
+  readonly sources: readonly Provenance[];
+}
+
+/** One authored change. Scenarios are ordered lists of these. */
+export interface Operation<P = unknown> {
+  readonly id: string;
+  readonly type: string;
+  readonly payload: P;
+  readonly author: string;
+  /** ISO timestamp. */
+  readonly at: string;
+}
+
+export interface Scenario {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  /** Baseline scenario is the unmodified city: it never holds operations. */
+  readonly isBaseline: boolean;
+  readonly locked: boolean;
+  readonly archived: boolean;
+  readonly createdAt: string;
+  readonly operations: readonly Operation[];
+}
+
+export type ProjectKind =
+  | 'municipality' | 'district' | 'neighbourhood' | 'corridor' | 'junction'
+  | 'mobility_plan' | 'regeneration' | 'transit' | 'safety_study';
+
+export type ProjectStatus = 'concept' | 'draft' | 'review' | 'final' | 'archived';
+
+export interface ProjectMeta {
+  readonly id: string;
+  readonly schemaVersion: 1;
+  readonly name: string;
+  readonly description?: string;
+  readonly city: string;
+  readonly kind: ProjectKind;
+  readonly status: ProjectStatus;
+  readonly author: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly bbox: readonly [number, number, number, number];
+  readonly crs: 'EPSG:4326';
+  readonly timezone: string;
+  readonly baselineId: string;
+  readonly scenarioIds: readonly string[];
+  readonly activeScenarioId: string;
+}
+
+/** The editable, derived state of one scenario: baseline + operations replayed. */
+export interface Network {
+  readonly nodes: Readonly<Record<string, RoadNode>>;
+  readonly roads: Readonly<Record<string, Road>>;
+  readonly assets: Readonly<Record<string, Asset>>;
+}
