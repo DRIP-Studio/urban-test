@@ -274,3 +274,43 @@ export function pedestrianState(plan: SignalPlan, roadId: string, t: number): 'g
   }
   return 'red';
 }
+
+export interface SignalHead {
+  readonly planId: string;
+  readonly nodeId: string;
+  /** Lane group id for vehicle heads, `ped:<roadId>` for pedestrian heads. */
+  readonly groupId: string;
+  readonly kind: 'vehicle' | 'arrow_left' | 'arrow_right' | 'arrow_straight' | 'pedestrian';
+  readonly at: LngLat;
+  readonly bearingDeg: number;
+}
+
+/** Physical signal heads of every plan: one per lane group at the stop line, two pedestrian heads per signalised crossing. */
+export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
+  const frame = new LocalFrame(frameOrigin);
+  const metric = new MetricCache(frame);
+  const out: SignalHead[] = [];
+  for (const plan of Object.values(net.signalPlans)) {
+    const a = analyzeJunction(net, frameOrigin, plan.nodeId);
+    if (!a) continue;
+    for (const g of a.groups) {
+      const only = g.turns.length === 1 ? g.turns[0] : null;
+      const kind = only === 'left' ? 'arrow_left' : only === 'right' ? 'arrow_right' : 'vehicle';
+      out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, kind, at: g.stopAt, bearingDeg: g.bearingDeg });
+    }
+    const pedRoads = new Set(plan.phases.flatMap((p) => p.pedestrianRoadIds));
+    if (!pedRoads.size) continue;
+    const node = net.nodes[plan.nodeId]!;
+    const arms = vehicularArms(net, plan.nodeId, metric);
+    const geo = buildJunction(plan.nodeId, frame.toMetric(node.at) as V, arms, net.junctions[plan.nodeId]?.cornerRadiusM ?? 4);
+    for (const arm of arms) {
+      if (!pedRoads.has(arm.road.id) || !geo) continue;
+      const s = (geo.setbacks.get(armKey(arm)) ?? 0) + 2.5;
+      const { p, t } = sampleAt(arm.axis, s);
+      for (const off of [arm.cwLeft + 0.6, arm.cwRight - 0.6]) {
+        out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: `ped:${arm.road.id}`, kind: 'pedestrian', at: frame.toLngLat(add(p, mul(leftNormal(t), off))), bearingDeg: 0 });
+      }
+    }
+  }
+  return out;
+}

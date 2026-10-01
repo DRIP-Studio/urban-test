@@ -1,0 +1,92 @@
+/**
+ * One icon family: 24 px optical grid, 1.6 stroke, round caps/joins, no fills.
+ * Paths are authored for DRIP Urban; add new glyphs here only.
+ */
+const P: Record<string, string> = {
+  select: 'M6 4l12 8-5.2 1.2L10.4 19z',
+  road: 'M8 21L10.5 3M16 21L13.5 3M12 5.5v2M12 11v2M12 16.5v2',
+  curve: 'M4 19c2-9 8-12 16-13M4 19l3-1M20 6l-3-1',
+  move: 'M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5',
+  node: 'M5 12h6m0 0l6-6m-6 6l6 6M5 12a1.6 1.6 0 1 0 0 .01M17 6a1.6 1.6 0 1 0 0 .01M17 18a1.6 1.6 0 1 0 0 .01',
+  cut: 'M6 6a2.5 2.5 0 1 0 0 .01M6 18a2.5 2.5 0 1 0 0 .01M8 7.5L20 18M8 16.5L20 6',
+  section: 'M3 18h18M5 18V9M19 18V9M8 18v-3h8v3M3 9h4M17 9h4',
+  junction: 'M12 3v7M12 14v7M3 12h7M14 12h7M10 10l4 4M14 10l-4 4',
+  roundabout: 'M12 7.5a4.5 4.5 0 1 1-.01 0M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21M15.5 8.5l1-2M8.5 15.5l-1 2',
+  signal: 'M9 3h6v13H9zM12 16v5M12 6.5h.01M12 9.5h.01M12 12.5h.01',
+  sign: 'M12 3l8 14H4zM12 17v4M12 9v4',
+  crossing: 'M4 6h16M4 18h16M7 8v8M11 8v8M15 8v8M19 8v8',
+  furniture: 'M4 12h16M6 12v6M18 12v6M5 9h14v3H5z',
+  tree: 'M12 21v-6M12 15a6 6 0 1 0-.01 0M9 11l3 3 3-3',
+  material: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  area: 'M5 6l6-2 8 4-2 10-9 2-4-6z',
+  zone: 'M4 5h16v14H4zM8 9h8M8 13h5',
+  transit: 'M6 4h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM4 11h16M8 17l-2 3M16 17l2 3M8 14h.01M16 14h.01',
+  measure: 'M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2',
+  layers: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5',
+  undo: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
+  redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
+  search: 'M11 4a7 7 0 1 1-.01 0M16 16l5 5',
+  settings: 'M12 9a3 3 0 1 1-.01 0M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1',
+  export: 'M12 3v12M7 8l5-5 5 5M4 15v5h16v-5',
+  import: 'M12 15V3M7 10l5 5 5-5M4 15v5h16v-5',
+  plus: 'M12 5v14M5 12h14',
+  close: 'M6 6l12 12M18 6L6 18',
+  chevronDown: 'M6 9l6 6 6-6',
+  chevronRight: 'M9 6l6 6-6 6',
+  chevronLeft: 'M15 6l-6 6 6 6',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 1-.01 0',
+  eyeOff: 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.5 6.6C3.8 8.3 2 12 2 12s4 7 10 7a9.7 9.7 0 0 0 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  lock: 'M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+  unlock: 'M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 6.6-1.6',
+  trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6',
+  duplicate: 'M8 8h12v12H8zM4 16V4h12',
+  play: 'M7 4l13 8-13 8z',
+  pause: 'M7 4h4v16H7zM13 4h4v16h-4z',
+  stop: 'M6 6h12v12H6z',
+  map: 'M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14',
+  cube: 'M12 2l9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10',
+  present: 'M3 4h18v12H3zM12 16v4M8 20h8',
+  civic: 'M4 20h16M6 20v-8M10 20v-8M14 20v-8M18 20v-8M3 10l9-6 9 6z',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  traffic: 'M4 18c4-6 12-6 16 0M4 13c4-6 12-6 16 0M12 18h.01',
+  route: 'M6 18a2 2 0 1 1-.01 0M18 6a2 2 0 1 1-.01 0M8 18h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6',
+  warning: 'M12 3l10 18H2zM12 10v5M12 18h.01',
+  check: 'M4 12l5 5L20 6',
+  info: 'M12 3a9 9 0 1 1-.01 0M12 11v6M12 7.5h.01',
+  folder: 'M3 6h6l2 2h10v11H3z',
+  clock: 'M12 3a9 9 0 1 1-.01 0M12 7v5l3 3',
+  user: 'M12 4a4 4 0 1 1-.01 0M4 21a8 8 0 0 1 16 0',
+  filter: 'M3 5h18l-7 8v6l-4 2v-8z',
+  grid: 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
+  magnet: 'M6 4h4v8a2 2 0 0 0 4 0V4h4v8a6 6 0 0 1-12 0zM6 8h4M14 8h4',
+  crosshair: 'M12 3a9 9 0 1 1-.01 0M12 1v6M12 17v6M1 12h6M17 12h6',
+  home: 'M3 11l9-7 9 7M5 9v11h14V9',
+  refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  safety: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  heat: 'M12 3c3 4 5 6.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-5 0 2 1 3 2 3 0-3 0-5 1-8z',
+  walk: 'M13 4a1.6 1.6 0 1 1-.01 0M10 21l2-6-2-3 1-4 3 3 3 1M8 12l2-4',
+  leaf: 'M5 19c0-9 6-14 15-14 0 9-5 15-14 15M5 19l7-7',
+  camera: 'M3 7h4l2-3h6l2 3h4v13H3zM12 10a3.5 3.5 0 1 1-.01 0',
+  keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  rotate: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
+  array: 'M4 12h16M6 12a1.5 1.5 0 1 0 0 .01M12 12a1.5 1.5 0 1 0 0 .01M18 12a1.5 1.5 0 1 0 0 .01',
+  ped: 'M12 4a1.6 1.6 0 1 1-.01 0M12 8v6l-3 7M12 14l3 7M8 11l4-3 4 3',
+  bike: 'M6 17a3 3 0 1 1-.01 0M18 17a3 3 0 1 1-.01 0M6 17l4-8h5l3 8M10 9l2 8',
+  bus: 'M5 4h14v13H5zM5 11h14M8 17v3M16 17v3M8 14h.01M16 14h.01',
+  pin: 'M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12zM12 9a2 2 0 1 1-.01 0',
+  doc: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7',
+};
+
+export type IconName = keyof typeof P;
+
+export function Icon({ name, size = 18, title, className }: { name: IconName | string; size?: number; title?: string; className?: string }) {
+  const d = P[name];
+  return (
+    <svg className={`icon ${className ?? ''}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
+      {title ? <title>{title}</title> : null}
+      {d ? <path d={d} /> : <rect x="5" y="5" width="14" height="14" />}
+    </svg>
+  );
+}

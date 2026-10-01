@@ -1,0 +1,111 @@
+/*
+ * DRIP Urban design tokens — the only place raw values live.
+ * Brand colours measured on the official logo files (packages/assets/brand/source):
+ *   DRIP blue #5587A2 · DRIP ink #1D1D1B · FST amaranto #8B0209 · FST ink #131212
+ * Product accent #83B4D1 (DRIP product system) is used for active/selection on the dark shell.
+ */
+:root {
+  /* Shell (dark technical) */
+  --ink-0: #0d0d0d;
+  --ink-1: #131416;
+  --ink-2: #191b1e;
+  --ink-3: #212428;
+  --ink-4: #2b2f34;
+  --line-1: #2a2d32;
+  --line-2: #383c42;
+  --text-1: #eceae5;
+  --text-2: #b4b3ae;
+  --text-3: #85878a;
+  --text-inverse: #131212;
+
+  /* Brand */
+  --drip-blue: #5587a2;
+  --drip-accent: #83b4d1;
+  --drip-accent-soft: rgba(131, 180, 209, 0.16);
+  --drip-orange: #e8772e;
+  --drip-orange-soft: rgba(232, 119, 46, 0.16);
+  --drip-rose: #d9b3ad;
+  --fst-red: #8b0209;
+  --fst-ink: #131212;
+  --ivory: #f5f3ef;
+  --ivory-2: #ebe7df;
+
+  /* Semantic */
+  --ok: #6fae86;
+  --warn: #d9a441;
+  --err: #d0614f;
+  --existing: #9aa3ab;
+  --project: var(--drip-orange);
+  --active: var(--drip-accent);
+
+  /* Provenance badges */
+  --prov-existing: #9aa3ab;
+  --prov-osm: #7ea7c4;
+  --prov-measured: #6fae86;
+  --prov-derived: #a99bc9;
+  --prov-estimated: #d9a441;
+  --prov-project: var(--drip-orange);
+  --prov-simulated: #c98bb0;
+  --prov-live: #5fc0a8;
+
+  /* Typography */
+  --font-ui: 'Manrope Variable', 'Manrope', system-ui, sans-serif;
+  --font-editorial: 'Playfair Display', Georgia, serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --fs-40: 40px;
+  --lh-tight: 1.15;
+  --lh-ui: 1.4;
+  --lh-text: 1.55;
+  --tracking-caps: 0.08em;
+
+  /* Spacing scale */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 48px;
+
+  /* Radii (restrained) */
+  --r-1: 6px;
+  --r-2: 8px;
+  --r-3: 10px;
+  --r-4: 12px;
+
+  /* Motion */
+  --t-fast: 100ms;
+  --t-std: 160ms;
+  --t-panel: 220ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Layout */
+  --topbar-h: 52px;
+  --statusbar-h: 26px;
+  --rail-w: 64px;
+  --inspector-w: 368px;
+  --dock-h: 300px;
+
+  /* Elevation (used sparingly: floating menus only) */
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-2);
+
+  /* Z layers */
+  --z-map-ui: 10;
+  --z-panel: 20;
+  --z-menu: 40;
+  --z-modal: 60;
+  --z-toast: 80;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 0ms; --t-std: 0ms; --t-panel: 0ms; }
+}

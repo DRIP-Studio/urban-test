@@ -3,14 +3,15 @@ import { add, dist, lengthOf, mul, project, slice, sub, type V } from '../geo/po
 import type {
   Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, Zone,
 } from '../model/types';
-import { defineOperation, type Issue } from './registry';
+import { defineOperation, operationSpec, type Issue } from './registry';
 import { makeLanes } from './road-factory';
 
 const err = (code: string, message: string, targetIds?: string[]): Issue => ({ code, severity: 'error', message, ...(targetIds ? { targetIds } : {}) });
 const PROJECT = { kind: 'project', source: 'DRIP Urban scenario' } as const;
 
 const okLL = (p: unknown): p is LngLat => Array.isArray(p) && p.length === 2 && p.every((x) => Number.isFinite(x)) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90;
-const near = (a: LngLat, b: LngLat) => Math.abs(a[0] - b[0]) < 1e-7 && Math.abs(a[1] - b[1]) < 1e-7;
+/** Endpoint tolerance ≈ 10 cm; apply() then pins the axis exactly to the node. */
+const near = (a: LngLat, b: LngLat) => Math.abs(a[0] - b[0]) < 1.2e-6 && Math.abs(a[1] - b[1]) < 1.2e-6;
 
 function frameFor(net: Network): LocalFrame {
   const first = Object.values(net.nodes)[0];
@@ -63,7 +64,10 @@ export const roadAdd = defineOperation<RoadAddPayload>({
   apply(net, p) {
     const nodes = { ...net.nodes };
     for (const n of p.nodes) nodes[n.id] = n;
-    return { ...net, nodes, roads: { ...net.roads, [p.road.id]: { ...p.road, provenance: { ...p.road.provenance, geometry: PROJECT, width: PROJECT } } } };
+    const axis = [...p.road.axis];
+    axis[0] = nodes[p.road.from]!.at;
+    axis[axis.length - 1] = nodes[p.road.to]!.at;
+    return { ...net, nodes, roads: { ...net.roads, [p.road.id]: { ...p.road, axis, provenance: { ...p.road.provenance, geometry: PROJECT, width: PROJECT } } } };
   },
 });
 
@@ -104,7 +108,10 @@ export const roadSetAxis = defineOperation<RoadSetAxisPayload>({
   },
   apply(net, p) {
     const r = net.roads[p.roadId]!;
-    return { ...net, roads: { ...net.roads, [r.id]: markProject({ ...r, axis: p.axis }, 'geometry') } };
+    const axis = [...p.axis];
+    axis[0] = net.nodes[r.from]!.at;
+    axis[axis.length - 1] = net.nodes[r.to]!.at;
+    return { ...net, roads: { ...net.roads, [r.id]: markProject({ ...r, axis }, 'geometry') } };
   },
 });
 
@@ -461,5 +468,32 @@ export const areaRemove = defineOperation<{ readonly areaIds: readonly string[] 
       else delete areas[id];
     }
     return { ...net, areas };
+  },
+});
+
+// ---------------------------------------------------------------- batch
+
+/** Several operations committed as one undoable step (compound tools, array placement, previews). */
+export const batch = defineOperation<{ readonly label: string; readonly ops: readonly { readonly type: string; readonly payload: unknown }[] }>({
+  type: 'batch',
+  label: (p) => p.label,
+  validate(net, p) {
+    if (!p.ops.length) return [err('batch.empty', 'Nessuna operazione')];
+    let cur = net;
+    const issues: Issue[] = [];
+    for (const o of p.ops) {
+      if (o.type === 'batch') return [err('batch.nested', 'Batch annidati non ammessi')];
+      const spec = operationSpec(o.type);
+      const found = spec.validate(cur, o.payload);
+      issues.push(...found);
+      if (found.some((i) => i.severity === 'error')) return issues;
+      cur = spec.apply(cur, o.payload);
+    }
+    return issues;
+  },
+  apply(net, p) {
+    let cur = net;
+    for (const o of p.ops) cur = operationSpec(o.type).apply(cur, o.payload);
+    return cur;
   },
 });

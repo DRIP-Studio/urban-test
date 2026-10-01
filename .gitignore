@@ -11,3 +11,4 @@ test-results/
 playwright-report/
 .playwright-mcp/
 .shots/
+public/cesium/

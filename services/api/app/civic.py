@@ -8,7 +8,10 @@ and the record states who published it and when.
 from __future__ import annotations
 
 import json
+import time
 import uuid
+
+import httpx
 from datetime import datetime, timezone
 
 from app.settings import SETTINGS
@@ -95,3 +98,24 @@ def withdraw(pub_id: str) -> None:
         rec["withdrawnAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         rec["withdrawnBy"] = _user()["name"]
         atomic_write_json(p, rec)
+
+
+FST_ORIGIN = "https://frattamaggioresitrasforma.studiodrip.it"
+_fst_cache: dict[str, tuple[float, dict]] = {}
+
+
+def fst_public(kind: str) -> dict:
+    """Read-only public data of the FST civic platform (reports / projects). Never writes to it."""
+    if kind not in {"reports", "projects"}:
+        raise ValueError("Tipo non valido")
+    hit = _fst_cache.get(kind)
+    if hit and time.time() - hit[0] < 300:
+        return hit[1]
+    try:
+        r = httpx.get(f"{FST_ORIGIN}/wp-json/fst-mobile/v1/maps/{kind}", timeout=15, headers={"User-Agent": SETTINGS.user_agent, "Accept": "application/json"})
+        r.raise_for_status()
+        data = {"status": "ok", "source": f"{FST_ORIGIN} (API pubblica fst-mobile/v1)", "fetchedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "items": r.json().get("items", [])}
+    except (httpx.HTTPError, ValueError) as exc:
+        return {"status": "error", "message": f"Piattaforma FST non raggiungibile: {exc}"[:300], "items": []}
+    _fst_cache[kind] = (time.time(), data)
+    return data

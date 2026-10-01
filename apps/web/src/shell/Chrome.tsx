@@ -1,0 +1,213 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { LngLat } from '@drip-urban/core';
+import { api } from '../api/client';
+import { flyTo, getMap, useMapUi } from '../map/mapStore';
+import { deleteSelection, duplicateSelection, pasteAt } from '../state/actions';
+import { select, setDock, setMode, setTool, useApp } from '../state/store';
+import { dismiss, useToasts } from '../state/toasts';
+import { GROUP_LABEL, TOOLS } from '../tools/registry';
+import { pickAt } from '../tools/select';
+import { usePicks } from '../tools/picks';
+import { useTool } from '../tools/toolState';
+import { Icon } from '../ui/Icon';
+import { COMMANDS } from './commands';
+import { useContextMenu } from './contextMenu';
+import { usePalette } from './palette';
+
+export function ToolRail() {
+  const mode = useApp((s) => s.mode);
+  const tool = useApp((s) => s.tool);
+  const tools = TOOLS.filter((t) => t.modes.includes(mode));
+  const groups = [...new Set(tools.map((t) => t.group))];
+  if (!tools.length) return null;
+  return (
+    <nav className="rail" aria-label="Strumenti">
+      {groups.map((g) => (
+        <div key={g} className="rail-group" role="group" aria-label={GROUP_LABEL[g]}>
+          <span className="rail-label">{GROUP_LABEL[g]}</span>
+          {tools.filter((t) => t.group === g).map((t) => (
+            <button key={t.id} type="button" className={`rail-btn ${tool === t.id ? 'is-on' : ''}`} onClick={() => setTool(t.id)} aria-pressed={tool === t.id} data-tip={`${t.label}${t.shortcut ? ` · ${t.shortcut}` : ''}`} data-tip-side="right">
+              <Icon name={t.icon} size={20} />
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+export function ToolHint() {
+  const tool = useApp((s) => s.tool);
+  const def = TOOLS.find((t) => t.id === tool);
+  const measure = useTool((s) => s.measure);
+  if (!def || def.id === 'select') return null;
+  return (
+    <div className="tool-hint" role="status">
+      <Icon name={def.icon} size={15} /><strong>{def.label}</strong><span>{def.hint}</span>
+      {measure && def.id === 'measure' ? <span className="mono">{measure.total.toFixed(1).replace('.', ',')} m{measure.area !== null ? ` · ${Math.round(measure.area).toLocaleString('it-IT')} m²` : ''}</span> : null}
+    </div>
+  );
+}
+
+const fmtCoord = (p: LngLat | null) => (p ? `${p[1].toFixed(6)}, ${p[0].toFixed(6)}` : '—');
+
+export function StatusBar() {
+  const { zoom, mpp, pointer, snap, gridM } = useMapUi();
+  const stats = useApp((s) => s.physStats);
+  const failed = useApp((s) => s.failedOps);
+  const scenario = useApp((s) => s.scenario);
+  const project = useApp((s) => s.project);
+  const scale = Math.round((mpp * 96) / 0.0254);
+  return (
+    <footer className="statusbar">
+      <span className="sb-item">{project?.city ?? ''}</span>
+      <span className="sb-item mono">{fmtCoord(pointer)}</span>
+      <span className="sb-item mono">z {zoom.toFixed(1)} · 1:{scale.toLocaleString('it-IT')}</span>
+      <button type="button" className={`sb-item sb-toggle ${snap.node || snap.edge ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, node: !s.snap.node, edge: !s.snap.node } }))}>
+        Snap {snap.node || snap.edge ? 'on' : 'off'}
+      </button>
+      <button type="button" className={`sb-item sb-toggle ${snap.grid ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, grid: !s.snap.grid } }))}>
+        Griglia {gridM.toString().replace('.', ',')} m
+      </button>
+      <button type="button" className={`sb-item sb-toggle ${snap.angle ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, angle: !s.snap.angle } }))}>Angolo 15°</button>
+      <span className="sb-spacer" />
+      {failed.length ? (
+        <button type="button" className="sb-item sb-warn" onClick={() => { setMode('analyze'); setDock('audit'); }}>
+          <Icon name="warning" size={13} />{failed.length} operazioni non applicabili
+        </button>
+      ) : null}
+      {scenario ? <span className="sb-item">{scenario.operations.length} modifiche</span> : null}
+      {stats ? <span className="sb-item mono" title="Modello fisico: strade, incroci, rotatorie, elementi di segnaletica — tempo di calcolo">{stats.roads} strade · {stats.junctions} incroci · {stats.markings} marking · {stats.ms} ms</span> : <span className="sb-item">Calcolo modello fisico…</span>}
+    </footer>
+  );
+}
+
+export function Toasts() {
+  const items = useToasts((s) => s.items);
+  return (
+    <div className="toasts" aria-live="polite">
+      {items.map((t) => (
+        <div key={t.id} className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
+          <Icon name={t.kind === 'error' ? 'warning' : t.kind === 'warn' ? 'warning' : t.kind === 'success' ? 'check' : 'info'} size={16} />
+          <div className="toast-text"><strong>{t.title}</strong>{t.body ? <span>{t.body}</span> : null}
+            {t.progress !== undefined ? <span className="progress"><span style={{ width: `${Math.round(t.progress * 100)}%` }} /></span> : null}
+          </div>
+          {t.action ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => { t.action!.run(); dismiss(t.id); }}>{t.action.label}</button> : null}
+          <button type="button" className="toast-close" aria-label="Chiudi" onClick={() => dismiss(t.id)}><Icon name="close" size={14} /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ContextMenu() {
+  const req = useContextMenu((s) => s.req);
+  const close = useContextMenu((s) => s.close);
+  useEffect(() => {
+    if (!req) return;
+    const off = () => close();
+    window.addEventListener('mousedown', off);
+    window.addEventListener('keydown', off);
+    return () => { window.removeEventListener('mousedown', off); window.removeEventListener('keydown', off); };
+  }, [req, close]);
+  const hit = useMemo(() => { const map = getMap(); return req && map ? pickAt(map, req.point) : null; }, [req]);
+  useEffect(() => { if (hit) select(hit); }, [hit]);
+  if (!req) return null;
+  const items: { label: string; icon: string; run: () => void; danger?: boolean }[] = [];
+  if (hit?.kind === 'node') {
+    items.push({ label: 'Apri Junction Lab', icon: 'junction', run: () => { setMode('design'); setDock('junction'); } });
+    items.push({ label: 'Signal Studio', icon: 'signal', run: () => { setMode('design'); setDock('signals'); } });
+    items.push({ label: 'Inserisci rotatoria qui', icon: 'roundabout', run: () => { setMode('design'); setTool('roundabout'); useTool.setState({ rb: { nodeId: hit.ids[0]!, type: 'compact', outerDiameterM: 30, circulatoryWidthM: 7, lanes: 1, apronWidthM: 1.5, aspect: 1, orientationDeg: 0, islandMaterial: 'grass', splitters: true, crossings: false } }); } });
+  }
+  if (hit?.kind === 'road') {
+    items.push({ label: 'Modifica sezione', icon: 'section', run: () => setDock('section') });
+    items.push({ label: 'Modifica vertici', icon: 'node', run: () => setTool('nodes') });
+  }
+  if (hit && (hit.kind === 'asset' || hit.kind === 'area')) items.push({ label: 'Duplica', icon: 'duplicate', run: () => duplicateSelection() });
+  items.push({ label: 'Incolla qui', icon: 'import', run: () => pasteAt(req.lngLat) });
+  items.push({ label: 'Percorso da qui', icon: 'route', run: () => { usePicks.setState({ from: req.lngLat, to: null }); setMode('traffic'); setTool('route'); } });
+  items.push({ label: 'Isocrona a piedi da qui', icon: 'walk', run: () => { setMode('analyze'); usePicks.getState().pickIsochrone(req.lngLat); } });
+  if (hit) items.push({ label: 'Elimina', icon: 'trash', run: deleteSelection, danger: true });
+  return (
+    <div className="context-menu" style={{ left: Math.min(req.x, innerWidth - 240), top: Math.min(req.y, innerHeight - items.length * 34 - 16) }} role="menu" onMouseDown={(e) => e.stopPropagation()}>
+      {items.map((i) => (
+        <button key={i.label} type="button" role="menuitem" className={`menu-item ${i.danger ? 'is-danger' : ''}`} onClick={() => { close(); i.run(); }}>
+          <Icon name={i.icon} size={15} /><span>{i.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface PaletteItem { id: string; label: string; group: string; hint?: string; run: () => void }
+
+export function CommandPalette() {
+  const open = usePalette((s) => s.open);
+  const close = usePalette((s) => s.close);
+  const [q, setQ] = useState('');
+  const [hi, setHi] = useState(0);
+  const [places, setPlaces] = useState<PaletteItem[]>([]);
+  const input = useRef<HTMLInputElement>(null);
+  const network = useApp((s) => s.network);
+  const project = useApp((s) => s.project);
+  useEffect(() => { if (open) { setQ(''); setHi(0); setPlaces([]); setTimeout(() => input.current?.focus(), 0); } }, [open]);
+  const items = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    const cmds: PaletteItem[] = COMMANDS.filter((c) => !c.when || c.when()).map((c) => ({ id: c.id, label: c.label, group: c.group, hint: c.shortcut, run: c.run }));
+    const roads: PaletteItem[] = [];
+    if (network && ql.length >= 2) {
+      const seen = new Set<string>();
+      for (const r of Object.values(network.roads)) {
+        if (!r.name || seen.has(r.name) || !r.name.toLowerCase().includes(ql)) continue;
+        seen.add(r.name);
+        const mid = r.axis[Math.floor(r.axis.length / 2)]!;
+        roads.push({ id: `road:${r.id}`, label: r.name, group: 'Strade del progetto', run: () => { flyTo([mid[0], mid[1]], 18); select({ kind: 'road', ids: [r.id] }); } });
+        if (roads.length >= 8) break;
+      }
+    }
+    return [...cmds.filter((c) => !ql || c.label.toLowerCase().includes(ql) || c.group.toLowerCase().includes(ql)).slice(0, 14), ...roads, ...places];
+  }, [q, network, places]);
+  useEffect(() => {
+    if (!open || q.trim().length < 3 || !project) return;
+    const t = setTimeout(() => {
+      api.get<{ name: string; at: [number, number] }[]>(`/api/geocode?q=${encodeURIComponent(q)}&bbox=${project.bbox.join(',')}`)
+        .then((rows) => setPlaces(rows.slice(0, 6).map((r, i) => ({ id: `geo:${i}`, label: r.name, group: 'Luoghi (OpenStreetMap Nominatim)', run: () => flyTo(r.at, 18) }))))
+        .catch(() => setPlaces([]));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [q, open, project]);
+  if (!open) return null;
+  const runAt = (i: number) => { const it = items[i]; if (it) { close(); it.run(); } };
+  let lastGroup = '';
+  return (
+    <div className="modal-backdrop palette-backdrop" onMouseDown={close}>
+      <div className="palette" role="dialog" aria-label="Comandi" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="palette-input">
+          <Icon name="search" size={16} />
+          <input ref={input} value={q} placeholder="Comandi, strumenti, strade, luoghi…" aria-label="Cerca" onChange={(e) => { setQ(e.target.value); setHi(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') close();
+              if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(items.length - 1, h + 1)); }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
+              if (e.key === 'Enter') runAt(hi);
+            }} />
+        </div>
+        <div className="palette-list" role="listbox">
+          {items.length === 0 ? <div className="palette-empty">Nessun risultato per “{q}”</div> : items.map((it, i) => {
+            const head = it.group !== lastGroup ? <div className="palette-group">{it.group}</div> : null;
+            lastGroup = it.group;
+            return (
+              <div key={it.id}>
+                {head}
+                <button type="button" role="option" aria-selected={i === hi} className={`palette-item ${i === hi ? 'is-hi' : ''}`} onMouseEnter={() => setHi(i)} onClick={() => runAt(i)}>
+                  <span>{it.label}</span>{it.hint ? <kbd className="kbd">{it.hint}</kbd> : null}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

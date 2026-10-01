@@ -1,0 +1,1 @@
+Noto Sans (SIL Open Font License 1.1), glyph ranges from demotiles.maplibre.org, bundled for offline map labels.

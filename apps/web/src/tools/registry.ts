@@ -1,0 +1,117 @@
+import type { Area, Zone } from '@drip-urban/core';
+import { commit, newId, select } from '../state/store';
+import { toast } from '../state/toasts';
+import { distribute, makeDrawTool } from './draw';
+import { cutTool, makeJunctionPicker, nodeTool, roundaboutTool, sectionTool } from './edit';
+import { furnitureTool, signTool } from './place';
+import { planRoad, spline } from './roadOps';
+import { selectTool } from './select';
+import { useTool } from './toolState';
+import { usePicks } from './picks';
+import type { ToolDef } from './types';
+
+const PROJECT = { kind: 'project' as const, source: 'DRIP Urban scenario' };
+
+const roadDraw = (curve: boolean) => makeDrawTool({
+  shape: 'line', minPoints: 2, curve,
+  finish(points, idx) {
+    const t = useTool.getState();
+    const axis = curve ? spline(idx, points.map((p) => p.at)) : points.map((p) => p.at);
+    const plan = planRoad(idx, points, axis, t.roadTemplate, t.roadName);
+    if (plan.error) { toast.warn('Strada non creata', plan.error); return false; }
+    const ok = commit('batch', { label: curve ? 'Nuova strada in curva' : 'Nuova strada', ops: plan.ops }).ok;
+    if (ok) {
+      const add = plan.ops.find((o) => o.type === 'road.add')!.payload as { road: { id: string } };
+      select({ kind: 'road', ids: [add.road.id] });
+    }
+    return ok;
+  },
+});
+
+const areaDraw = makeDrawTool({
+  shape: 'polygon', minPoints: 3, snapEnabled: true,
+  finish(points) {
+    const t = useTool.getState();
+    const area: Area = { id: newId('ar'), kind: t.areaKind, polygon: points.map((p) => p.at), material: t.areaMaterial, state: 'project', properties: {}, provenance: PROJECT };
+    const ok = commit('area.set', { area }).ok;
+    if (ok) select({ kind: 'area', ids: [area.id] });
+    return ok;
+  },
+});
+
+const zoneDraw = makeDrawTool({
+  shape: 'polygon', minPoints: 3, snapEnabled: false,
+  finish(points) {
+    const kind = useTool.getState().zoneKind;
+    const names: Record<string, string> = { ztl: 'ZTL', pedestrian: 'Area pedonale', school: 'Strada scolastica', zone30: 'Zona 30', low_emission: 'Zona a basse emissioni', parking: 'Zona sosta', work: 'Cantiere' };
+    const zone: Zone = {
+      id: newId('z'), kind, name: names[kind] ?? 'Zona', polygon: points.map((p) => p.at),
+      allowedModes: kind === 'ztl' ? ['bus', 'emergency', 'bike', 'walk'] : kind === 'pedestrian' || kind === 'school' ? ['walk', 'bike', 'emergency'] : kind === 'work' ? ['walk', 'emergency'] : ['car', 'bus', 'truck', 'bike', 'walk', 'emergency'],
+      ...(kind === 'ztl' ? { schedule: [{ days: [0, 1, 2, 3, 4, 5, 6], from: '20:00', to: '02:00' }] } : {}),
+      ...(kind === 'zone30' || kind === 'school' ? { speedKmh: 30 } : {}),
+    };
+    const ok = commit('zone.set', { zone }).ok;
+    if (ok) select({ kind: 'zone', ids: [zone.id] });
+    return ok;
+  },
+});
+
+const crossingDraw = makeDrawTool({
+  shape: 'line', minPoints: 2, maxPoints: 2, snapEnabled: false,
+  finish(points) {
+    const area: Area = { id: newId('ar'), kind: 'crossing', name: 'Attraversamento pedonale', polygon: [points[0]!.at, points[1]!.at], material: 'road_marking_white', depthM: 4, state: 'project', properties: {}, provenance: PROJECT };
+    const ok = commit('area.set', { area }).ok;
+    if (ok) select({ kind: 'area', ids: [area.id] });
+    return ok;
+  },
+});
+
+const arrayDraw = makeDrawTool({
+  shape: 'line', minPoints: 2,
+  finish(points, idx) {
+    const t = useTool.getState();
+    const spots = distribute(idx, points.map((p) => p.at), Math.max(1, t.arraySpacingM));
+    if (spots.length > 400) { toast.warn('Troppi oggetti', `${spots.length} posizioni: aumenta il passo.`); return false; }
+    const assets = spots.map((s) => ({ id: newId('a'), type: t.arrayItem, at: s.at, rotationDeg: s.bearing + 90, state: 'project' as const, properties: {}, provenance: PROJECT }));
+    const ok = commit('asset.add', { assets }).ok;
+    if (ok) { select({ kind: 'asset', ids: assets.map((a) => a.id) }); toast.success('Distribuzione', `${assets.length} elementi ogni ${t.arraySpacingM} m`); }
+    return ok;
+  },
+});
+
+const measureDraw = makeDrawTool({ shape: 'line', minPoints: 99, finish: () => false });
+
+const transitDraw = makeDrawTool({
+  shape: 'line', minPoints: 2,
+  finish(points) {
+    usePicks.getState().addTransitRoute(points.map((p) => p.at));
+    return true;
+  },
+});
+
+export const TOOLS: readonly ToolDef[] = [
+  { id: 'select', label: 'Seleziona', icon: 'select', shortcut: 'V', group: 'draw', modes: ['design', 'analyze', 'traffic', 'transit'], hint: 'Clic per selezionare · Shift+clic aggiunge · Shift+trascina per riquadro · trascina un oggetto selezionato per spostarlo', handler: selectTool },
+  { id: 'road', label: 'Strada', icon: 'road', shortcut: 'R', group: 'draw', modes: ['design'], hint: 'Clic per i vertici · si aggancia a nodi e strade · doppio clic o Invio per finire · Alt disattiva lo snap', cursor: 'crosshair', handler: roadDraw(false) },
+  { id: 'curve', label: 'Curva', icon: 'curve', shortcut: 'C', group: 'draw', modes: ['design'], hint: 'Punti di controllo di una spline · Invio per finire', cursor: 'crosshair', handler: roadDraw(true) },
+  { id: 'nodes', label: 'Nodi', icon: 'node', shortcut: 'N', group: 'draw', modes: ['design'], hint: 'Seleziona una strada · trascina estremi e vertici · i punti chiari inseriscono un vertice · clic destro elimina', handler: nodeTool },
+  { id: 'cut', label: 'Taglia', icon: 'cut', shortcut: 'X', group: 'draw', modes: ['design'], hint: 'Clic sull\'asse per dividere la strada', cursor: 'crosshair', handler: cutTool },
+  { id: 'section', label: 'Sezione', icon: 'section', shortcut: 'S', group: 'civil', modes: ['design'], hint: 'Clic su una strada per modificare corsie, marciapiedi, sosta, ciclabili', handler: sectionTool },
+  { id: 'junction', label: 'Junction Lab', icon: 'junction', shortcut: 'J', group: 'civil', modes: ['design', 'analyze'], hint: 'Clic su un incrocio: corsie, svolte, conflitti, regolazione', handler: makeJunctionPicker('junction') },
+  { id: 'roundabout', label: 'Rotatoria', icon: 'roundabout', shortcut: 'O', group: 'civil', modes: ['design'], hint: 'Clic su un incrocio con almeno 3 bracci, poi configura e conferma nel pannello', handler: roundaboutTool },
+  { id: 'signals', label: 'Semafori', icon: 'signal', shortcut: 'T', group: 'civil', modes: ['design', 'traffic'], hint: 'Clic su un incrocio: Signal Studio con fasi e ciclo', handler: makeJunctionPicker('signals') },
+  { id: 'signs', label: 'Cartelli', icon: 'sign', shortcut: 'G', group: 'street', modes: ['design'], hint: 'Scegli il segnale e clic per posarlo · Alt+clic su un cartello aggiunge un pannello allo stesso palo · Q/E ruota', cursor: 'crosshair', handler: signTool },
+  { id: 'crossing', label: 'Attraversamento', icon: 'crossing', shortcut: 'K', group: 'street', modes: ['design'], hint: 'Due clic da un bordo all\'altro della carreggiata', cursor: 'crosshair', handler: crossingDraw },
+  { id: 'furniture', label: 'Arredo', icon: 'furniture', shortcut: 'F', group: 'space', modes: ['design'], hint: 'Scegli l\'elemento · si allinea alla strada più vicina (Alt per libero) · Q/E o Shift+rotella ruota', cursor: 'crosshair', handler: furnitureTool },
+  { id: 'array', label: 'Distribuisci', icon: 'array', shortcut: 'Y', group: 'space', modes: ['design'], hint: 'Disegna un percorso: oggetti ogni N metri (alberi, lampioni, dissuasori)', cursor: 'crosshair', handler: arrayDraw },
+  { id: 'area', label: 'Superficie', icon: 'area', shortcut: 'A', group: 'space', modes: ['design'], hint: 'Piazze, verde, sosta, giardini della pioggia: clic per i vertici, Invio per chiudere', cursor: 'crosshair', handler: areaDraw },
+  { id: 'zone', label: 'Zone', icon: 'zone', shortcut: 'Z', group: 'space', modes: ['design', 'traffic'], hint: 'ZTL, zona 30, strada scolastica, cantiere: disegna il perimetro', cursor: 'crosshair', handler: zoneDraw },
+  { id: 'measure', label: 'Misura', icon: 'measure', shortcut: 'U', group: 'analysis', modes: ['design', 'analyze', 'traffic', 'transit'], hint: 'Clic per misurare distanze; con 3+ punti anche l\'area · Esc per azzerare', cursor: 'crosshair', handler: measureDraw },
+  { id: 'route', label: 'Navigatore', icon: 'route', shortcut: 'P', group: 'traffic', modes: ['traffic', 'analyze'], hint: 'Clic per origine, poi destinazione', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().pickRoutePoint(e.lngLat) } },
+  { id: 'isochrone', label: 'Isocrona', icon: 'walk', shortcut: 'I', group: 'analysis', modes: ['analyze'], hint: 'Clic su un punto: area raggiungibile in 5/7/10/15 minuti', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().pickIsochrone(e.lngLat) } },
+  { id: 'transitRoute', label: 'Linea TPL', icon: 'transit', shortcut: 'L', group: 'transit', modes: ['transit'], hint: 'Disegna il percorso della linea, Invio per finire', cursor: 'crosshair', handler: transitDraw },
+  { id: 'transitStop', label: 'Fermata', icon: 'bus', shortcut: 'B', group: 'transit', modes: ['transit'], hint: 'Clic per aggiungere una fermata alla linea selezionata', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().addTransitStop(e.lngLat) } },
+];
+
+export const toolById = (id: string) => TOOLS.find((t) => t.id === id) ?? TOOLS[0]!;
+
+export const GROUP_LABEL: Record<ToolDef['group'], string> = { draw: 'Disegno', civil: 'Civile', street: 'Strada', space: 'Spazio', analysis: 'Analisi', traffic: 'Traffico', transit: 'TPL' };

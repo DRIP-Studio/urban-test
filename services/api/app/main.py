@@ -402,6 +402,14 @@ def gtfs_rt() -> dict:
 
 # ------------------------------------------------------------------ civic
 
+@app.get("/api/civic/fst/{kind}")
+def fst_public(kind: str) -> dict:
+    try:
+        return civic.fst_public(kind)
+    except ValueError as exc:
+        raise _err(exc) from exc
+
+
 @app.get("/api/civic/publications")
 def publications(projectId: str | None = None) -> list[dict]:
     return [p for p in civic.list_publications(projectId)]
