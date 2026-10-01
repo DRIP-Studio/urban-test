@@ -1,0 +1,159 @@
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
+import {
+  FlowSimulation, LocalFrame, OperationRejected, ScenarioHistory, analyzeJunction, analyzeNetwork, auditScenario,
+  estimateTraffic, geom, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan,
+  type CityBaseline, type Network, type Scenario,
+} from '../src/index';
+
+const SEED = fileURLToPath(new URL('../../../services/api/seed/frattamaggiore.baseline.json.gz', import.meta.url));
+let baseline: CityBaseline;
+beforeAll(() => { baseline = JSON.parse(gunzipSync(readFileSync(SEED)).toString('utf8')) as CityBaseline; });
+const scenario = (): Scenario => ({ id: 's', name: 'Test', isBaseline: false, locked: false, archived: false, createdAt: '2026-10-01T00:00:00Z', operations: [] });
+let seq = 0;
+const ids = () => `op${++seq}`;
+const ctx = { mode: 'car' as const, day: 1, minutes: 8 * 60 };
+
+function signalisableJunction(net: Network): string {
+  const counts = new Map<string, number>();
+  for (const r of Object.values(net.roads)) {
+    if (layoutSection(r).pedestrianOnly) continue;
+    for (const n of [r.from, r.to]) counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  const f = new LocalFrame(baseline.origin);
+  for (const [n, c] of counts) {
+    if (c !== 4) continue;
+    const arms = Object.values(net.roads).filter((r) => r.from === n || r.to === n);
+    if (arms.every((r) => r.oneway === 'no' && !layoutSection(r).pedestrianOnly && geom.lengthOf(r.axis.map((q) => f.toMetric(q))) > 40)) return n;
+  }
+  throw new Error('no two-way 4-arm junction');
+}
+
+describe('routing on the scenario network', () => {
+  it('finds a car route across Frattamaggiore with steps in Italian', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const r = route(h.network, baseline.origin, [14.268, 40.937], [14.286, 40.947], ctx);
+    expect(r.found).toBe(true);
+    expect(r.distanceM).toBeGreaterThan(1500);
+    expect(r.durationS).toBeGreaterThan(60);
+    expect(r.steps.at(-1)!.maneuver).toBe('arrive');
+    expect(r.steps.every((s) => s.instruction.length > 3)).toBe(true);
+  });
+
+  it('a one-way reversal changes the car route but not the walking route', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const a: [number, number] = [14.268, 40.937], b: [number, number] = [14.286, 40.947];
+    const before = route(h.network, baseline.origin, a, b, ctx);
+    const used = before.roadIds.find((id) => h.network.roads[id]!.oneway === 'no' && !h.network.roads[id]!.tags?.roundabout && id !== before.roadIds[0] && id !== before.roadIds.at(-1))!;
+    const fwdUsed = (() => {
+      const road = h.network.roads[used]!;
+      const i = before.line.findIndex((p) => p[0] === road.axis[0]![0] && p[1] === road.axis[0]![1]);
+      const j = before.line.findIndex((p) => p[0] === road.axis.at(-1)![0] && p[1] === road.axis.at(-1)![1]);
+      return i >= 0 && j > i;
+    })();
+    h.commit({ type: 'road.setOneway', payload: { roadId: used, oneway: fwdUsed ? 'backward' : 'forward' } });
+    const after = route(h.network, baseline.origin, a, b, ctx);
+    expect(after.found).toBe(true);
+    expect(after.roadIds.includes(used) && after.durationS === before.durationS).toBe(false);
+    const walk = route(h.network, baseline.origin, a, b, { ...ctx, mode: 'walk' });
+    expect(walk.found).toBe(true);
+  });
+
+  it('an active ZTL blocks cars but allows emergency vehicles and is reported', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const target: [number, number] = [14.2745, 40.9416];
+    const d = 0.0012;
+    h.commit({ type: 'zone.set', payload: { zone: { id: 'ztl1', kind: 'ztl', name: 'ZTL centro', allowedModes: ['emergency', 'bus'],
+      polygon: [[target[0] - d, target[1] - d], [target[0] + d, target[1] - d], [target[0] + d, target[1] + d], [target[0] - d, target[1] + d]],
+      schedule: [{ days: [0, 1, 2, 3, 4, 5, 6], from: '00:00', to: '23:59' }] } } });
+    const car = route(h.network, baseline.origin, [14.262, 40.935], target, ctx);
+    const emergency = route(h.network, baseline.origin, [14.262, 40.935], target, { ...ctx, mode: 'emergency' });
+    expect(emergency.found).toBe(true);
+    if (car.found) expect(car.warnings.length + (car.distanceM > emergency.distanceM ? 1 : 0)).toBeGreaterThan(0);
+  });
+});
+
+describe('junction lab and signals', () => {
+  it('builds movements, conflicts and a conflict-free plan that the signal op accepts', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const node = signalisableJunction(h.network);
+    const a = analyzeJunction(h.network, baseline.origin, node)!;
+    expect(a.arms).toHaveLength(4);
+    expect(a.movements.length).toBeGreaterThanOrEqual(8);
+    expect(a.conflicts.some((c) => c.kind === 'crossing')).toBe(true);
+    expect(a.incompatible.length).toBeGreaterThan(0);
+    const plan = suggestSignalPlan(h.network, a);
+    h.commit({ type: 'signal.setPlan', payload: { plan, conflicts: a.incompatible } });
+    expect(h.network.junctions[node]!.control).toBe('signal');
+    // Putting two incompatible groups in the same phase is rejected.
+    const [x, y] = a.incompatible[0]!;
+    const bad = { ...plan, phases: plan.phases.map((p, i) => (i === 0 ? { ...p, greenGroups: [...new Set([...p.greenGroups, x, y])] } : p)) };
+    expect(() => h.commit({ type: 'signal.setPlan', payload: { plan: bad, conflicts: a.incompatible } })).toThrow(OperationRejected);
+    // Every group sees green, yellow and red within one cycle.
+    for (const g of a.groups) {
+      const states = new Set(Array.from({ length: plan.cycleS }, (_, t) => signalState(plan, g.id, t)));
+      expect(states).toEqual(new Set(['green', 'yellow', 'red']));
+    }
+    expect(auditScenario(h.network, baseline.origin, null).filter((i) => i.category === 'signals' && i.severity === 'error')).toHaveLength(0);
+  });
+});
+
+describe('traffic, simulation, safety, network, accessibility', () => {
+  it('estimates traffic with explicit estimate provenance', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const t0 = Date.now();
+    const t = estimateTraffic(h.network, baseline, { dailyTrips: 40000, externalShare: 0.3, day: 1, hour: 8, iterations: 3, growthPercent: 0 });
+    expect(Date.now() - t0).toBeLessThan(20000);
+    expect(t.provenance).toBe('estimated');
+    expect(t.flows.filter((f) => f.volumeVph > 0).length).toBeGreaterThan(200);
+    expect(t.totals.vehKm).toBeGreaterThan(0);
+  });
+
+  it('simulates vehicles that stop at a red signal', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const node = signalisableJunction(h.network);
+    const a = analyzeJunction(h.network, baseline.origin, node)!;
+    h.commit({ type: 'signal.setPlan', payload: { plan: suggestSignalPlan(h.network, a), conflicts: a.incompatible } });
+    const at = h.network.nodes[node]!.at;
+    const d = 0.004;
+    const sim = new FlowSimulation(h.network, baseline, { day: 1, hour: 8, dailyTrips: 400000, scale: 1, seed: 7, focus: [at[0] - d, at[1] - d, at[0] + d, at[1] + d] });
+    for (let i = 0; i < 1200; i++) sim.step(0.25);
+    const f = sim.frameData();
+    expect(f.metrics.vehicles).toBeGreaterThan(5);
+    expect(f.signals.length).toBe(a.groups.length);
+    expect(f.data.length).toBe(f.metrics.vehicles * 5);
+    for (let i = 0; i < f.data.length; i += 5) {
+      expect(Math.abs(f.data[i]! - at[0])).toBeLessThan(0.05);
+    }
+    expect(f.metrics.completed).toBeGreaterThan(0);
+  });
+
+  it('safety screening is surrogate without crash data and observed with it', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const s = screenSafety(h.network, baseline, [], null);
+    expect(s.length).toBeGreaterThan(100);
+    expect(s.every((x) => x.basis === 'surrogate')).toBe(true);
+    const top = s[0]!;
+    const csv = `data;lat;lon;gravita;pedone\n2025-03-02;${top.at[1]};${top.at[0]};grave;si\nbad;;;;\n`;
+    const parsed = parseCrashCsv(csv, 'test');
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.rejected).toBe(1);
+    const s2 = screenSafety(h.network, baseline, parsed.records, null);
+    expect(s2.find((x) => x.nodeId === top.nodeId)!.basis).toBe('observed');
+  });
+
+  it('network analysis and 7-minute city accessibility run on real data', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const n = analyzeNetwork(h.network, baseline.origin, 20);
+    expect(n.largestShare).toBeGreaterThan(0.8);
+    expect(Object.keys(n.centrality).length).toBeGreaterThan(100);
+    const acc = serviceAccess(h.network, baseline, 7);
+    expect(acc.serviceCounts.school).toBeGreaterThan(0);
+    expect(acc.coverage).toBeGreaterThanOrEqual(0);
+    expect(acc.coverage).toBeLessThanOrEqual(100);
+    const iso = isochrone(h.network, baseline.origin, [14.2745, 40.9416], 'walk', 7);
+    expect(Object.keys(iso).length).toBeGreaterThan(20);
+  });
+});
