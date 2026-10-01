@@ -10,3 +10,4 @@ data-dev/
 test-results/
 playwright-report/
 .playwright-mcp/
+.shots/

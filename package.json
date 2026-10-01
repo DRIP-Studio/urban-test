@@ -3,7 +3,10 @@
   "version": "1.0.0-alpha.0",
   "private": true,
   "description": "DRIP Urban — municipal planning, civil design, traffic and digital twin workstation",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "npm run dev -w @drip-urban/web",
     "build": "npm run build -w @drip-urban/core && npm run build -w @drip-urban/web",
@@ -11,5 +14,10 @@
     "test": "npm run test --workspaces --if-present",
     "e2e": "playwright test"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "potrace": "^2.1.8"
+  }
 }

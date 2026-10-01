@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="svg14633" version="1.1" viewBox="0 0 400.624 596.046">
+  <defs id="defs14635">
+    </defs>
+  <g id="layer1" transform="translate(97.700198,-1352.6441)">
+    <g transform="translate(-98.072404,1157.5775)" id="layer1-5">
+      <g transform="translate(-0.315523,-258.876)" id="layer1-6">
+        <rect style="fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:0;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0" id="rect20110" width="452.01929" height="655.17401" x="-23.013657" y="426.9805" rx="13.7356" ry="20.148399" />
+        <path d="m -0.21105187,455.58002 401.89233187,0 0,597.93298 -401.89233187,0 0,-597.93298 z m 33.78000987,12.44778 334.332312,0 c 11.55933,0 21.00742,10.07859 21.00742,22.40219 l 0,528.23301 c 0,12.3235 -9.44809,22.4021 -21.00742,22.4021 l -334.332312,0 c -11.55934,0 -21.00742,-10.0786 -21.00742,-22.4021 l 0,-528.23301 c 0,-12.3236 9.44808,-22.40219 21.00742,-22.40219 z m -0.25832,-7.87181 334.848182,0 c 15.74363,0 28.6213,13.54639 28.6213,30.11159 l 0,528.56732 c 0,16.5556 -12.87767,30.1021 -28.6213,30.1021 l -334.848182,0 c -15.74363,0 -28.6212899,-13.5465 -28.6212899,-30.1021 l 0,-528.56732 c 0,-16.5652 12.8776599,-30.11159 28.6212899,-30.11159 z m 20.38647,48.93134 294.075242,0 0,294.06568 -294.075242,0" style="fill:#8f5445;fill-opacity:1;fill-rule:evenodd;stroke:none" id="path19324" />
+        <g id="g4092">
+          <path id="path19310" style="fill:#1f1a17;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 74.943738,674.14701 251.563652,0 0,-10.03083 -251.563652,0 0,10.03083 z" />
+          <path id="path19312" style="fill:#1f1a17;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 74.943738,656.27303 48.300832,0 0,-10.04038 -48.300832,0 0,10.04038 z" />
+          <path id="path19314" style="fill:#1f1a17;fill-opacity:1;fill-rule:nonzero;stroke:none" d="m 278.20655,656.27303 48.30084,0 0,-10.04038 -48.30084,0 0,10.04038 z" />
+          <g transform="matrix(9.5531705,0,0,-9.5531705,125.28895,597.92227)" id="g19316">
+            <path id="path19318" style="fill:#1f1a17;fill-opacity:1;fill-rule:evenodd;stroke:none" d="m 0,0 15.793,0 0,-2.561 -3.562,0 0.88,-3.809 -1.116,0 -0.88,3.809 -6.436,0 -0.88,-3.809 -1.117,0 0.88,3.809 -3.562,0" />
+          </g>
+          <g transform="matrix(9.5531705,0,0,-9.5531705,156.79531,679.47768)" id="g19320">
+            <path id="path19322" style="fill:#1f1a17;fill-opacity:1;fill-rule:evenodd;stroke:none" d="m 0,0 -0.842,-3.645 -1.116,0 L -1.116,0 0,0 z m 9.197,0 0.842,-3.645 1.117,0 L 10.313,0" />
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

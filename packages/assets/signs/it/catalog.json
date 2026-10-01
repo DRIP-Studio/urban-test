@@ -1,0 +1,1476 @@
+{
+ "source": "Wikimedia Commons via github.com/albertograva/italian_road_signs",
+ "license": "CC BY-SA 3.0",
+ "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+ "families": {
+  "priority": "Precedenza",
+  "prohibition": "Divieto",
+  "mandatory": "Obbligo",
+  "ztl": "ZTL e zone",
+  "parking": "Sosta",
+  "temporary": "Temporanei e lavori",
+  "warning": "Pericolo",
+  "direction": "Direzione e territorio",
+  "information": "Indicazione"
+ },
+ "items": [
+  {
+   "id": "it.sign.aeromobili",
+   "file": "aeromobili.svg",
+   "label": "Aeromobili",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.albergo",
+   "file": "albergo.svg",
+   "label": "Albergo",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.altri_pericoli",
+   "file": "altri_pericoli.svg",
+   "label": "Altri pericoli",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.altri_pericoli_provvisorio",
+   "file": "altri_pericoli_provvisorio.svg",
+   "label": "Altri pericoli provvisorio",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.animali_domestici_vaganti",
+   "file": "animali_domestici_vaganti.svg",
+   "label": "Animali domestici vaganti",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.animali_selvatici_vaganti",
+   "file": "animali_selvatici_vaganti.svg",
+   "label": "Animali selvatici vaganti",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.area_con_scarico_liquami",
+   "file": "area_con_scarico_liquami.svg",
+   "label": "Area con scarico liquami",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.area_pedonale",
+   "file": "area_pedonale.svg",
+   "label": "Area pedonale",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.area_pic_nic",
+   "file": "area_pic_nic.svg",
+   "label": "Area pic nic",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.attraversamento_binari",
+   "file": "attraversamento_binari.svg",
+   "label": "Attraversamento binari",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.attraversamento_ciclabile",
+   "file": "attraversamento_ciclabile.svg",
+   "label": "Attraversamento ciclabile",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.attraversamento_ciclabile_2",
+   "file": "attraversamento_ciclabile_2.svg",
+   "label": "Attraversamento ciclabile 2",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.attraversamento_pedonale",
+   "file": "attraversamento_pedonale.svg",
+   "label": "Attraversamento pedonale",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.attraversamento_pericoloso",
+   "file": "attraversamento_pericoloso.svg",
+   "label": "Attraversamento pericoloso",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.attraversamento_tramviario",
+   "file": "attraversamento_tramviario.svg",
+   "label": "Attraversamento tramviario",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.auto_al_seguito",
+   "file": "auto_al_seguito.svg",
+   "label": "Auto al seguito",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.auto_su_nave",
+   "file": "auto_su_nave.svg",
+   "label": "Auto su nave",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.auto_su_treno",
+   "file": "auto_su_treno.svg",
+   "label": "Auto su treno",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.autocarri_in_rallentamento",
+   "file": "autocarri_in_rallentamento.svg",
+   "label": "Autocarri in rallentamento",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.avvio_zona_industriale",
+   "file": "avvio_zona_industriale.svg",
+   "label": "Avvio zona industriale",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.bambini",
+   "file": "bambini.svg",
+   "label": "Bambini",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.banchina_pericolosa",
+   "file": "banchina_pericolosa.svg",
+   "label": "Banchina pericolosa",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.bar",
+   "file": "bar.svg",
+   "label": "Bar",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.caduta_massi_da_destra",
+   "file": "caduta_massi_da_destra.svg",
+   "label": "Caduta massi da destra",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.caduta_massi_da_sinistra",
+   "file": "caduta_massi_da_sinistra.svg",
+   "label": "Caduta massi da sinistra",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.campeggio",
+   "file": "campeggio.svg",
+   "label": "Campeggio",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.catene_da_neve_obbligatorie",
+   "file": "catene_da_neve_obbligatorie.svg",
+   "label": "Catene da neve obbligatorie",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.circolazione_rotatoria",
+   "file": "circolazione_rotatoria.svg",
+   "label": "Circolazione rotatoria",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.coda",
+   "file": "coda.svg",
+   "label": "Coda",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.confine_CEE",
+   "file": "confine_CEE.svg",
+   "label": "Confine CEE",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.confine_di_stato",
+   "file": "confine_di_stato.svg",
+   "label": "Confine di stato",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.confluenza_dx",
+   "file": "confluenza_dx.svg",
+   "label": "Confluenza dx",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.confluenza_sx",
+   "file": "confluenza_sx.svg",
+   "label": "Confluenza sx",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.corsia_riservata_agli_autobus",
+   "file": "corsia_riservata_agli_autobus.svg",
+   "label": "Corsia riservata agli autobus",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.croce_di_santandrea",
+   "file": "croce_di_santandrea.svg",
+   "label": "Croce di santandrea",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.croce_di_santandrea_verticale",
+   "file": "croce_di_santandrea_verticale.svg",
+   "label": "Croce di santandrea verticale",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.cunetta",
+   "file": "cunetta.svg",
+   "label": "Cunetta",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.curva_pericolosa_a_destra",
+   "file": "curva_pericolosa_a_destra.svg",
+   "label": "Curva pericolosa a destra",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.curva_pericolosa_a_sinistra",
+   "file": "curva_pericolosa_a_sinistra.svg",
+   "label": "Curva pericolosa a sinistra",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.dare_precedenza",
+   "file": "dare_precedenza.svg",
+   "label": "Dare precedenza",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.dare_precedenza_nei_sensi_unici_alternati",
+   "file": "dare_precedenza_nei_sensi_unici_alternati.svg",
+   "label": "Dare precedenza nei sensi unici alternati",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.direzione_alberghiera",
+   "file": "direzione_alberghiera.svg",
+   "label": "Direzione alberghiera",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.direzione_autocarri_consigliata",
+   "file": "direzione_autocarri_consigliata.svg",
+   "label": "Direzione autocarri consigliata",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.direzione_obbligatoria_a_destra",
+   "file": "direzione_obbligatoria_a_destra.svg",
+   "label": "Direzione obbligatoria a destra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.direzione_obbligatoria_a_sinistra",
+   "file": "direzione_obbligatoria_a_sinistra.svg",
+   "label": "Direzione obbligatoria a sinistra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.direzione_obbligatoria_dritto",
+   "file": "direzione_obbligatoria_dritto.svg",
+   "label": "Direzione obbligatoria dritto",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.direzione_per_le_industrie",
+   "file": "direzione_per_le_industrie.svg",
+   "label": "Direzione per le industrie",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.direzioni_consentite_a_destra_ed_a_sinistra",
+   "file": "direzioni_consentite_a_destra_ed_a_sinistra.svg",
+   "label": "Direzioni consentite a destra ed a sinistra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.direzioni_consentite_a_dritto_ed_a_destra",
+   "file": "direzioni_consentite_a_dritto_ed_a_destra.svg",
+   "label": "Direzioni consentite a dritto ed a destra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.direzioni_consentite_a_dritto_ed_a_sinistra",
+   "file": "direzioni_consentite_a_dritto_ed_a_sinistra.svg",
+   "label": "Direzioni consentite a dritto ed a sinistra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.diritto_di_precedenza",
+   "file": "diritto_di_precedenza.svg",
+   "label": "Diritto di precedenza",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.diritto_di_precedenza_nei_sensi_unici_alternati",
+   "file": "diritto_di_precedenza_nei_sensi_unici_alternati.svg",
+   "label": "Diritto di precedenza nei sensi unici alternati",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.discesa_pericolosa",
+   "file": "discesa_pericolosa.svg",
+   "label": "Discesa pericolosa",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.distanza",
+   "file": "distanza.svg",
+   "label": "Distanza",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.distanziamento_minimo_obbligatorio",
+   "file": "distanziamento_minimo_obbligatorio.svg",
+   "label": "Distanziamento minimo obbligatorio",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_fermata",
+   "file": "divieto_di_fermata.svg",
+   "label": "Divieto di fermata",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_segnalazioni_acustiche",
+   "file": "divieto_di_segnalazioni_acustiche.svg",
+   "label": "Divieto di segnalazioni acustiche",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_sorpasso",
+   "file": "divieto_di_sorpasso.svg",
+   "label": "Divieto di sorpasso",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_sorpasso_per_veicoli_olt3t",
+   "file": "divieto_di_sorpasso_per_veicoli_olt3t.svg",
+   "label": "Divieto di sorpasso per veicoli olt3t",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_sosta",
+   "file": "divieto_di_sosta.svg",
+   "label": "Divieto di sosta",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito",
+   "file": "divieto_di_transito.svg",
+   "label": "Divieto di transito",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_a_carico_su_asse_7t",
+   "file": "divieto_di_transito_a_carico_su_asse_7t.svg",
+   "label": "Divieto di transito a carico su asse 7t",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_a_trasporti_pericolosi",
+   "file": "divieto_di_transito_a_trasporti_pericolosi.svg",
+   "label": "Divieto di transito a trasporti pericolosi",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_a_tutti_gli_autoveicoli",
+   "file": "divieto_di_transito_a_tutti_gli_autoveicoli.svg",
+   "label": "Divieto di transito a tutti gli autoveicoli",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_a_veicoli_a_braccia",
+   "file": "divieto_di_transito_a_veicoli_a_braccia.svg",
+   "label": "Divieto di transito a veicoli a braccia",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_a_veicoli_di_massa_sopra_7t",
+   "file": "divieto_di_transito_a_veicoli_di_massa_sopra_7t.svg",
+   "label": "Divieto di transito a veicoli di massa sopra 7t",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_agli_autobus",
+   "file": "divieto_di_transito_agli_autobus.svg",
+   "label": "Divieto di transito agli autobus",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_agli_inquinanti_idrici",
+   "file": "divieto_di_transito_agli_inquinanti_idrici.svg",
+   "label": "Divieto di transito agli inquinanti idrici",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_ai_veicoli_a_motore_con_rimorchio",
+   "file": "divieto_di_transito_ai_veicoli_a_motore_con_rimorchio.svg",
+   "label": "Divieto di transito ai veicoli a motore con rimorchio",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_ai_veicoli_con_esplosivi_od_infiammabili",
+   "file": "divieto_di_transito_ai_veicoli_con_esplosivi_od_infiammabili.svg",
+   "label": "Divieto di transito ai veicoli con esplosivi od infiammabili",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_ai_veicoli_da_trasp6_5t",
+   "file": "divieto_di_transito_ai_veicoli_da_trasp6_5t.svg",
+   "label": "Divieto di transito ai veicoli da trasp6 5t",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_ai_veicoli_da_trasporto",
+   "file": "divieto_di_transito_ai_veicoli_da_trasporto.svg",
+   "label": "Divieto di transito ai veicoli da trasporto",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_ai_veicoli_lunghi",
+   "file": "divieto_di_transito_ai_veicoli_lunghi.svg",
+   "label": "Divieto di transito ai veicoli lunghi",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_alla_trazione_animale",
+   "file": "divieto_di_transito_alla_trazione_animale.svg",
+   "label": "Divieto di transito alla trazione animale",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_alle_biciclette",
+   "file": "divieto_di_transito_alle_biciclette.svg",
+   "label": "Divieto di transito alle biciclette",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_alle_macchine_agricole",
+   "file": "divieto_di_transito_alle_macchine_agricole.svg",
+   "label": "Divieto di transito alle macchine agricole",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_altezza_3,50m",
+   "file": "divieto_di_transito_altezza_3,50m.svg",
+   "label": "Divieto di transito altezza 3,50m",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_larghezza_2,30m",
+   "file": "divieto_di_transito_larghezza_2,30m.svg",
+   "label": "Divieto di transito larghezza 2,30m",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_motocarrozzette",
+   "file": "divieto_di_transito_motocarrozzette.svg",
+   "label": "Divieto di transito motocarrozzette",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_motocicli",
+   "file": "divieto_di_transito_motocicli.svg",
+   "label": "Divieto di transito motocicli",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.divieto_di_transito_motocicli_B",
+   "file": "divieto_di_transito_motocicli_B.svg",
+   "label": "Divieto di transito motocicli B",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.dogana",
+   "file": "dogana.svg",
+   "label": "Dogana",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.Doppia_croce_di_Sant_Andrea",
+   "file": "Doppia_croce_di_Sant_Andrea.svg",
+   "label": "Doppia croce di Sant'Andrea",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.Doppia_croce_di_Sant_Andrea_verticale",
+   "file": "Doppia_croce_di_Sant_Andrea_verticale.svg",
+   "label": "Doppia croce di Sant'Andrea verticale",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.doppia_curva_dx",
+   "file": "doppia_curva_dx.svg",
+   "label": "Doppia curva dx",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.doppia_curva_sx",
+   "file": "doppia_curva_sx.svg",
+   "label": "Doppia curva sx",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.doppio_senso",
+   "file": "doppio_senso.svg",
+   "label": "Doppio senso",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.dosso",
+   "file": "dosso.svg",
+   "label": "Dosso",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.estesa",
+   "file": "estesa.svg",
+   "label": "Estesa",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.estesa_1",
+   "file": "estesa_1.svg",
+   "label": "Estesa 1",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.fermarsi_e_dare_precedenza_-_stop",
+   "file": "fermarsi_e_dare_precedenza_-_stop.svg",
+   "label": "Fermarsi e dare precedenza – stop",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.fermata_autobus",
+   "file": "fermata_autobus.svg",
+   "label": "Fermata autobus",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.fermata_tram",
+   "file": "fermata_tram.svg",
+   "label": "Fermata tram",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.fine_area_pedonale",
+   "file": "fine_area_pedonale.svg",
+   "label": "Fine area pedonale",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.fine_centro_abitato",
+   "file": "fine_centro_abitato.svg",
+   "label": "Fine centro abitato",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.fine_del_diritto_di_precedenza",
+   "file": "fine_del_diritto_di_precedenza.svg",
+   "label": "Fine del diritto di precedenza",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.fine_del_divieto_di_sorpasso",
+   "file": "fine_del_divieto_di_sorpasso.svg",
+   "label": "Fine del divieto di sorpasso",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.fine_del_divieto_di_sorpasso_per_veicoli_oltre_3,5t",
+   "file": "fine_del_divieto_di_sorpasso_per_veicoli_oltre_3,5t.svg",
+   "label": "Fine del divieto di sorpasso per veicoli oltre 3,5t",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.fine_limite_di_velocita_50",
+   "file": "fine_limite_di_velocita_50.svg",
+   "label": "Fine limite di velocita 50",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.fine_limite_minimo_di_velocita_30",
+   "file": "fine_limite_minimo_di_velocita_30.svg",
+   "label": "Fine limite minimo di velocita 30",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.fine_percorso_pedonale",
+   "file": "fine_percorso_pedonale.svg",
+   "label": "Fine percorso pedonale",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.fine_percorso_pedonale_e_ciclabile",
+   "file": "fine_percorso_pedonale_e_ciclabile.svg",
+   "label": "Fine percorso pedonale e ciclabile",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.fine_percorso_riservato_ai_quadrupedi",
+   "file": "fine_percorso_riservato_ai_quadrupedi.svg",
+   "label": "Fine percorso riservato ai quadrupedi",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.fine_pista_ciclabile",
+   "file": "fine_pista_ciclabile.svg",
+   "label": "Fine pista ciclabile",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.fine_pista_ciclabile_contigua_al_marciapiede",
+   "file": "fine_pista_ciclabile_contigua_al_marciapiede.svg",
+   "label": "Fine pista ciclabile contigua al marciapiede",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.fine_strada_riservata_ai_veicoli_a_motore",
+   "file": "fine_strada_riservata_ai_veicoli_a_motore.svg",
+   "label": "Fine strada riservata ai veicoli a motore",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.fine_velocita_consigliata_60",
+   "file": "fine_velocita_consigliata_60.svg",
+   "label": "Fine velocita consigliata 60",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.fine_zona_30",
+   "file": "fine_zona_30.svg",
+   "label": "Fine zona 30",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.fine_zona_residenziale",
+   "file": "fine_zona_residenziale.svg",
+   "label": "Fine zona residenziale",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.fine_zona_traffico_limitato",
+   "file": "fine_zona_traffico_limitato.svg",
+   "label": "Fine zona traffico limitato",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.fiume",
+   "file": "fiume.svg",
+   "label": "Fiume",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.forte_vento_laterale",
+   "file": "forte_vento_laterale.svg",
+   "label": "Forte vento laterale",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.galleria_blu",
+   "file": "galleria_blu.svg",
+   "label": "Galleria blu",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.incidente",
+   "file": "incidente.svg",
+   "label": "Incidente",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.informazioni",
+   "file": "informazioni.svg",
+   "label": "Informazioni",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.informazioni_alberghere",
+   "file": "informazioni_alberghere.svg",
+   "label": "Informazioni alberghere",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.Inizio_autostrada",
+   "file": "Inizio_autostrada.svg",
+   "label": "Inizio autostrada",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.inizio_centro_abitato",
+   "file": "inizio_centro_abitato.svg",
+   "label": "Inizio centro abitato",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.inizio_localita",
+   "file": "inizio_localita.svg",
+   "label": "Inizio localita",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.inizio_provincia",
+   "file": "inizio_provincia.svg",
+   "label": "Inizio provincia",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.inizio_regione",
+   "file": "inizio_regione.svg",
+   "label": "Inizio regione",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.Inizio_strada_extraurbana_principale",
+   "file": "Inizio_strada_extraurbana_principale.svg",
+   "label": "Inizio strada extraurbana principale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.inizio_territorio_comunale",
+   "file": "inizio_territorio_comunale.svg",
+   "label": "Inizio territorio comunale",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.intersezione_a_T_con_diritto_di_precedenza_dx",
+   "file": "intersezione_a_T_con_diritto_di_precedenza_dx.svg",
+   "label": "Intersezione a T con diritto di precedenza dx",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.intersezione_a_T_con_diritto_di_precedenza_sx",
+   "file": "intersezione_a_T_con_diritto_di_precedenza_sx.svg",
+   "label": "Intersezione a T con diritto di precedenza sx",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.intersezione_con_diritto_di_precedenza",
+   "file": "intersezione_con_diritto_di_precedenza.svg",
+   "label": "Intersezione con diritto di precedenza",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.intersezione_con_precedenza_a_destra",
+   "file": "intersezione_con_precedenza_a_destra.svg",
+   "label": "Intersezione con precedenza a destra",
+   "family": "priority"
+  },
+  {
+   "id": "it.sign.inversione_di_marcia",
+   "file": "inversione_di_marcia.svg",
+   "label": "Inversione di marcia",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.lavori",
+   "file": "lavori.svg",
+   "label": "Lavori",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.limite_di_velocita_50",
+   "file": "limite_di_velocita_50.svg",
+   "label": "Limite di velocita 50",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.limite_minimo_di_velocita_30",
+   "file": "limite_minimo_di_velocita_30.svg",
+   "label": "Limite minimo di velocita 30",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.limiti_generali",
+   "file": "limiti_generali.svg",
+   "label": "Limiti generali",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.localizzazione_polizia_municipale",
+   "file": "localizzazione_polizia_municipale.svg",
+   "label": "Localizzazione polizia municipale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.materiale_instabile",
+   "file": "materiale_instabile.svg",
+   "label": "Materiale instabile",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.mezzi_di_lavoro_in_azione",
+   "file": "mezzi_di_lavoro_in_azione.svg",
+   "label": "Mezzi di lavoro in azione",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.ospedale",
+   "file": "ospedale.svg",
+   "label": "Ospedale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.ostello_per_la_gioventu",
+   "file": "ostello_per_la_gioventu.svg",
+   "label": "Ostello per la gioventu",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.parcheggio",
+   "file": "parcheggio.svg",
+   "label": "Parcheggio",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_+_escursionismo",
+   "file": "parcheggio_+_escursionismo.svg",
+   "label": "Parcheggio + escursionismo",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_di_scambio_con_autobus",
+   "file": "parcheggio_di_scambio_con_autobus.svg",
+   "label": "Parcheggio di scambio con autobus",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_di_scambio_con_metro",
+   "file": "parcheggio_di_scambio_con_metro.svg",
+   "label": "Parcheggio di scambio con metro",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_di_scambio_con_tram",
+   "file": "parcheggio_di_scambio_con_tram.svg",
+   "label": "Parcheggio di scambio con tram",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_riservato_ai_disabili_-_new",
+   "file": "parcheggio_riservato_ai_disabili_-_new.svg",
+   "label": "Parcheggio riservato ai disabili",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_riservato_ai_disabili_ad_personam_-_new",
+   "file": "parcheggio_riservato_ai_disabili_ad_personam_-_new.svg",
+   "label": "Parcheggio riservato ai disabili ad personam",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.parcheggio_riservato_pronto_soccorso",
+   "file": "parcheggio_riservato_pronto_soccorso.svg",
+   "label": "Parcheggio riservato pronto soccorso",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.passaggi_consentiti",
+   "file": "passaggi_consentiti.svg",
+   "label": "Passaggi consentiti",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.passaggio_a_livello_con_barriere",
+   "file": "passaggio_a_livello_con_barriere.svg",
+   "label": "Passaggio a livello con barriere",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.passaggio_a_livello_senza_barriere",
+   "file": "passaggio_a_livello_senza_barriere.svg",
+   "label": "Passaggio a livello senza barriere",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.passaggio_obbligatorio_a_destra",
+   "file": "passaggio_obbligatorio_a_destra.svg",
+   "label": "Passaggio obbligatorio a destra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.passaggio_obbligatorio_a_sinistra",
+   "file": "passaggio_obbligatorio_a_sinistra.svg",
+   "label": "Passaggio obbligatorio a sinistra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.passo_carrabile",
+   "file": "passo_carrabile.svg",
+   "label": "Passo carrabile",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.passo_carrabile_bilingue_sloveno",
+   "file": "passo_carrabile_bilingue_sloveno.svg",
+   "label": "Passo carrabile bilingue sloveno",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.percorso_pedonale",
+   "file": "percorso_pedonale.svg",
+   "label": "Percorso pedonale",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.percorso_pedonale_e_ciclabile",
+   "file": "percorso_pedonale_e_ciclabile.svg",
+   "label": "Percorso pedonale e ciclabile",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.percorso_riservato_ai_quadrupedi",
+   "file": "percorso_riservato_ai_quadrupedi.svg",
+   "label": "Percorso riservato ai quadrupedi",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.pericolo_di_incendio",
+   "file": "pericolo_di_incendio.svg",
+   "label": "Pericolo di incendio",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.piazzola_su_viabilita_ordinaria",
+   "file": "piazzola_su_viabilita_ordinaria.svg",
+   "label": "Piazzola su viabilita ordinaria",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.piena_improvvisa",
+   "file": "piena_improvvisa.svg",
+   "label": "Piena improvvisa",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.pista_ciclabile",
+   "file": "pista_ciclabile.svg",
+   "label": "Pista ciclabile",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.pista_ciclabile_contigua_al_marciapiede",
+   "file": "pista_ciclabile_contigua_al_marciapiede.svg",
+   "label": "Pista ciclabile contigua al marciapiede",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.ponte_blu",
+   "file": "ponte_blu.svg",
+   "label": "Ponte blu",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.ponte_mobile",
+   "file": "ponte_mobile.svg",
+   "label": "Ponte mobile",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.posto_di_blocco",
+   "file": "posto_di_blocco.svg",
+   "label": "Posto di blocco",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.preavviso_alberghero",
+   "file": "preavviso_alberghero.svg",
+   "label": "Preavviso alberghero",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_deviazione_consigliata_autocarri",
+   "file": "preavviso_deviazione_consigliata_autocarri.svg",
+   "label": "Preavviso deviazione consigliata autocarri",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.preavviso_di_direzione_obbligatoria_a_destra",
+   "file": "preavviso_di_direzione_obbligatoria_a_destra.svg",
+   "label": "Preavviso di direzione obbligatoria a destra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.preavviso_di_direzione_obbligatoria_a_sinistra",
+   "file": "preavviso_di_direzione_obbligatoria_a_sinistra.svg",
+   "label": "Preavviso di direzione obbligatoria a sinistra",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.preavviso_di_parcheggio",
+   "file": "preavviso_di_parcheggio.svg",
+   "label": "Preavviso di parcheggio",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.preavviso_di_strada_senza_uscita_DX",
+   "file": "preavviso_di_strada_senza_uscita_DX.svg",
+   "label": "Preavviso di strada senza uscita DX",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_di_strada_senza_uscita_ODX",
+   "file": "preavviso_di_strada_senza_uscita_ODX.svg",
+   "label": "Preavviso di strada senza uscita ODX",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_diramazione_autostradale",
+   "file": "preavviso_diramazione_autostradale.svg",
+   "label": "Preavviso diramazione autostradale",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_incrocio_extraurbano",
+   "file": "preavviso_incrocio_extraurbano.svg",
+   "label": "Preavviso incrocio extraurbano",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_informazioni_turistico_alberghiere",
+   "file": "preavviso_informazioni_turistico_alberghiere.svg",
+   "label": "Preavviso informazioni turistico alberghiere",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_intersezione",
+   "file": "preavviso_intersezione.svg",
+   "label": "Preavviso intersezione",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_intersezione_extraurbana",
+   "file": "preavviso_intersezione_extraurbana.svg",
+   "label": "Preavviso intersezione extraurbana",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_rotatoria",
+   "file": "preavviso_rotatoria.svg",
+   "label": "Preavviso rotatoria",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.preavviso_ZTL_destra",
+   "file": "preavviso_ZTL_destra.svg",
+   "label": "Preavviso ZTL destra",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.preavviso_ZTL_dritto",
+   "file": "preavviso_ZTL_dritto.svg",
+   "label": "Preavviso ZTL dritto",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.preavviso_ZTL_sinistro",
+   "file": "preavviso_ZTL_sinistro.svg",
+   "label": "Preavviso ZTL sinistro",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.progressiva_chilometrica",
+   "file": "progressiva_chilometrica.svg",
+   "label": "Progressiva chilometrica",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.progressiva_chilometrica_integrata_con_segnale_di_conferma",
+   "file": "progressiva_chilometrica_integrata_con_segnale_di_conferma.svg",
+   "label": "Progressiva chilometrica integrata con segnale di conferma",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.progressiva_ettometrica",
+   "file": "progressiva_ettometrica.svg",
+   "label": "Progressiva ettometrica",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.pronto_soccorso",
+   "file": "pronto_soccorso.svg",
+   "label": "Pronto soccorso",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.rampa_pedonale",
+   "file": "rampa_pedonale.svg",
+   "label": "Rampa pedonale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.regolazione_flessibile_della_sosta_in_centro",
+   "file": "regolazione_flessibile_della_sosta_in_centro.svg",
+   "label": "Regolazione flessibile della sosta in centro",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.rifornimento",
+   "file": "rifornimento.svg",
+   "label": "Rifornimento",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.rifornimento_verde",
+   "file": "rifornimento_verde.svg",
+   "label": "Rifornimento verde",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.rimozione_forzata",
+   "file": "rimozione_forzata.svg",
+   "label": "Rimozione forzata",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.riparazioni",
+   "file": "riparazioni.svg",
+   "label": "Riparazioni",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.ristorante",
+   "file": "ristorante.svg",
+   "label": "Ristorante",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.rotatoria",
+   "file": "rotatoria.svg",
+   "label": "Rotatoria",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.salita_ripida",
+   "file": "salita_ripida.svg",
+   "label": "Salita ripida",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.sbocco_su_molo",
+   "file": "sbocco_su_molo.svg",
+   "label": "Sbocco su molo",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.scuolabus",
+   "file": "scuolabus.svg",
+   "label": "Scuolabus",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.segnale_di_itinerario",
+   "file": "segnale_di_itinerario.svg",
+   "label": "Segnale di itinerario",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.segnale_di_preavviso_di_bivio_-_1959",
+   "file": "segnale_di_preavviso_di_bivio_-_1959.svg",
+   "label": "Segnale di preavviso di bivio – 1959",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.segnale_fine_strada_extraurbana_principale",
+   "file": "segnale_fine_strada_extraurbana_principale.svg",
+   "label": "Segnale fine strada extraurbana principale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.segnale_sperimentale_micromobilita_elettrica",
+   "file": "segnale_sperimentale_micromobilita_elettrica.svg",
+   "label": "Segnale sperimentale micromobilita elettrica",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.segnaletica_in_rifacimento",
+   "file": "segnaletica_in_rifacimento.svg",
+   "label": "Segnaletica in rifacimento",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.segnali_di_territorio",
+   "file": "segnali_di_territorio.svg",
+   "label": "Segnali di territorio",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.segnali_turistici",
+   "file": "segnali_turistici.svg",
+   "label": "Segnali turistici",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.semaforo_orizzontale",
+   "file": "semaforo_orizzontale.svg",
+   "label": "Semaforo orizzontale",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.semaforo_verticale",
+   "file": "semaforo_verticale.svg",
+   "label": "Semaforo verticale",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.semaforo_verticale_provvisorio",
+   "file": "semaforo_verticale_provvisorio.svg",
+   "label": "Semaforo verticale provvisorio",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.senso_unico_(a_destra)",
+   "file": "senso_unico_(a_destra).svg",
+   "label": "Senso unico (a destra)",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.senso_unico_frontale",
+   "file": "senso_unico_frontale.svg",
+   "label": "Senso unico frontale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.sgombraneve_in_azione",
+   "file": "sgombraneve_in_azione.svg",
+   "label": "Sgombraneve in azione",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.SOS",
+   "file": "SOS.svg",
+   "label": "SOS",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.sottopassaggio_pedonale",
+   "file": "sottopassaggio_pedonale.svg",
+   "label": "Sottopassaggio pedonale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.sovrappassaggio_pedonale",
+   "file": "sovrappassaggio_pedonale.svg",
+   "label": "Sovrappassaggio pedonale",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.stazione",
+   "file": "stazione.svg",
+   "label": "Stazione",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.strada_comunale_2",
+   "file": "strada_comunale_2.svg",
+   "label": "Strada comunale 2",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.strada_dissestata",
+   "file": "strada_dissestata.svg",
+   "label": "Strada dissestata",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strada_dissestata_provvisorio",
+   "file": "strada_dissestata_provvisorio.svg",
+   "label": "Strada dissestata provvisorio",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.Strada_Provinciale_7_Italia",
+   "file": "Strada_Provinciale_7_Italia.svg",
+   "label": "Strada Provinciale 7 Italia",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.Strada_Regionale_11_Italia",
+   "file": "Strada_Regionale_11_Italia.svg",
+   "label": "Strada Regionale 11 Italia",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.strada_riservata_ai_veicoli_a_motore",
+   "file": "strada_riservata_ai_veicoli_a_motore.svg",
+   "label": "Strada riservata ai veicoli a motore",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.strada_sdrucciolevole",
+   "file": "strada_sdrucciolevole.svg",
+   "label": "Strada sdrucciolevole",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strada_sdrucciolevole_per_ghiaccio",
+   "file": "strada_sdrucciolevole_per_ghiaccio.svg",
+   "label": "Strada sdrucciolevole per ghiaccio",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strada_sdrucciolevole_per_pioggia",
+   "file": "strada_sdrucciolevole_per_pioggia.svg",
+   "label": "Strada sdrucciolevole per pioggia",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strada_senza_uscita",
+   "file": "strada_senza_uscita.svg",
+   "label": "Strada senza uscita",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.Strada_Statale_10_Italia",
+   "file": "Strada_Statale_10_Italia.svg",
+   "label": "Strada Statale 10 Italia",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.strettoia_asimmetrica_a_destra",
+   "file": "strettoia_asimmetrica_a_destra.svg",
+   "label": "Strettoia asimmetrica a destra",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strettoia_asimmetrica_a_sinistra",
+   "file": "strettoia_asimmetrica_a_sinistra.svg",
+   "label": "Strettoia asimmetrica a sinistra",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strettoia_simmetrica",
+   "file": "strettoia_simmetrica.svg",
+   "label": "Strettoia simmetrica",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.strettoia_simmetrica_provvisorio",
+   "file": "strettoia_simmetrica_provvisorio.svg",
+   "label": "Strettoia simmetrica provvisorio",
+   "family": "temporary"
+  },
+  {
+   "id": "it.sign.svolta_a_sx_indiretta",
+   "file": "svolta_a_sx_indiretta.svg",
+   "label": "Svolta a sx indiretta",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.svolta_a_sx_semidiretta",
+   "file": "svolta_a_sx_semidiretta.svg",
+   "label": "Svolta a sx semidiretta",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.taxi",
+   "file": "taxi.svg",
+   "label": "Taxi",
+   "family": "parking"
+  },
+  {
+   "id": "it.sign.telefono",
+   "file": "telefono.svg",
+   "label": "Telefono",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.transitabilita_1",
+   "file": "transitabilita_1.svg",
+   "label": "Transitabilita 1",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.transitabilita_4",
+   "file": "transitabilita_4.svg",
+   "label": "Transitabilita 4",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.transito_vietato_ai_pedoni",
+   "file": "transito_vietato_ai_pedoni.svg",
+   "label": "Transito vietato ai pedoni",
+   "family": "prohibition"
+  },
+  {
+   "id": "it.sign.uso_corsie",
+   "file": "uso_corsie.svg",
+   "label": "Uso corsie",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.uso_corsie_1",
+   "file": "uso_corsie_1.svg",
+   "label": "Uso corsie 1",
+   "family": "mandatory"
+  },
+  {
+   "id": "it.sign.variazione_corsie_disponibili_-_aumento",
+   "file": "variazione_corsie_disponibili_-_aumento.svg",
+   "label": "Variazione corsie disponibili – aumento",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.variazione_corsie_disponibili_-_riduzione",
+   "file": "variazione_corsie_disponibili_-_riduzione.svg",
+   "label": "Variazione corsie disponibili – riduzione",
+   "family": "direction"
+  },
+  {
+   "id": "it.sign.velocita_consigliata_60",
+   "file": "velocita_consigliata_60.svg",
+   "label": "Velocita consigliata 60",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.via_libera",
+   "file": "via_libera.svg",
+   "label": "Via libera",
+   "family": "information"
+  },
+  {
+   "id": "it.sign.zona_30_kmh",
+   "file": "zona_30_kmh.svg",
+   "label": "Zona 30 km/h",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.zona_residenziale",
+   "file": "zona_residenziale.svg",
+   "label": "Zona residenziale",
+   "family": "ztl"
+  },
+  {
+   "id": "it.sign.zona_soggetta_ad_allagamento",
+   "file": "zona_soggetta_ad_allagamento.svg",
+   "label": "Zona soggetta ad allagamento",
+   "family": "warning"
+  },
+  {
+   "id": "it.sign.zona_traffico_limitato",
+   "file": "zona_traffico_limitato.svg",
+   "label": "Zona traffico limitato",
+   "family": "ztl"
+  }
+ ]
+}
