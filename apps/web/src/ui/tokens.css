@@ -4,30 +4,40 @@
  *   DRIP blue #5587A2 · DRIP ink #1D1D1B · FST amaranto #8B0209 · FST ink #131212
  * Product accent #83B4D1 (DRIP product system) is used for active/selection on the dark shell.
  */
-:root {
-  /* Shell (dark technical) */
-  --ink-0: #0d0d0d;
-  --ink-1: #131416;
-  --ink-2: #191b1e;
-  --ink-3: #212428;
-  --ink-4: #2b2f34;
-  --line-1: #2a2d32;
-  --line-2: #383c42;
-  --text-1: #eceae5;
-  --text-2: #b4b3ae;
-  --text-3: #85878a;
-  --text-inverse: #131212;
+@font-face { font-family: 'Ginto'; src: url('/fonts/ginto-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Ginto'; src: url('/fonts/ginto-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Ginto'; src: url('/fonts/ginto-500.woff2') format('woff2'); font-weight: 500 600; font-display: swap; }
+@font-face { font-family: 'Ginto'; src: url('/fonts/ginto-700.woff2') format('woff2'); font-weight: 700 800; font-display: swap; }
+@font-face { font-family: 'Ginto Nord'; src: url('/fonts/ginto-nord-500.woff2') format('woff2'); font-weight: 500 600; font-display: swap; }
+@font-face { font-family: 'Ginto Nord'; src: url('/fonts/ginto-nord-700.woff2') format('woff2'); font-weight: 700 800; font-display: swap; }
+@font-face { font-family: 'Ginto Nord'; src: url('/fonts/ginto-nord-900.woff2') format('woff2'); font-weight: 900; font-display: swap; }
 
-  /* Brand */
+:root {
+  /* Surfaces — DRIP product system: off-black base, one warm-neutral family (no cool/warm mix). */
+  --ink-0: #0d0d0d;            /* chrome: top bar, rail, status */
+  --ink-1: #141414;            /* panels */
+  --ink-2: #1b1b1c;            /* raised controls */
+  --ink-3: #242425;            /* hover */
+  --ink-4: #2f2f31;            /* pressed / scrollbar */
+  --line-1: rgba(245, 243, 239, 0.07);
+  --line-2: rgba(245, 243, 239, 0.13);
+  --text-1: #f5f3ef;           /* DRIP ivory */
+  --text-2: #b9b6b0;
+  --text-3: #85827d;
+  --text-inverse: #0d0d0d;
+
+  /* Brand (measured on the official files; see packages/assets/brand/source) */
   --drip-blue: #5587a2;
-  --drip-accent: #83b4d1;
-  --drip-accent-soft: rgba(131, 180, 209, 0.16);
-  --drip-orange: #e8772e;
-  --drip-orange-soft: rgba(232, 119, 46, 0.16);
-  --drip-rose: #d9b3ad;
-  --fst-red: #8b0209;
+  --drip-accent: #83b4d1;      /* azzurro polvere: selection, active, primary action */
+  --drip-accent-soft: rgba(131, 180, 209, 0.14);
+  --drip-accent-hover: #9cc4dc;
+  --drip-orange: #e8772e;      /* arancione Hermès: everything that is "project" */
+  --drip-orange-soft: rgba(232, 119, 46, 0.14);
+  --drip-orange-hover: #f0894a;
+  --drip-rose: #d9b3ad;        /* rosa polvere: secondary highlight (hover on map objects, measurements) */
+  --fst-red: #8b0209;          /* FST logo red — logo only */
   --fst-ink: #131212;
-  /* FST platform UI red (civic pages, from the FST app/WordPress UI), distinct from the logo red. */
+  /* FST platform UI red (civic section only) */
   --fst-civic: #7a1f32;
   --fst-civic-soft: rgba(122, 31, 50, 0.25);
   --fst-civic-text: #e7b6c0;
@@ -39,23 +49,19 @@
   --ed-muted: #6b625a;
   --ed-line: #ddd5c8;
 
-  /* Hover shades of the two action colours */
-  --drip-accent-hover: #9cc4dc;
-  --drip-orange-hover: #f0894a;
-
-  /* Signal aspects (Signal Studio timeline, conflict matrix) */
+  /* Signal aspects, risk */
   --sig-green: #3fc06a;
   --sig-amber: #f3b52f;
   --sig-red: #b9312a;
   --risk-2: #e1703a;
   --risk-3: #f08a7c;
 
-  /* Cross-section element swatches (mini section strip) */
+  /* Cross-section element swatches */
   --el-lane: #4a4d52; --el-bus: #8a3a32; --el-sidewalk: #b8b2a6; --el-parking: #5f6268; --el-cycle: #9a4b3d;
   --el-green: #6f8f52; --el-furniture: #8b8578; --el-shoulder: #3e4146; --el-curb: #9c9a96;
 
   /* Semantic */
-  --ok: #6fae86;
+  --ok: #7fb894;
   --warn: #d9a441;
   --err: #d0614f;
   --existing: #9aa3ab;
@@ -65,62 +71,70 @@
   /* Provenance badges */
   --prov-existing: #9aa3ab;
   --prov-osm: #7ea7c4;
-  --prov-measured: #6fae86;
+  --prov-measured: #7fb894;
   --prov-derived: #a99bc9;
   --prov-estimated: #d9a441;
   --prov-project: var(--drip-orange);
   --prov-simulated: #c98bb0;
   --prov-live: #5fc0a8;
 
-  /* Typography */
-  --font-ui: 'Manrope Variable', 'Manrope', system-ui, sans-serif;
+  /* Typography — Ginto (DRIP), Ginto Nord for display, Playfair for FST editorial accents. */
+  --font-ui: 'Ginto', 'Manrope Variable', system-ui, sans-serif;
+  --font-display: 'Ginto Nord', 'Ginto', system-ui, sans-serif;
   --font-editorial: 'Playfair Display', Georgia, serif;
   --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --fs-10: 10px;
   --fs-11: 11px;
   --fs-12: 12px;
   --fs-13: 13px;
-  --fs-14: 14px;
+  --fs-14: 15px;   /* Ginto loses the dot of "i" at exactly 14px (hinting): the step is 15px */
   --fs-16: 16px;
-  --fs-20: 20px;
-  --fs-28: 28px;
-  --fs-40: 40px;
-  --lh-tight: 1.15;
-  --lh-ui: 1.4;
-  --lh-text: 1.55;
-  --tracking-caps: 0.08em;
+  --fs-20: 21px;
+  --fs-28: 34px;   /* φ steps above the UI size */
+  --fs-40: 55px;
+  --lh-tight: 1.1;
+  --lh-ui: 1.45;
+  --lh-text: 1.6;
+  --tracking-caps: 0.06em;
+  --tracking-display: -0.02em;
 
-  /* Spacing scale */
-  --s-1: 4px;
+  /* Spacing — Fibonacci/golden steps (each ≈ φ × the previous). */
+  --s-1: 5px;
   --s-2: 8px;
-  --s-3: 12px;
-  --s-4: 16px;
-  --s-5: 20px;
-  --s-6: 24px;
-  --s-8: 32px;
-  --s-12: 48px;
+  --s-3: 13px;
+  --s-4: 21px;
+  --s-5: 26px;
+  --s-6: 34px;
+  --s-8: 42px;
+  --s-12: 55px;
 
-  /* Radii (restrained) */
-  --r-1: 6px;
+  /* Radii — tighter inside, softer outside. */
+  --r-1: 5px;
   --r-2: 8px;
-  --r-3: 10px;
-  --r-4: 12px;
+  --r-3: 13px;
+  --r-4: 21px;
 
-  /* Motion */
-  --t-fast: 100ms;
-  --t-std: 160ms;
-  --t-panel: 220ms;
+  /* Motion — springs as linear() curves sampled from a damped-spring model (see docs/DESIGN-SYSTEM.md).
+     Transitions restart from the on-screen value, so they stay interruptible. */
+  --spring: linear(0, 0.029, 0.099, 0.189, 0.285, 0.381, 0.47, 0.552, 0.624, 0.687, 0.741, 0.786, 0.825, 0.857, 0.884, 0.906, 0.924, 0.938, 0.951, 0.96, 0.968, 0.975, 0.98, 0.984, 0.987, 0.99, 0.992, 0.994, 0.995, 0.996, 0.997, 0.997, 1);
+  --spring-bounce: linear(0, 0.027, 0.096, 0.188, 0.291, 0.397, 0.499, 0.593, 0.676, 0.749, 0.811, 0.862, 0.903, 0.936, 0.961, 0.98, 0.993, 1.003, 1.009, 1.013, 1.015, 1.015, 1.015, 1.014, 1.012, 1.011, 1.009, 1.007, 1.006, 1.005, 1.004, 1.003, 1);
+  --t-spring: 470ms;           /* damping 1.0, response 0.35 s */
+  --t-fast: 120ms;
+  --t-std: 200ms;
+  --t-panel: 320ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Layout */
-  --topbar-h: 52px;
-  --statusbar-h: 26px;
-  --rail-w: 72px;
-  --inspector-w: 368px;
-  --dock-h: 300px;
+  /* Layout — chrome heights on the golden scale; inspector ≈ viewport / φ³. */
+  --topbar-h: 55px;
+  --statusbar-h: 29px;
+  --rail-w: 60px;
+  --inspector-w: 356px;
+  --dock-h: 34vh;
 
-  /* Elevation (used sparingly: floating menus only) */
-  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-2);
+  /* Elevation — tinted, single light source from above. */
+  --shadow-pop: 0 13px 34px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line-2);
+  --shadow-float: 0 8px 21px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--line-1);
 
   /* Z layers */
   --z-map-ui: 10;
@@ -131,5 +145,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --t-fast: 0ms; --t-std: 0ms; --t-panel: 0ms; }
+  :root { --t-fast: 0ms; --t-std: 0ms; --t-panel: 0ms; --t-spring: 0ms; }
 }

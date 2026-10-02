@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { ScenarioSummary } from '../api/types';
 import { navigate, refreshProject, selectScenario, setDock, setMode, undo, redo, useApp } from '../state/store';
@@ -29,7 +29,7 @@ function ScenarioMenu() {
   }, copyFrom ? 'Scenario duplicato' : 'Scenario creato');
   return (
     <Popover width={320} trigger={(open, toggle) => (
-      <button type="button" className={`scenario-trigger ${open ? 'is-open' : ''}`} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}>
+      <button type="button" className={`scenario-trigger ${open ? 'is-open' : ''} ${scenario.isBaseline ? 'is-base' : ''}`} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}>
         <span className="scn-label">{scenario.isBaseline ? 'Stato attuale' : 'Scenario'}</span>
         <span className="scn-name">{scenario.name}{scenario.locked && !scenario.isBaseline ? <Icon name="lock" size={12} /> : null}</span>
         <Icon name="chevronDown" size={14} />
@@ -74,6 +74,34 @@ function ScenarioMenu() {
   );
 }
 
+/** Segmented mode control; the thumb slides to the active mode on a spring (CSS, interruptible). */
+function ModeSwitch({ mode }: { mode: string }) {
+  const nav = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const el = nav.current;
+    if (!el) return;
+    const place = () => {
+      const on = el.querySelector<HTMLElement>('.mode.is-on');
+      if (!on) return;
+      el.style.setProperty('--thumb-x', `${on.offsetLeft}px`);
+      el.style.setProperty('--thumb-w', `${on.offsetWidth}px`);
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    void document.fonts?.ready.then(place);
+    return () => ro.disconnect();
+  }, [mode]);
+  return (
+    <nav ref={nav} className="modes" aria-label="Modalità">
+      <span className="modes-thumb" aria-hidden />
+      {MODES.map((m) => (
+        <button key={m.id} type="button" className={`mode ${mode === m.id ? 'is-on' : ''}`} onClick={() => setMode(m.id)} aria-current={mode === m.id ? 'page' : undefined} data-tip={`${m.label}  ·  Alt ${m.key}`}>{m.label}</button>
+      ))}
+    </nav>
+  );
+}
+
 export function TopBar() {
   const project = useApp((s) => s.project);
   const mode = useApp((s) => s.mode);
@@ -84,17 +112,13 @@ export function TopBar() {
   return (
     <header className="topbar">
       <button type="button" className="brand-btn" onClick={() => navigate({ view: 'hub' })} aria-label="Project Hub">
-        <TechnicalLockup city={project?.city ?? null} />
+        <TechnicalLockup />
       </button>
       <div className="topbar-project">
         <span className="project-name" title={project?.name}>{project?.name}</span>
         <ScenarioMenu />
       </div>
-      <nav className="modes" aria-label="Modalità">
-        {MODES.map((m) => (
-          <button key={m.id} type="button" className={`mode ${mode === m.id ? 'is-on' : ''}`} onClick={() => setMode(m.id)} aria-current={mode === m.id ? 'page' : undefined} data-tip={`${m.label} · Alt+${m.key}`}>{m.label}</button>
-        ))}
-      </nav>
+      <ModeSwitch mode={mode} />
       <div className="topbar-actions">
         <button type="button" className="search-btn" onClick={() => usePalette.getState().toggle()} aria-label="Comandi e ricerca">
           <Icon name="search" size={15} /><span>Cerca comandi, luoghi, strade</span><kbd className="kbd">Ctrl K</kbd>

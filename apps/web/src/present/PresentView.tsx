@@ -66,7 +66,7 @@ export function PresentView() {
   return (
     <div className={`present ${civic ? 'is-civic' : ''}`}>
       <aside className="present-rail">
-        <div className="present-brand">{civic ? <CivicLockup /> : <TechnicalLockup city={project.city} />}</div>
+        <div className="present-brand">{civic ? <CivicLockup /> : <TechnicalLockup />}</div>
         <h1 className={civic ? 'editorial' : ''}>{project.name}</h1>
         <p className="muted">{scenario?.isBaseline ? 'Stato attuale' : `Scenario: ${scenario?.name}`}</p>
         <Toggle label="Versione civica (identità FST)" checked={civic} onChange={(v) => void save({ ...doc, civic: v })} />

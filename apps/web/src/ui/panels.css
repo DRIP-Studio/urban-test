@@ -29,7 +29,7 @@
 .template .mini-section { height: 14px; }
 .template-name { font-weight: 700; }
 .template-meta { font-size: var(--fs-11); color: var(--text-3); }
-.lib-group-title { font-size: var(--fs-10); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--text-3); font-weight: 700; margin: 6px 0 2px; }
+.lib-group-title { font-size: var(--fs-12); color: var(--text-3); font-weight: 400; margin: 8px 0 4px; }
 .lib-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; width: 100%; background: none; border: 0; border-radius: var(--r-1); padding: 6px; text-align: left; }
 .lib-row:hover { background: var(--ink-2); }
 .lib-row.is-on { background: var(--drip-orange-soft); box-shadow: inset 2px 0 0 var(--drip-orange); }
@@ -65,7 +65,7 @@
 .junction-lab { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--s-5); align-items: start; }
 .jl-col.jl-wide { grid-column: span 2; }
 .jl-col { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; }
-.jl-col h3, .signal-studio h3 { margin: 0; font-size: var(--fs-11); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--text-3); }
+.jl-col h3, .signal-studio h3 { margin: 0; font-size: var(--fs-13); font-weight: 500; color: var(--text-2); }
 .group-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .group-row { width: 100%; display: grid; grid-template-columns: 32px 1fr auto; gap: 6px; align-items: center; background: var(--ink-0); border: 1px solid var(--line-1); border-radius: var(--r-1); padding: 6px 8px; text-align: left; }
 .group-row.is-on { border-color: var(--drip-accent); }
@@ -171,7 +171,7 @@
 .card:hover .card-thumb img { transform: scale(1.02); }
 .card-nothumb { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text-3); font-size: var(--fs-11); }
 .card-body { padding: var(--s-4); display: flex; flex-direction: column; gap: 4px; }
-.card-kind { font-size: var(--fs-10); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--drip-accent); font-weight: 700; }
+.card-kind { font-size: var(--fs-12); color: var(--drip-accent); font-weight: 500; }
 .card-body h2 { margin: 0 0 4px; font-size: var(--fs-16); }
 .card-meta { font-size: var(--fs-11); color: var(--text-3); }
 .card-actions { display: flex; gap: var(--s-4); padding: 0 var(--s-4) var(--s-4); }

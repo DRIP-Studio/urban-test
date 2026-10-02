@@ -126,7 +126,7 @@ export function Hub() {
   return (
     <div className="hub">
       <header className="hub-head">
-        <TechnicalLockup city="Frattamaggiore" />
+        <TechnicalLockup />
         <div className="hub-actions">
           <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPkg(f); e.target.value = ''; }} />
           <Button icon="import" onClick={() => file.current?.click()}>Importa progetto</Button>

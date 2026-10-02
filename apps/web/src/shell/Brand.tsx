@@ -1,25 +1,14 @@
 /**
- * Co-branding from the official vector files (packages/assets/brand, served at /brand).
- * Technical mode: DRIP dominant, FST as civic deployment identifier.
- * Civic / public mode: FST dominant, "Tecnologia DRIP Studio" secondary.
- * Responsive: wide = both full lockups · medium = DRIP lockup + FST mark · narrow = marks only (CSS container queries).
+ * Brand lockups from the official vector files (packages/assets/brand, served at /brand).
+ * Workstation: DRIP only — mark, wordmark and product name share one cap height.
+ * Frattamaggiore Si Trasforma appears only in the civic section and on public pages (CivicLockup).
  */
-export function TechnicalLockup({ city }: { city: string | null }) {
-  const fst = city?.toLowerCase().includes('frattamaggiore');
+export function TechnicalLockup() {
   return (
-    <div className="lockup lockup-tech" aria-label={`DRIP Urban${fst ? ' — deployment civico Frattamaggiore Si Trasforma' : ''}`}>
-      <img className="lk-drip-mark" src="/brand/drip-mark.svg" alt="" />
+    <div className="lockup lockup-tech" aria-label="DRIP Urban">
+      <img className="lk-drip-mark" src="/brand/drip-mark-reverse.svg" alt="" />
       <img className="lk-drip-word" src="/brand/drip-wordmark-reverse.svg" alt="DRIP" />
-      <span className="lk-product">URBAN</span>
-      {fst ? (
-        <>
-          <span className="lk-sep" aria-hidden />
-          <span className="lk-civic">
-            <img className="lk-fst-mark" src="/brand/fst-mark-reverse.svg" alt="" />
-            <img className="lk-fst-word" src="/brand/fst-wordmark-reverse.svg" alt="Frattamaggiore Si Trasforma" />
-          </span>
-        </>
-      ) : null}
+      <span className="lk-product">Urban</span>
     </div>
   );
 }
