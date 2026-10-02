@@ -20,7 +20,9 @@ test('hub', async ({ page }) => {
   const problems = guard(page);
   await page.goto('/');
   await expect(page.getByText('E2E viste')).toBeVisible();
-  await expect(page).toHaveScreenshot('hub.png', { mask: [page.locator('.card-meta')] });
+  // Other spec files add their own projects: compare the header and this project's card only.
+  await expect(page.locator('.hub-head')).toHaveScreenshot('hub-head.png');
+  await expect(page.locator('article.card', { hasText: 'E2E viste' })).toHaveScreenshot('hub-card.png', { mask: [page.locator('.card-meta')] });
   expect(problems).toEqual([]);
 });
 

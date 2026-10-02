@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { VEHICLE_SPECS, pedestrianState, signalState, type Asset, type SignalHead, type SimFrame } from '@drip-urban/core';
-import { api } from '../api/client';
-import type { FurnitureItem, MaterialItem, ProviderStatus } from '../api/types';
+import type { FurnitureItem, MaterialItem } from '../api/types';
 import { engine } from '../engine/engine';
 import type { PhysicalPayload } from '../engine/protocol';
 import { useApp } from '../state/store';
@@ -107,8 +106,6 @@ export function TwinView() {
     if (!el.current || !baseline) return;
     let destroyed = false;
     (async () => {
-      const prov = await api.get<ProviderStatus[]>('/api/providers').catch(() => [] as ProviderStatus[]);
-      const ion = prov.find((p) => p.id === 'cesium_ion')?.configured;
       const viewer = new Cesium.Viewer(el.current!, {
         baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', credit: 'Esri, Maxar, Earthstar Geographics', maximumLevel: 19 })),
         terrainProvider: new Cesium.EllipsoidTerrainProvider(),
@@ -125,7 +122,7 @@ export function TwinView() {
       const pend = takePendingTwinCamera();
       if (pend) viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(pend.lon, pend.lat, pend.height), orientation: { heading: Cesium.Math.toRadians(pend.heading), pitch: Cesium.Math.toRadians(pend.pitch), roll: 0 } });
       else viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees((w + e) / 2, s - 0.012, 1400), orientation: { heading: 0, pitch: Cesium.Math.toRadians(-38), roll: 0 } });
-      setStatus(ion ? 'Terreno piatto (ellissoide); il token Cesium ion è configurato ma il comune è in pianura' : 'Terreno ellissoidico · immagini Esri');
+      setStatus('Terreno ellissoidico · immagini Esri');
       setReady(true);
     })().catch((err) => toast.error('Twin 3D', err instanceof Error ? err.message : String(err)));
     return () => { destroyed = true; viewerRef.current?.destroy(); viewerRef.current = null; };

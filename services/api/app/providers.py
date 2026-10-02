@@ -18,8 +18,7 @@ from app.storage import atomic_write_json, read_json
 
 PROVIDERS = {
     "here": {"label": "HERE Traffic API v7", "kind": "key", "use": "Traffico in tempo reale (flow + incidenti)"},
-    "google": {"label": "Google Maps Platform", "kind": "key", "use": "Routes API (tempi con traffico), Map Tiles (satellite, 3D)"},
-    "cesium_ion": {"label": "Cesium ion", "kind": "token", "use": "Terreno globale e Google Photorealistic 3D Tiles via ion"},
+    "google": {"label": "Google Maps Platform", "kind": "key", "use": "Map Tiles API: basemap Google Satellite nella mappa 2D"},
     "gtfs_rt": {"label": "GTFS-Realtime", "kind": "url", "use": "Posizioni veicoli TPL in tempo reale"},
 }
 _cache: dict[str, tuple[float, Any]] = {}
@@ -36,6 +35,15 @@ def _load() -> dict:
 def provider_secret(name: str) -> str | None:
     v = (_load().get(name) or {}).get("value")
     return v or None
+
+
+def redact(text: str) -> str:
+    """Removes every configured secret from a message (httpx errors echo the request URL, keys included)."""
+    for key, meta in PROVIDERS.items():
+        v = provider_secret(key)
+        if v and meta["kind"] != "url" and len(v) >= 6:
+            text = text.replace(v, "[chiave]")
+    return text
 
 
 def status() -> list[dict]:
@@ -82,20 +90,17 @@ def test(name: str) -> dict:
         if name == "here":
             r = httpx.get("https://data.traffic.hereapi.com/v7/flow", params={"in": "circle:40.9416,14.2745;r=200", "locationReferencing": "shape", "apiKey": key}, timeout=12)
         elif name == "google":
-            r = httpx.post("https://routes.googleapis.com/directions/v2:computeRoutes", timeout=12,
-                           headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": "routes.duration"},
-                           json={"origin": {"location": {"latLng": {"latitude": 40.9416, "longitude": 14.2745}}},
-                                 "destination": {"location": {"latLng": {"latitude": 40.9450, "longitude": 14.2800}}}, "travelMode": "DRIVE"})
-        elif name == "cesium_ion":
-            r = httpx.get("https://api.cesium.com/v1/me", headers={"Authorization": f"Bearer {key}"}, timeout=12)
+            # The same call the satellite basemap makes, so a passing test means the basemap works.
+            r = httpx.post("https://tile.googleapis.com/v1/createSession", params={"key": key}, timeout=12,
+                           json={"mapType": "satellite", "language": "it-IT", "region": "IT"})
         elif name == "gtfs_rt":
             r = httpx.get(key, timeout=12)
         else:
             return {"ok": False, "message": "Provider sconosciuto"}
         ok = r.status_code < 400
-        return _record_test(name, ok, "Connessione riuscita" if ok else f"HTTP {r.status_code}: {r.text[:160]}")
+        return _record_test(name, ok, "Connessione riuscita" if ok else redact(f"HTTP {r.status_code}: {r.text[:160]}"))
     except httpx.HTTPError as exc:
-        return _record_test(name, False, f"Rete: {exc}")
+        return _record_test(name, False, redact(f"Rete: {exc}"))
 
 
 def _cached(key: str, ttl: float, fn):
@@ -133,7 +138,7 @@ def here_flow(bbox: list[float]) -> dict:
     try:
         return _cached(f"here:{w:.4f},{s:.4f},{e:.4f},{n:.4f}", 120, fetch)
     except httpx.HTTPError as exc:
-        return {"status": "error", "provider": "HERE", "message": str(exc)[:300], "features": []}
+        return {"status": "error", "provider": "HERE", "message": redact(str(exc))[:300], "features": []}
 
 
 def weather_and_air(lat: float, lon: float) -> dict:
@@ -189,7 +194,7 @@ def google_tile_session(map_type: str) -> dict:
     try:
         return _cached(f"gsession:{map_type}", 3600 * 6, fetch)
     except httpx.HTTPError as exc:
-        return {"status": "error", "message": str(exc)[:300]}
+        return {"status": "error", "message": redact(str(exc))[:300]}
 
 
 def google_tile(map_type: str, z: int, x: int, y: int) -> tuple[bytes, str] | None:

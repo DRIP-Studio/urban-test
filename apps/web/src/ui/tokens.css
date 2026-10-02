@@ -27,8 +27,32 @@
   --drip-rose: #d9b3ad;
   --fst-red: #8b0209;
   --fst-ink: #131212;
+  /* FST platform UI red (civic pages, from the FST app/WordPress UI), distinct from the logo red. */
+  --fst-civic: #7a1f32;
+  --fst-civic-soft: rgba(122, 31, 50, 0.25);
+  --fst-civic-text: #e7b6c0;
   --ivory: #f5f3ef;
   --ivory-2: #ebe7df;
+
+  /* Editorial (civic pages on ivory) */
+  --ed-text: #3a332d;
+  --ed-muted: #6b625a;
+  --ed-line: #ddd5c8;
+
+  /* Hover shades of the two action colours */
+  --drip-accent-hover: #9cc4dc;
+  --drip-orange-hover: #f0894a;
+
+  /* Signal aspects (Signal Studio timeline, conflict matrix) */
+  --sig-green: #3fc06a;
+  --sig-amber: #f3b52f;
+  --sig-red: #b9312a;
+  --risk-2: #e1703a;
+  --risk-3: #f08a7c;
+
+  /* Cross-section element swatches (mini section strip) */
+  --el-lane: #4a4d52; --el-bus: #8a3a32; --el-sidewalk: #b8b2a6; --el-parking: #5f6268; --el-cycle: #9a4b3d;
+  --el-green: #6f8f52; --el-furniture: #8b8578; --el-shoulder: #3e4146; --el-curb: #9c9a96;
 
   /* Semantic */
   --ok: #6fae86;

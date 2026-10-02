@@ -9,9 +9,9 @@
 .btn:hover:not(:disabled) { background: var(--ink-4); }
 .btn:disabled { opacity: 0.45; }
 .btn-primary { background: var(--drip-accent); border-color: var(--drip-accent); color: var(--ink-0); }
-.btn-primary:hover:not(:disabled) { background: #9cc4dc; }
+.btn-primary:hover:not(:disabled) { background: var(--drip-accent-hover); }
 .btn-project { background: var(--drip-orange); border-color: var(--drip-orange); color: var(--ink-0); }
-.btn-project:hover:not(:disabled) { background: #f0894a; }
+.btn-project:hover:not(:disabled) { background: var(--drip-orange-hover); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }
 .btn-ghost:hover:not(:disabled) { background: var(--ink-3); color: var(--text-1); }
 .btn-danger { background: transparent; border-color: rgba(208, 97, 79, 0.5); color: var(--err); }

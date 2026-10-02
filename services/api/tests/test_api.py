@@ -123,3 +123,17 @@ def test_migration_from_legacy_fixture(client, tmp_path):
     types = [o["type"] for o in scenarios[0]["operations"]]
     assert "asset.add" in types
     assert any("collaudo" in r["reason"] for r in report)
+
+
+def test_provider_keys_are_masked_and_redacted(client):
+    import app.providers as providers
+    secret = "AIzaTEST-secret-1234567890"
+    assert client.put("/api/providers/google", json={"value": secret}).status_code == 200
+    listed = client.get("/api/providers").json()
+    google = next(p for p in listed if p["id"] == "google")
+    assert google["configured"] and secret not in str(listed)
+    # httpx errors echo the request URL, which carries the key: messages must not.
+    msg = providers.redact(f"Client error for url https://tile.googleapis.com/v1/createSession?key={secret}")
+    assert secret not in msg and "[chiave]" in msg
+    # Only providers the product actually uses are offered.
+    assert {p["id"] for p in listed} == {"here", "google", "gtfs_rt"}
