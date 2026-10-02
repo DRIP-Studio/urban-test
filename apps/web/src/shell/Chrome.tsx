@@ -9,6 +9,7 @@ import { GROUP_LABEL, TOOLS } from '../tools/registry';
 import { pickAt } from '../tools/select';
 import { usePicks } from '../tools/picks';
 import { useTool } from '../tools/toolState';
+import { DEFAULT_RB } from '../tools/roundabout';
 import { Icon } from '../ui/Icon';
 import { COMMANDS } from './commands';
 import { useContextMenu } from './contextMenu';
@@ -118,7 +119,7 @@ export function ContextMenu() {
   if (hit?.kind === 'node') {
     items.push({ label: 'Apri Junction Lab', icon: 'junction', run: () => { setMode('design'); setDock('junction'); } });
     items.push({ label: 'Signal Studio', icon: 'signal', run: () => { setMode('design'); setDock('signals'); } });
-    items.push({ label: 'Inserisci rotatoria qui', icon: 'roundabout', run: () => { setMode('design'); setTool('roundabout'); useTool.setState({ rb: { nodeId: hit.ids[0]!, type: 'compact', outerDiameterM: 30, circulatoryWidthM: 7, lanes: 1, apronWidthM: 1.5, aspect: 1, orientationDeg: 0, islandMaterial: 'grass', splitters: true, crossings: false } }); } });
+    items.push({ label: 'Inserisci rotatoria qui', icon: 'roundabout', run: () => { setMode('design'); setTool('roundabout'); const node = useApp.getState().network?.nodes[hit.ids[0]!]; if (node) useTool.setState({ rb: { ...DEFAULT_RB, center: node.at, nodeId: node.id, placed: true } }); } });
   }
   if (hit?.kind === 'road') {
     items.push({ label: 'Modifica sezione', icon: 'section', run: () => setDock('section') });

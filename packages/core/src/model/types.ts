@@ -238,6 +238,22 @@ export interface Roundabout {
   readonly control: 'yield' | 'signalized' | 'metered' | 'part_time';
   readonly speedKmh: number;
   readonly arms: readonly RoundaboutArmSpec[];
+  /**
+   * Set by the insertion (never authored): the network pieces the ring replaced, so removing or
+   * reshaping the roundabout restores them exactly.
+   */
+  readonly replaced?: RoundaboutReplaced;
+}
+
+export interface RoundaboutReplaced {
+  /** Original version of every road the ring cut or swallowed. */
+  readonly roads: readonly Road[];
+  /** Nodes that were inside the ring. */
+  readonly nodes: readonly RoadNode[];
+  readonly junctions: readonly JunctionSpec[];
+  readonly signalPlans: readonly SignalPlan[];
+  /** Roads created by the insertion (second half of a road crossing the whole ring). */
+  readonly createdRoadIds: readonly string[];
 }
 
 export interface SignalPhase {

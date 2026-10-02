@@ -21,7 +21,7 @@ export interface ToolState {
   arraySpacingM: number;
   arrayItem: string;
   /** Pending roundabout preview. */
-  rb: { nodeId: string; type: RoundaboutType; outerDiameterM: number; circulatoryWidthM: number; lanes: 1 | 2; apronWidthM: number; aspect: number; orientationDeg: number; islandMaterial: string; splitters: boolean; crossings: boolean } | null;
+  rb: { center: LngLat; nodeId: string | null; placed: boolean; type: RoundaboutType; outerDiameterM: number; circulatoryWidthM: number; lanes: 1 | 2; apronWidthM: number; aspect: number; orientationDeg: number; islandMaterial: string; splitters: boolean; crossings: boolean } | null;
   measure: { total: number; area: number | null } | null;
   routePick: { from: LngLat | null; to: LngLat | null; target: 'from' | 'to' };
 }

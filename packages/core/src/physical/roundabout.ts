@@ -1,4 +1,4 @@
-import { add, intersectLines, leftNormal, mul, quadBezier, type V } from '../geo/polyline';
+import { add, intersectLines, leftNormal, mul, quadBezier, sampleAt, sub, unit, type V } from '../geo/polyline';
 import type { Network, Roundabout } from '../model/types';
 import { armKey } from './junction';
 import { dashes, MARKING } from './markings';
@@ -114,31 +114,42 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         const maxLeft = 0.45 * gapTo(ai, 1), maxRight = 0.45 * gapTo(ai, -1);
         const spec = rb.arms.find((a) => a.roadId === arm.road.id);
         const entryR = spec?.entryRadiusM ?? Math.max(6, rb.outerDiameterM * 0.35);
-        // Arm direction measured from the roundabout centre (the ring node sits on the ring).
-        const angle = Math.atan2(arm.axis[0]![1] - c[1], arm.axis[0]![0] - c[0]);
-        const u: V = [Math.cos(angle), Math.sin(angle)];
-        const n = leftNormal(u);
+        // Everything is measured in the arm's own frame (s along its axis from the ring node, w to its
+        // left), so oblique arms of a freely placed ring line up with their road strip.
+        const axis = arm.axis;
+        const P = (s: number, w: number): V => {
+          const q = s >= 0 ? sampleAt(axis, Math.min(s, arm.length)) : { p: add(axis[0]!, mul(unit(sub(axis[1]!, axis[0]!)), s)), t: unit(sub(axis[1]!, axis[0]!)) };
+          return add(q.p, mul(leftNormal(q.t), w));
+        };
+        const dirAt = (s: number): V => sampleAt(axis, Math.max(0, Math.min(s, arm.length))).t;
+        const outside = (q: V) => Math.hypot(q[0] - c[0], q[1] - c[1]) >= radiusTowards(outer, Math.atan2(q[1] - c[1], q[0] - c[0]));
+        /** Distance along the arm where its edge line at offset w leaves the outer ring edge. */
+        const along = (w: number): number => {
+          let lo = -outer.a, hi = Math.min(arm.length, outer.a * 2 + 10);
+          if (outside(P(lo, w))) return lo;
+          if (!outside(P(hi, w))) return hi;
+          for (let i = 0; i < 32; i++) { const m = (lo + hi) / 2; if (outside(P(m, w))) hi = m; else lo = m; }
+          return hi;
+        };
+        const angle = Math.atan2(P(along(0), 0)[1] - c[1], P(along(0), 0)[0] - c[0]);
         const Ro = radiusTowards(outer, angle);
-        const along = (w: number) => Math.sqrt(Math.max(0, Ro * Ro - w * w));
         const wl = arm.cwLeft, wr = arm.cwRight;
-        // Setback measured along the arm axis from the ring node.
-        const ringNodeDist = Math.hypot(arm.axis[0]![0] - c[0], arm.axis[0]![1] - c[1]);
-        const S = Math.max(along(wl), along(wr)) - ringNodeDist + entryR;
+        const S = Math.max(along(wl), along(wr)) + entryR;
         const setback = Math.max(0, Math.min(S, arm.length * 0.6));
         out.setbacks.set(armKey(arm), setback);
-        const sFromC = ringNodeDist + setback;
-        const P = (s: number, w: number): V => add(add(c, mul(u, s)), mul(n, w));
 
-        // Tangent fillets from both carriageway edges onto the outer circle.
-        const throat: V[] = [P(sFromC, wr), P(sFromC, wl)];
+        // Tangent fillets from both carriageway edges onto the outer edge.
+        const throat: V[] = [P(setback, wr), P(setback, wl)];
         const tangent = (w: number, side: 1 | -1): V[] => {
-          const spread = Math.min(side > 0 ? maxLeft : maxRight, Math.asin(Math.min(0.95, Math.abs(w) / Ro)) + Math.min(0.9, entryR / Ro));
+          const hit = P(along(w), w);
+          const edgeAng = Math.atan2(hit[1] - c[1], hit[0] - c[0]);
+          const spread = Math.min(side > 0 ? maxLeft : maxRight, Math.max(0, (edgeAng - angle) * side) + Math.min(0.9, entryR / Ro));
           const ang = angle + side * spread;
           const tp = pointAt(outer, thetaFor(outer, ang));
           const tdir: V = [-Math.sin(ang) * side, Math.cos(ang) * side];
-          const meet = intersectLines(P(sFromC, w), mul(u, -1), tp, tdir);
-          const ctrl = meet && meet.s > 0 ? meet.at : P(along(w), w);
-          return quadBezier(P(sFromC, w), ctrl, tp, 10);
+          const meet = intersectLines(P(setback, w), mul(dirAt(setback), -1), tp, tdir);
+          const ctrl = meet && meet.s > 0 ? meet.at : hit;
+          return quadBezier(P(setback, w), ctrl, tp, 12);
         };
         const leftCurve = tangent(wl, 1);
         const rightCurve = tangent(wr, -1);
@@ -157,9 +168,10 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         }
         throat.push(...leftCurve.slice(1), ...arcPts, ...[...rightCurve].reverse().slice(0, -1));
         out.polygons.push({ id: `rb:${id}:throat:${arm.road.id}`, kind: 'carriageway', ring: throat, roadId: arm.road.id, state: 'project', material: 'asphalt', z: 4, heightM: 0 });
+        const edgeS = along(0);
 
         if (spec?.splitter) {
-          const L0 = Ro + 1.0, L1 = Ro + 1.0 + spec.splitterLengthM, hw = spec.splitterWidthM / 2;
+          const L0 = edgeS + 1.0, L1 = edgeS + 1.0 + spec.splitterLengthM, hw = spec.splitterWidthM / 2;
           const island: V[] = [];
           for (let i = 0; i <= 8; i++) {
             const t = i / 8;
@@ -184,7 +196,7 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
           }
         }
         if (spec?.crossing) {
-          const s = Ro + (spec.splitter ? 1.0 + spec.splitterLengthM * 0.55 : 6);
+          const s = edgeS + (spec.splitter ? 1.0 + spec.splitterLengthM * 0.55 : 6);
           const depth = MARKING.zebraDepthM / 2;
           const width = arm.cwLeft - arm.cwRight;
           const period = MARKING.zebraStripeM + MARKING.zebraGapM;

@@ -143,11 +143,6 @@ export function makeJunctionPicker(dock: string | null, then?: (nodeId: string) 
   };
 }
 
-export const roundaboutTool: ToolHandler = makeJunctionPicker(null, (nodeId) => {
-  const prev = useTool.getState().rb;
-  useTool.setState({ rb: { nodeId, type: prev?.type ?? 'compact', outerDiameterM: prev?.outerDiameterM ?? 30, circulatoryWidthM: prev?.circulatoryWidthM ?? 7, lanes: prev?.lanes ?? 1, apronWidthM: prev?.apronWidthM ?? 1.5, aspect: 1, orientationDeg: 0, islandMaterial: prev?.islandMaterial ?? 'grass', splitters: prev?.splitters ?? true, crossings: prev?.crossings ?? false } });
-});
-
 export const sectionTool: ToolHandler = {
   click(e, ctx) {
     // Rendered features first; fall back to the spatial index so a click near a kerb still finds the road.

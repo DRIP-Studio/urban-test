@@ -1,8 +1,7 @@
-import { useEffect } from 'react';
-import { LocalFrame, type Roundabout, type RoundaboutType } from '@drip-urban/core';
-import { fc } from '../engine/geojson';
-import { setSource } from '../map/mapStore';
-import { commit, newId, select, setTool, useApp } from '../state/store';
+import { useEffect, useMemo } from 'react';
+import { planRoundabout, type Roundabout, type RoundaboutType } from '@drip-urban/core';
+import { commit, useApp } from '../state/store';
+import { createRoundabout, drawPreview, roundaboutFrom } from '../tools/roundabout';
 import { deleteSelection } from '../state/actions';
 import { useTool } from '../tools/toolState';
 import { Button, Empty, Field, NumberField, Section, Segmented, Select, Toggle } from '../ui/controls';
@@ -15,60 +14,23 @@ const TYPES: { value: RoundaboutType; label: string; range: [number, number]; hi
   { value: 'turbo', label: 'Turbo', range: [40, 70], hint: 'corsie separate' },
 ];
 
-function ring(center: [number, number], r: number, aspect: number, orientationDeg: number, origin: [number, number]) {
-  const f = new LocalFrame(origin);
-  const c = f.toMetric(center);
-  const rot = ((90 - orientationDeg) * Math.PI) / 180;
-  const pts = Array.from({ length: 97 }, (_, i) => {
-    const t = (2 * Math.PI * i) / 96;
-    const x = r * Math.cos(t), y = r * aspect * Math.sin(t);
-    const ll = f.toLngLat([c[0] + x * Math.cos(rot) - y * Math.sin(rot), c[1] + x * Math.sin(rot) + y * Math.cos(rot)]);
-    return [ll[0], ll[1]];
-  });
-  return pts;
-}
-
 export function RoundaboutPlacePanel() {
   const rb = useTool((s) => s.rb);
   const net = useApp((s) => s.network);
-  const baseline = useApp((s) => s.baseline);
-  useEffect(() => {
-    if (!rb || !net || !baseline || !net.nodes[rb.nodeId]) { setSource('draft', null); return; }
-    const c = net.nodes[rb.nodeId]!.at as [number, number];
-    const R = rb.outerDiameterM / 2;
-    const aspect = rb.type === 'elliptical' ? rb.aspect : 1;
-    setSource('draft', fc([
-      { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring(c, R, aspect, rb.orientationDeg, baseline.origin as [number, number]), ring(c, R - rb.circulatoryWidthM, aspect, rb.orientationDeg, baseline.origin as [number, number])] }, properties: {} },
-      { type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { snap: true, label: `Ø ${rb.outerDiameterM} m` } },
-    ]));
-    return () => setSource('draft', null);
-  }, [rb, net, baseline]);
-  if (!rb) return <Empty icon="roundabout" title="Scegli un incrocio">Clicca su un incrocio con almeno 3 bracci: vedrai l'anteprima della rotatoria prima di confermarla.</Empty>;
+  useEffect(() => { drawPreview(rb); }, [rb, net]);
+  const plan = useMemo(() => (rb && net ? planRoundabout(net, roundaboutFrom(rb)) : null), [rb, net]);
+  if (!rb || !plan) return <Empty icon="roundabout" title="Posiziona la rotatoria">Muovi il puntatore sulla mappa: l'anello segue il cursore e si aggancia agli incroci. Clic per fissarla.</Empty>;
   const set = (p: Partial<NonNullable<typeof rb>>) => useTool.setState({ rb: { ...rb, ...p } });
   const type = TYPES.find((t) => t.value === rb.type)!;
-  const arms = net ? Object.values(net.roads).filter((r) => r.from === rb.nodeId || r.to === rb.nodeId).length : 0;
-  const confirm = () => {
-    const center = net!.nodes[rb.nodeId]!.at;
-    const r: Roundabout = {
-      id: newId('rb'), name: 'Rotatoria di progetto', type: rb.type, center, replacedNodeId: rb.nodeId, outerDiameterM: rb.outerDiameterM, aspect: rb.type === 'elliptical' ? rb.aspect : 1,
-      orientationDeg: rb.orientationDeg, circulatoryWidthM: rb.circulatoryWidthM, lanes: rb.lanes, apronWidthM: rb.apronWidthM, islandMaterial: rb.islandMaterial,
-      control: 'yield', speedKmh: rb.type === 'mini' ? 20 : 30,
-      arms: Object.values(net!.roads).filter((x) => x.from === rb.nodeId || x.to === rb.nodeId).map((x) => ({
-        roadId: x.id, entryRadiusM: Math.max(6, rb.outerDiameterM * 0.35), exitRadiusM: Math.max(8, rb.outerDiameterM * 0.45),
-        splitter: rb.splitters && rb.type !== 'mini', splitterLengthM: 10, splitterWidthM: 1.5, crossing: rb.crossings,
-      })),
-    };
-    const res = commit('roundabout.add', { roundabout: r });
-    if (res.ok) {
-      useTool.setState({ rb: null });
-      setTool('select');
-      select({ kind: 'roundabout', ids: [r.id] });
-    }
-  };
   return (
     <>
       <Section title="Nuova rotatoria">
-        <p className="muted">{arms} bracci · la rotatoria sostituisce l'incrocio nel grafo di routing (anello antiorario) e genera la geometria fisica tangente.</p>
+        <p className="muted">
+          {rb.nodeId ? "Sull'incrocio esistente" : 'Posizione libera'} · {plan.arms.length} {plan.arms.length === 1 ? 'braccio' : 'bracci'}
+          {plan.removedRoadIds.length ? ` · ${plan.removedRoadIds.length} tratti interni sostituiti dall'anello` : ''}
+          {plan.arms.length === 0 ? " · disegna poi le strade fino all'anello per collegarle" : ''}
+        </p>
+        {plan.overlaps.length ? <p className="warn-line">Si sovrappone a un'altra rotatoria: spostala o riduci il diametro.</p> : null}
         <Field label="Tipo (DM 19/04/2006)"><Select value={rb.type} ariaLabel="Tipo rotatoria" options={TYPES.map((t) => ({ value: t.value, label: t.label, hint: `${t.range[0]}–${t.range[1]} m · ${t.hint}` }))}
           onChange={(v) => { const t = TYPES.find((x) => x.value === v)!; set({ type: v, outerDiameterM: Math.min(t.range[1], Math.max(t.range[0], rb.outerDiameterM)), apronWidthM: v === 'mini' ? 1 : rb.apronWidthM }); }} /></Field>
         <div className="grid-2">
@@ -88,7 +50,10 @@ export function RoundaboutPlacePanel() {
         <Toggle label="Attraversamenti pedonali sugli accessi" checked={rb.crossings} onChange={(v) => set({ crossings: v })} />
         <p className="muted">Nessuna segnaletica viene aggiunta in automatico oltre alla linea di dare precedenza richiesta dalla regolazione.</p>
       </Section>
-      <div className="inspector-actions"><Button variant="ghost" onClick={() => useTool.setState({ rb: null })}>Annulla</Button><Button variant="project" icon="check" onClick={confirm}>Crea rotatoria</Button></div>
+      <div className="inspector-actions">
+        <Button variant="ghost" onClick={() => set({ placed: false })}>{rb.placed ? 'Riposiziona' : 'Annulla'}</Button>
+        <Button variant="project" icon="check" disabled={!rb.placed || plan.overlaps.length > 0} onClick={createRoundabout}>Crea rotatoria</Button>
+      </div>
     </>
   );
 }

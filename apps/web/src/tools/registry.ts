@@ -2,7 +2,8 @@ import type { Area, Zone } from '@drip-urban/core';
 import { commit, newId, select } from '../state/store';
 import { toast } from '../state/toasts';
 import { distribute, makeDrawTool } from './draw';
-import { cutTool, makeJunctionPicker, nodeTool, roundaboutTool, sectionTool } from './edit';
+import { cutTool, makeJunctionPicker, nodeTool, sectionTool } from './edit';
+import { roundaboutTool } from './roundabout';
 import { furnitureTool, signTool } from './place';
 import { planRoad, spline } from './roadOps';
 import { selectTool } from './select';
@@ -97,7 +98,7 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'cut', label: 'Taglia', icon: 'cut', shortcut: 'X', group: 'draw', modes: ['design'], hint: 'Clic sull\'asse per dividere la strada', cursor: 'crosshair', handler: cutTool },
   { id: 'section', label: 'Sezione', icon: 'section', shortcut: 'S', group: 'civil', modes: ['design'], hint: 'Clic su una strada per modificare corsie, marciapiedi, sosta, ciclabili', handler: sectionTool },
   { id: 'junction', label: 'Junction Lab', icon: 'junction', shortcut: 'J', group: 'civil', modes: ['design', 'analyze'], hint: 'Clic su un incrocio: corsie, svolte, conflitti, regolazione', handler: makeJunctionPicker('junction') },
-  { id: 'roundabout', label: 'Rotatoria', icon: 'roundabout', shortcut: 'O', group: 'civil', modes: ['design'], hint: 'Clic su un incrocio con almeno 3 bracci, poi configura e conferma nel pannello', handler: roundaboutTool },
+  { id: 'roundabout', label: 'Rotatoria', icon: 'roundabout', shortcut: 'O', group: 'civil', modes: ['design'], hint: 'Clic ovunque (si aggancia agli incroci) · [ ] diametro · Invio crea · Esc riposiziona', handler: roundaboutTool },
   { id: 'signals', label: 'Semafori', icon: 'signal', shortcut: 'T', group: 'civil', modes: ['design', 'traffic'], hint: 'Clic su un incrocio: Signal Studio con fasi e ciclo', handler: makeJunctionPicker('signals') },
   { id: 'signs', label: 'Cartelli', icon: 'sign', shortcut: 'G', group: 'street', modes: ['design'], hint: 'Scegli il segnale e clic per posarlo · Alt+clic su un cartello aggiunge un pannello allo stesso palo · Q/E ruota', cursor: 'crosshair', handler: signTool },
   { id: 'crossing', label: 'Attraversamento', icon: 'crossing', shortcut: 'K', group: 'street', modes: ['design'], hint: 'Due clic da un bordo all\'altro della carreggiata', cursor: 'crosshair', handler: crossingDraw },

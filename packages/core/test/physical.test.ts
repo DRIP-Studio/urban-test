@@ -179,3 +179,51 @@ describe('incremental physical build', () => {
     expect(cachedMs).toBeLessThan(fresh.stats.ms);
   });
 });
+
+describe('geometric roundabout insertion', () => {
+  const rbAt = (center: LngLat, over: Partial<Roundabout> = {}): Roundabout => ({
+    id: 'rbx', name: 'Rotatoria', type: 'compact', center, outerDiameterM: 32, aspect: 1, orientationDeg: 0,
+    circulatoryWidthM: 7, lanes: 1, apronWidthM: 1.5, islandMaterial: 'grass', control: 'yield', speedKmh: 30, arms: [], ...over,
+  });
+  const lenM = (net: Network, id: string) => geom.lengthOf(net.roads[id]!.axis.map((q) => new LocalFrame(baseline.origin).toMetric(q)));
+
+  it('takes arms through short OSM tracts: no "short arm" refusal, every arm leaves the ring', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const frame = new LocalFrame(baseline.origin);
+    // A junction with at least one incident tract shorter than the ring radius.
+    const deg = new Map<string, number>();
+    for (const r of Object.values(h.network.roads)) if (!layoutSection(r).pedestrianOnly) for (const n of [r.from, r.to]) deg.set(n, (deg.get(n) ?? 0) + 1);
+    const node = [...deg].find(([n, d]) => d >= 3 && Object.values(h.network.roads).some((r) => (r.from === n || r.to === n) && geom.lengthOf(r.axis.map((q) => frame.toMetric(q))) < 12))![0];
+    const rb = rbAt(h.network.nodes[node]!.at, { replacedNodeId: node });
+    h.commit({ type: 'roundabout.add', payload: { roundabout: rb } });
+    const net = h.network;
+    const placed = net.roundabouts.rbx!;
+    expect(placed.arms.length).toBeGreaterThanOrEqual(3);
+    const f = new LocalFrame(rb.center);
+    for (const a of placed.arms) {
+      const road = net.roads[a.roadId]!;
+      const ringEnd = road.from.startsWith('rbx:n') ? road.axis[0]! : road.axis[road.axis.length - 1]!;
+      const far = road.from.startsWith('rbx:n') ? road.axis[road.axis.length - 1]! : road.axis[0]!;
+      const p = f.toMetric(ringEnd), q = f.toMetric(far);
+      expect(Math.abs(Math.hypot(p[0], p[1]) - (32 / 2 - 7 / 2))).toBeLessThan(0.05);
+      expect(Math.hypot(q[0], q[1])).toBeGreaterThan(Math.hypot(p[0], p[1]));
+    }
+    expect(net.nodes[node]).toBeUndefined();
+  });
+
+  it('can be placed freely on a road and removing it restores the network exactly', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const frame = new LocalFrame(baseline.origin);
+    const road = Object.values(h.network.roads).find((r) => !layoutSection(r).pedestrianOnly && r.axis.length === 2 && geom.lengthOf(r.axis.map((q) => frame.toMetric(q))) > 120)!;
+    const mid: LngLat = [(road.axis[0]![0] + road.axis[1]![0]) / 2, (road.axis[0]![1] + road.axis[1]![1]) / 2];
+    const before = JSON.stringify([h.network.roads, h.network.nodes]);
+    h.commit({ type: 'roundabout.add', payload: { roundabout: rbAt(mid) } });
+    const net = h.network;
+    expect(net.roundabouts.rbx!.arms.map((a) => a.roadId).sort()).toEqual([road.id, `${road.id}~rbx`].sort());
+    expect(Object.values(net.roads).filter((r) => r.tags?.roundabout === 'rbx').length).toBeGreaterThanOrEqual(3);
+    // The two arms keep the road's course outside the ring: together shorter than the original by about the ring chord.
+    expect(lenM(net, road.id) + lenM(net, `${road.id}~rbx`)).toBeLessThan(geom.lengthOf(road.axis.map((q) => frame.toMetric(q))) - 20);
+    h.commit({ type: 'roundabout.remove', payload: { roundaboutId: 'rbx' } });
+    expect(JSON.stringify([h.network.roads, h.network.nodes])).toBe(before);
+  });
+});

@@ -5,6 +5,10 @@ import type {
 } from '../model/types';
 import { defineOperation, operationSpec, type Issue } from './registry';
 import { makeLanes } from './road-factory';
+import { extractRoundabout, insertRoundabout, planRoundabout } from './roundabout-insert';
+
+const warn = (code: string, message: string, targetIds?: string[]): Issue => ({ code, severity: 'warning', message, ...(targetIds ? { targetIds } : {}) });
+export { centreRadius, extractRoundabout, insertRoundabout, planRoundabout } from './roundabout-insert';
 
 const err = (code: string, message: string, targetIds?: string[]): Issue => ({ code, severity: 'error', message, ...(targetIds ? { targetIds } : {}) });
 const PROJECT = { kind: 'project', source: 'DRIP Urban scenario' } as const;
@@ -296,110 +300,10 @@ export const zoneRemove = defineOperation<{ readonly zoneId: string }>({
 // ---------------------------------------------------------------- roundabouts
 
 /** Ring centre-line radius in direction `angle` (ellipse aware). */
-function centreRadius(rb: Roundabout, angle: number): number {
-  const a = rb.outerDiameterM / 2 - rb.circulatoryWidthM / 2;
-  const b = rb.type === 'elliptical' ? (rb.outerDiameterM / 2) * Math.min(1, Math.max(0.5, rb.aspect)) - rb.circulatoryWidthM / 2 : a;
-  const rot = ((90 - rb.orientationDeg) * Math.PI) / 180;
-  const t = angle - rot;
-  return (a * b) / Math.hypot(b * Math.cos(t), a * Math.sin(t));
-}
-
-export function insertRoundabout(net: Network, rb: Roundabout): Network {
-  const f = new LocalFrame(rb.center);
-  const nodeId = rb.replacedNodeId!;
-  const ends = Object.values(net.roads).filter((r) => r.from === nodeId || r.to === nodeId);
-  const arms = ends.map((r) => {
-    const atStart = r.from === nodeId;
-    const pts = (atStart ? r.axis : [...r.axis].reverse()).map((q) => f.toMetric(q) as V);
-    // First point at the ring centre line along the arm.
-    let k = 1;
-    let ring: V = pts[pts.length - 1]!;
-    let angle = 0;
-    for (; k < pts.length; k++) {
-      const q = pts[k]!;
-      angle = Math.atan2(q[1], q[0]);
-      const R = centreRadius(rb, angle);
-      if (Math.hypot(q[0], q[1]) >= R) {
-        const p0 = pts[k - 1]!;
-        const d0 = Math.hypot(p0[0], p0[1]), d1 = Math.hypot(q[0], q[1]);
-        const t = (R - d0) / Math.max(1e-6, d1 - d0);
-        ring = add(p0, mul(sub(q, p0), Math.max(0, Math.min(1, t))));
-        break;
-      }
-    }
-    angle = Math.atan2(ring[1], ring[0]);
-    return { road: r, atStart, rest: pts.slice(k), ring, angle };
-  }).sort((a, b) => a.angle - b.angle);
-
-  const roads = { ...net.roads };
-  const nodes = { ...net.nodes };
-  delete nodes[nodeId];
-  arms.forEach((arm, i) => {
-    const nid = `${rb.id}:n${i}`;
-    nodes[nid] = { id: nid, at: f.toLngLat(arm.ring) };
-    const outward = [arm.ring, ...arm.rest].map((q) => f.toLngLat(q));
-    const axis = arm.atStart ? outward : [...outward].reverse();
-    axis[arm.atStart ? 0 : axis.length - 1] = nodes[nid]!.at;
-    roads[arm.road.id] = markProject({ ...arm.road, axis, ...(arm.atStart ? { from: nid } : { to: nid }) }, 'geometry');
-  });
-  const laneW = rb.circulatoryWidthM / rb.lanes;
-  arms.forEach((arm, i) => {
-    const next = arms[(i + 1) % arms.length]!;
-    let a1 = next.angle;
-    while (a1 <= arm.angle) a1 += 2 * Math.PI;
-    const steps = Math.max(4, Math.ceil((a1 - arm.angle) / (Math.PI / 36)));
-    const axis: LngLat[] = [];
-    for (let s = 0; s <= steps; s++) {
-      const a = arm.angle + ((a1 - arm.angle) * s) / steps;
-      const R = centreRadius(rb, a);
-      axis.push(f.toLngLat([R * Math.cos(a), R * Math.sin(a)]));
-    }
-    const from = `${rb.id}:n${i}`, to = `${rb.id}:n${(i + 1) % arms.length}`;
-    axis[0] = nodes[from]!.at;
-    axis[axis.length - 1] = nodes[to]!.at;
-    const id = `${rb.id}:ring${i}`;
-    const lanes = makeLanes(id, rb.lanes, laneW, 'forward', ['car', 'bus', 'truck', 'bike', 'emergency']);
-    roads[id] = {
-      id, from, to, name: rb.name, roadClass: 'roundabout', axis, oneway: 'forward', speedKmh: rb.speedKmh,
-      lanes, section: { elements: lanes.map((l) => ({ id: `${l.id}:e`, kind: 'lane' as const, widthM: l.widthM, laneId: l.id })).reverse() },
-      provenance: { geometry: PROJECT, width: PROJECT }, tags: { roundabout: rb.id },
-    };
-  });
-  const armSpecs = arms.map((a) => rb.arms.find((s) => s.roadId === a.road.id) ?? {
-    roadId: a.road.id, entryRadiusM: Math.max(6, rb.outerDiameterM * 0.35), exitRadiusM: Math.max(8, rb.outerDiameterM * 0.45),
-    splitter: rb.type !== 'mini' && rb.outerDiameterM >= 26, splitterLengthM: 10, splitterWidthM: 1.5, crossing: false,
-  });
-  const junctions = { ...net.junctions };
-  delete junctions[nodeId];
-  // The roundabout replaces the junction: its signal plans go with it (re-plan via roundabout control).
-  const signalPlans = Object.fromEntries(Object.entries(net.signalPlans).filter(([, p]) => p.nodeId !== nodeId));
-  return { ...net, roads, nodes, junctions, signalPlans, roundabouts: { ...net.roundabouts, [rb.id]: { ...rb, arms: armSpecs } } };
-}
-
-export function extractRoundabout(net: Network, rbId: string): Network {
-  const rb = net.roundabouts[rbId]!;
-  const nodeId = rb.replacedNodeId ?? `${rb.id}:centre`;
-  const roads = { ...net.roads };
-  const nodes = { ...net.nodes, [nodeId]: { id: nodeId, at: rb.center } };
-  for (const r of Object.values(net.roads)) {
-    if (r.tags?.roundabout === rbId) { delete roads[r.id]; continue; }
-    const fromRing = r.from.startsWith(`${rbId}:n`), toRing = r.to.startsWith(`${rbId}:n`);
-    if (!fromRing && !toRing) continue;
-    let axis = [...r.axis];
-    if (fromRing) axis = [rb.center, ...axis];
-    if (toRing) axis = [...axis, rb.center];
-    roads[r.id] = { ...r, axis, ...(fromRing ? { from: nodeId } : {}), ...(toRing ? { to: nodeId } : {}) };
-  }
-  for (const id of Object.keys(nodes)) if (id.startsWith(`${rbId}:n`)) delete nodes[id];
-  const roundabouts = { ...net.roundabouts };
-  delete roundabouts[rbId];
-  return { ...net, roads, nodes, roundabouts };
-}
-
 function validateRoundabout(net: Network, rb: Roundabout, replacing = false): Issue[] {
   const issues: Issue[] = [];
   if (!replacing && net.roundabouts[rb.id]) issues.push(err('rb.duplicateId', `Id già in uso: ${rb.id}`));
-  if (!rb.replacedNodeId || (!replacing && !net.nodes[rb.replacedNodeId])) issues.push(err('rb.node', 'La rotatoria si inserisce su un incrocio esistente'));
+  if (!replacing && rb.replacedNodeId && !net.nodes[rb.replacedNodeId]) issues.push(err('rb.node', 'Incrocio inesistente'));
   const D = rb.outerDiameterM;
   // DM 19/04/2006: mini 14–25 m, compatta 25–40 m, convenzionale > 40 m.
   const min = rb.type === 'mini' ? 14 : rb.type === 'compact' ? 25 : 40;
@@ -407,12 +311,12 @@ function validateRoundabout(net: Network, rb: Roundabout, replacing = false): Is
   if (D < min || D > max) issues.push(err('rb.diameter', `Diametro esterno ${D} m fuori intervallo per il tipo (${min}–${max} m, DM 19/04/2006)`));
   if (rb.circulatoryWidthM < 6 || rb.circulatoryWidthM > 12) issues.push(err('rb.width', 'Larghezza anello 6–12 m'));
   if (rb.circulatoryWidthM + rb.apronWidthM >= D / 2 - 0.5 && rb.type !== 'mini') issues.push(err('rb.island', 'Isola centrale troppo piccola per anello e fascia sormontabile'));
-  if (!replacing && rb.replacedNodeId) {
-    const arms = Object.values(net.roads).filter((r) => r.from === rb.replacedNodeId || r.to === rb.replacedNodeId);
-    if (arms.length < 3) issues.push(err('rb.arms', 'Servono almeno 3 bracci'));
-    const short = arms.filter((r) => lengthOf(r.axis.map((q) => new LocalFrame(rb.center).toMetric(q) as V)) < D / 2 + 3);
-    if (short.length) issues.push(err('rb.short', `Bracci troppo corti per il diametro scelto: ${short.map((r) => r.name || r.id).join(', ')}`, short.map((r) => r.id)));
-  }
+  const base = replacing ? extractRoundabout(net, rb.id) : net;
+  const plan = planRoundabout(base, rb);
+  if (plan.overlaps.length) issues.push(err('rb.overlap', "Si sovrappone a un'altra rotatoria"));
+  // Arms that leave the ring and end almost at once cannot carry an entry: report, don't block.
+  const stubby = plan.arms.filter((a) => lengthOf(a.outward) < 3);
+  if (stubby.length) issues.push(warn('rb.short', `Bracci che finiscono a meno di 3 m dall'anello: ${[...new Set(stubby.map((a) => a.road.name || a.roadId))].join(', ')}`, stubby.map((a) => a.roadId)));
   return issues;
 }
 
