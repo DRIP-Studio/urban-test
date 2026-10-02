@@ -1,4 +1,4 @@
-import { LocalFrame, geom, isPedestrianRoad, type LngLat, type Network } from '@drip-urban/core';
+import { LocalFrame, centreRadius, geom, isPedestrianRoad, type LngLat, type Network } from '@drip-urban/core';
 import type { Map as MLMap } from 'maplibre-gl';
 import { useMapUi } from '../map/mapStore';
 
@@ -77,6 +77,20 @@ export function snap(map: MLMap, idx: NetworkIndex, lngLat: LngLat, opts: { from
   if (opts.disable) return free;
   const mpp = s.mpp;
   const p = idx.frame.toMetric(lngLat) as geom.V;
+  // Anywhere on a roundabout (ring or island): attach to the ring centre line at that bearing,
+  // so a road drawn up to the ring becomes a new arm.
+  if (s.snap.edge) {
+    for (const rb of Object.values(idx.net.roundabouts)) {
+      const c = idx.frame.toMetric(rb.center) as geom.V;
+      const d = geom.sub(p, c);
+      if (geom.len(d) > rb.outerDiameterM / 2 + 1.5) continue;
+      const ang = Math.atan2(d[1], d[0]);
+      const R = centreRadius(rb, ang);
+      const onRing: geom.V = [c[0] + R * Math.cos(ang), c[1] + R * Math.sin(ang)];
+      const r = idx.nearestRoad(onRing, 1.5);
+      if (r && idx.net.roads[r.id]?.tags?.roundabout === rb.id) return { at: idx.frame.toLngLat(r.at), kind: 'edge', roadId: r.id, along: r.along };
+    }
+  }
   if (s.snap.node) {
     const n = idx.nearestNode(p, 12 * mpp);
     if (n) return { at: idx.net.nodes[n.id]!.at, kind: 'node', nodeId: n.id };
