@@ -46,7 +46,7 @@ function applyBasemap(map: maplibregl.Map, id: string): void {
     }
   }
   // Over imagery the city context is hidden; the project's physical model stays.
-  const imagery = b.id === 'satellite' || b.id === 'hybrid' || b.id === 'google_satellite' || b.id === 'osm' || b.id === 'terrain' || b.id === 'light';
+  const imagery = b.id === 'satellite' || b.id === 'hybrid' || b.id === 'google_satellite' || b.id === 'osm' || b.id === 'terrain';
   const visibleOpacity: Record<string, [string, number]> = { 'context-fill': ['fill-opacity', 0.9], 'buildings-fill': ['fill-opacity', 0.95], 'buildings-line': ['line-opacity', 1] };
   for (const [l, [prop, v]] of Object.entries(visibleOpacity)) if (map.getLayer(l)) map.setPaintProperty(l, prop as never, (imagery ? 0 : v) as never);
   if (map.getLayer('surfaces-fill')) map.setPaintProperty('surfaces-fill', 'fill-opacity', imagery ? ['case', ['in', ['get', 'kind'], ['literal', ['sidewalk', 'corner', 'footpath']]], 0.55, 0.92] : ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1]);

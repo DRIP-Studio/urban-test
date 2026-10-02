@@ -157,6 +157,7 @@ function Publish() {
           before: { type: 'FeatureCollection', features: before.surfaces.features.filter((x) => (roadIds.has(x.properties.roadId) || nodeIds.has(x.properties.nodeId) || inBox(x))) },
           after: { type: 'FeatureCollection', features: [...after.surfaces.features.filter(inBox), ...after.markings.features.filter(inBox)] },
           assets: { type: 'FeatureCollection', features: assets },
+          buildings: { type: 'FeatureCollection', features: Object.values(baseline.buildings).filter((bd) => bd.footprint.some((p) => p[0] >= bbox[0]! && p[0] <= bbox[2]! && p[1] >= bbox[1]! && p[1] <= bbox[3]!)).map((bd): Feature => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...bd.footprint.map((p) => [p[0], p[1]]), [bd.footprint[0]![0], bd.footprint[0]![1]]]] }, properties: {} })) },
         },
       };
       const rec = await api.post<{ id: string }>(`/api/projects/${project.id}/publish`, body);

@@ -9,7 +9,7 @@ import { BeforeAfter } from './BeforeAfter';
 interface Publication {
   id: string; title: string; summary: string; story: string; status: string; responsibleBody: string; estimatedCostEur: number | null; costSource: string | null;
   publishedAt: string; publishedBy: string; scenarioName?: string; documents: { title: string; url: string }[]; metrics: { label: string; before: number; after: number; unit: string }[];
-  geometry: { before: FeatureCollection; after: FeatureCollection; assets?: FeatureCollection }; bbox: [number, number, number, number]; sources: string[];
+  geometry: { before: FeatureCollection; after: FeatureCollection; assets?: FeatureCollection; buildings?: FeatureCollection }; bbox: [number, number, number, number]; sources: string[];
 }
 const STATUS_IT: Record<string, string> = { proposta: 'Proposta', in_valutazione: 'In valutazione', approvato: 'Approvato', finanziato: 'Finanziato', in_corso: 'In corso', completato: 'Completato', sospeso: 'Sospeso' };
 
@@ -36,8 +36,8 @@ export function PublicationView({ pubId }: { pubId: string }) {
       </section>
       <section className="pub-map">
         <BeforeAfter editorial materials={materials.items} initial={bbox}
-          before={{ surfaces: pub.geometry.before, label: 'Oggi' }}
-          after={{ surfaces: surfacesAfter, markings, assets: pub.geometry.assets, label: 'Proposta' }} />
+          before={{ surfaces: pub.geometry.before, buildings: pub.geometry.buildings, label: 'Oggi' }}
+          after={{ surfaces: surfacesAfter, markings, assets: pub.geometry.assets, buildings: pub.geometry.buildings, label: 'Proposta' }} />
       </section>
       {pub.metrics.length ? (
         <section className="pub-metrics">

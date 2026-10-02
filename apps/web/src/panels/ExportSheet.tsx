@@ -40,7 +40,8 @@ async function composeImage(title: string, subtitle: string): Promise<HTMLCanvas
   g.fillStyle = '#b4b3ae'; g.font = `${Math.round(band * 0.2)}px Manrope, sans-serif`; g.fillText(subtitle, band * 0.35, band * 0.8);
   // Legend of visible layers that have one.
   const vis = useMapUi.getState().visible;
-  const items = LAYERS.filter((l) => vis[l.id] && l.legend).flatMap((l) => l.legend!);
+  // Only layers that actually draw something in this view get a legend entry.
+  const items = LAYERS.filter((l) => vis[l.id] && l.legend && map.queryRenderedFeatures({ layers: l.mapLayers.filter((id) => map.getLayer(id)) }).length > 0).flatMap((l) => l.legend!);
   const lh = 18 * dpr, pad = 10 * dpr;
   if (items.length) {
     const boxW = 190 * dpr, boxH = items.length * lh + pad * 2;

@@ -16,8 +16,8 @@ function style(data: StateData, materials: readonly MaterialItem[], editorial: b
   return {
     version: 8,
     glyphs: `${location.origin}/glyphs/{fontstack}/{range}.pbf`,
+    // Context comes from the project's own OSM buildings: no third-party basemap or key needed.
     sources: {
-      base: { type: 'raster', tiles: ['https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© CARTO, © OpenStreetMap contributors' },
       s: { type: 'geojson', data: data.surfaces as never },
       m: { type: 'geojson', data: (data.markings ?? { type: 'FeatureCollection', features: [] }) as never },
       b: { type: 'geojson', data: (data.buildings ?? { type: 'FeatureCollection', features: [] }) as never },
@@ -25,7 +25,6 @@ function style(data: StateData, materials: readonly MaterialItem[], editorial: b
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': editorial ? '#f5f3ef' : '#e9e6df' } },
-      { id: 'base', type: 'raster', source: 'base', paint: { 'raster-opacity': editorial ? 0.55 : 0.8, 'raster-saturation': -0.6 } },
       { id: 'b', type: 'fill', source: 'b', paint: { 'fill-color': editorial ? '#e4ddd2' : '#d6d1c7' } },
       { id: 's', type: 'fill', source: 's', paint: { 'fill-color': materialColorExpr(materials), 'fill-antialias': false } },
       { id: 'sp', type: 'line', source: 's', filter: ['==', ['get', 'state'], 'project'], paint: { 'line-color': editorial ? '#7a1f32' : '#e8772e', 'line-width': 1.6 } },
