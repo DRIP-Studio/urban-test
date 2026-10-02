@@ -149,3 +149,21 @@ a { color: var(--drip-accent); }
 .maplibregl-ctrl-scale { background: rgba(13, 13, 13, 0.75); color: var(--text-1); border-color: var(--text-2); font-size: 10px; }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
+
+/* ------------------------------------------------------------------ top bar: narrower screens */
+.mode, .scn-name, .scn-label, .project-name { white-space: nowrap; }
+.topbar { gap: var(--s-3); }
+@media (max-width: 1600px) {
+  .mode { padding: 6px 9px; }
+  .project-name { max-width: 150px; }
+}
+@media (max-width: 1440px) {
+  .lk-civic { display: none; }
+  .lk-sep { display: none; }
+  .search-btn { padding: 6px 8px; }
+  .search-btn .kbd { display: none; }
+}
+@media (max-width: 1280px) {
+  .project-name { display: none; }
+  .save-status { font-size: 0; gap: 0; }
+}

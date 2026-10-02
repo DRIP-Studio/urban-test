@@ -202,8 +202,10 @@ export function Inspector() {
   const sel = useApp((s) => s.selection);
   const net = useApp((s) => s.network);
   useApp((s) => s.netVersion);
+  const tool = useApp((s) => s.tool);
   if (!net) return null;
-  if (!sel) return <ToolSettings />;
+  // Placement tools that work on a picked junction keep their own panel while active.
+  if (!sel || tool === 'roundabout') return <ToolSettings />;
   const id = sel.ids[0]!;
   if (sel.kind === 'road' && net.roads[id]) return sel.ids.length > 1 ? <Section title={`${sel.ids.length} strade selezionate`}><Button icon="trash" variant="danger" onClick={deleteSelection}>Elimina</Button></Section> : <RoadInspector road={net.roads[id]!} />;
   if (sel.kind === 'asset') return <AssetInspector ids={sel.ids} />;

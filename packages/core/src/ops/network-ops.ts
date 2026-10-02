@@ -371,7 +371,9 @@ export function insertRoundabout(net: Network, rb: Roundabout): Network {
   });
   const junctions = { ...net.junctions };
   delete junctions[nodeId];
-  return { ...net, roads, nodes, junctions, roundabouts: { ...net.roundabouts, [rb.id]: { ...rb, arms: armSpecs } } };
+  // The roundabout replaces the junction: its signal plans go with it (re-plan via roundabout control).
+  const signalPlans = Object.fromEntries(Object.entries(net.signalPlans).filter(([, p]) => p.nodeId !== nodeId));
+  return { ...net, roads, nodes, junctions, signalPlans, roundabouts: { ...net.roundabouts, [rb.id]: { ...rb, arms: armSpecs } } };
 }
 
 export function extractRoundabout(net: Network, rbId: string): Network {
