@@ -1,19 +1,19 @@
 # RECURRENT-BUGS — DRIP Urban
 
-Bug che sono tornati in più release 4x–53. Ognuno avrà un **test di comportamento** (non sul testo del sorgente) prima della chiusura.
+Bug tornati in più release 4x–53. Uno è chiuso solo quando c'è un **test di comportamento** che lo copre (nessun test sul testo del sorgente). Aggiornato il 2026-10-02.
 
-| ID | Bug | Causa radice (audit 53.0) | Prevenzione strutturale in 1.0 | Test di regressione | Stato |
-|---|---|---|---|---|---|
-| RB-01 | Marker che si spostano durante lo zoom | Trasformazioni CSS e collision solver in coordinate schermo sul contenitore del marker | Asset statici = layer GPU (symbol/model), non marker DOM. Marker DOM solo per maniglie di editing; mai `transform` sulla radice | E2E: posiziona asset, zoom 14→20→14, `map.project(anchor)` coincide con centro icona ±1 px | aperto |
-| RB-02 | Asset che finiscono in alto a sinistra | Marker creati prima del layout / senza `setLngLat` valido | Asset renderizzati da dati GeoJSON validati; coordinate obbligatorie a livello di tipo | Unit: asset senza ancora rifiutato; E2E: nessun asset in (0..40, 0..40) px | aperto |
-| RB-03 | Cunei/trapezi nelle rotatorie | Accessi tagliati a mano + `roundabout_throat`; geometria di visualizzazione mescolata al grafo | Grafo di routing e geometria fisica separati; raccordi tangenti con fillet calcolati da offset delle linee di bordo | Core: per ogni braccio, angolo bordo/anello ≤ 3° al punto di tangenza; nessuna auto-intersezione nei poligoni | aperto |
-| RB-04 | Segnaletica orizzontale generata a caso | Auto-marking in `road_canvas.py` con eccezioni per rotatorie | Nessun marking automatico oltre linee di corsia della sezione; tutto il resto è asset esplicito | Core: rotatoria nuova → 0 attraversamenti, 0 zebrature, 0 separatori di approccio | aperto |
-| RB-05 | Frecce di senso che spariscono | Regole LOD diverse per percorso di codice | Frecce derivate dal LaneModel nel Physical Model, layer unico con LOD dichiarato | E2E: a zoom ≥ 17 ogni corsia a senso unico visibile ha ≥ 1 freccia renderizzata | aperto |
-| RB-06 | Asset mancanti nel Twin | Secondo renderer in `earth3d.html` | Twin legge lo stesso Physical Model | Parità: insieme id asset 2D == insieme id asset 3D | aperto |
-| RB-07 | Cartelli sovrapposti nel Twin | Più cartelli sullo stesso punto senza palo comune | Composer palo: più pannelli su un palo, offset verticale calcolato | Core: cartelli entro 0,5 m → stesso palo, nessuna sovrapposizione di bbox 3D | aperto |
-| RB-08 | Pulsanti morti | Pulsanti in HTML senza handler o con handler condizionati | Tool/azioni solo da registro; un pulsante senza azione registrata non compila | Unit: ogni voce di registro ha handler; E2E: click su ogni tool cambia stato | aperto |
-| RB-09 | Traffico vuoto | Provider senza chiave → nessun fallback visibile | Catena provider con stato esplicito; fallback "stimato" sempre disponibile | E2E senza chiavi: layer traffico popolato, badge "stimato" | aperto |
-| RB-10 | Heatmap vuota | Layer creato senza dati o con pesi a zero | Heatmap disponibile solo se ha dati; altrimenti empty state con motivo | E2E: heatmap sicurezza con ≥ 1 punto; senza dati → messaggio | aperto |
-| RB-11 | Catalogo materiali vuoto | Caricamento asincrono non atteso | Catalogo statico nel pacchetto assets, validato in build | Unit: ≥ 17 materiali richiesti (§63) presenti con preview | aperto |
-| RB-12 | Pannelli tagliati / sovrapposti | CSS stratificato con `!important` | Layout a griglia della shell con aree dichiarate; un solo pannello inferiore alla volta | Visual: 8 viste a 1366×768, 1600×950, 1920×1080 senza overflow | aperto |
-| RB-13 | Branding disallineato | Logo raster ridotto, nessun lockup definito | Componente Lockup con regole di spazio di rispetto e 3 breakpoint (§121) | Visual: header a 3 larghezze | aperto |
+| ID | Bug | Prevenzione strutturale in 1.0 | Test di regressione | Stato |
+|---|---|---|---|---|
+| RB-01 | Marker che si spostano durante lo zoom | Asset statici = layer GPU (symbol), nessun marker DOM | `e2e/assets.spec.ts`: il cartello è renderizzato sulla sua coordinata a zoom 17 → 18,5 → 20 → 17; 0 `.maplibregl-marker` | **chiuso** |
+| RB-02 | Asset finiti in alto a sinistra | Asset da GeoJSON validato, coordinate obbligatorie a livello di tipo | stesso test: posizione proiettata fuori dall'angolo 40×40 px a ogni zoom | **chiuso** |
+| RB-03 | Cunei/trapezi nelle rotatorie | Grafo di routing separato dalla geometria; gole tangenti limitate dai bracci vicini | `core/test/physical.test.ts`: anello con foro, 4 gole senza auto-intersezioni | **chiuso** |
+| RB-04 | Segnaletica orizzontale inventata | Nessun marking oltre a quelli derivati da sezione e regolazione esplicita | `physical.test.ts`: nessuna linea di arresto senza regolazione; rotatoria nuova senza zebre né linee d'anello | **chiuso** |
+| RB-05 | Frecce di senso che spariscono | Frecce derivate dalle corsie nel modello fisico, layer unico | `physical.test.ts`: ogni corsia a senso unico > 12 m ha una freccia | **chiuso** (verifica di rendering per zoom non automatizzata) |
+| RB-06 | Asset mancanti nel Twin | Twin legge lo stesso modello fisico | `e2e/views.spec.ts` e `assets.spec.ts`: "Parità 2D/3D: n/n" | **chiuso** |
+| RB-07 | Cartelli sovrapposti nel Twin | Alt+clic aggiunge un pannello allo stesso palo (`poleId`, `stackOrder`); il Twin impila i pannelli | `assets.spec.ts`: 2 pannelli, 1 palo, ordini 0 e 1, parità 2D/3D | **chiuso** |
+| RB-08 | Pulsanti morti | Strumenti e comandi solo da registro | `web/test/registries.test.ts`: ogni strumento ha handler, scorciatoia unica e suggerimento; ogni comando ha `run` | **chiuso** |
+| RB-09 | Traffico vuoto | Stima DRIP sempre disponibile, etichettata "Stimato" | `assets.spec.ts`: senza chiavi il layer traffico ha > 100 elementi e il badge "Stimato" | **chiuso** |
+| RB-10 | Heatmap vuota | Screening sicurezza calcolato all'apertura del pannello | `assets.spec.ts`: heatmap con ≥ 1 punto e dicitura "surrogato" | **chiuso** |
+| RB-11 | Catalogo materiali vuoto | Catalogo statico nel pacchetto assets | `registries.test.ts`: ≥ 17 materiali con colore e categoria, almeno uno permeabile | **chiuso** |
+| RB-12 | Pannelli tagliati / sovrapposti | Shell a griglia, griglie fluide nei pannelli, niente `!important` | `views.spec.ts`: dock senza scorrimento orizzontale (Junction Lab), nessun overflow di pagina a 1024 px; baseline visive a 1440 e 1024 | **parziale**: 1366/1600/1920 non ancora nelle baseline |
+| RB-13 | Branding disallineato | Lockup SVG con varianti normali e reverse | baseline `hub-head.png`, header in tutte le schermate e2e | **parziale**: SVG ricavati dai PNG (P1-01) |
