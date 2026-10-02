@@ -131,7 +131,7 @@ function Estimate() {
       {res ? (
         <Section title={`Risultato · ${DAYS[p.day]} ${String(p.hour).padStart(2, '0')}:00`}>
           <div className="stats-row">
-            <Stat label="Veicoli·km/h" value={res.project.totals.vehKm.toLocaleString('it-IT')} prov="estimated" delta={{ value: d(res.today.totals.vehKm, res.project.totals.vehKm), goodWhen: 'down' }} />
+            <Stat label="Veicoli·km nell’ora" value={res.project.totals.vehKm.toLocaleString('it-IT')} prov="estimated" delta={{ value: d(res.today.totals.vehKm, res.project.totals.vehKm), goodWhen: 'down' }} />
             <Stat label="Velocità media" value={res.project.totals.avgSpeedKmh} unit="km/h" delta={{ value: d(res.today.totals.avgSpeedKmh, res.project.totals.avgSpeedKmh), goodWhen: 'up', unit: ' km/h' }} />
             <Stat label="Tratti v/c > 1" value={res.project.totals.overCapacity} delta={{ value: d(res.today.totals.overCapacity, res.project.totals.overCapacity), goodWhen: 'down' }} />
           </div>

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, type ReactElement } from 'react';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
-import { MapView, captureThumbnail } from '../map/MapView';
+import { MapView, captureThumbnail, getIndex } from '../map/MapView';
 import { getMap } from '../map/mapStore';
 import { AnalyzePanel } from '../panels/AnalyzePanel';
 import { CivicPanel } from '../panels/CivicPanel';
@@ -83,7 +83,7 @@ export function Workspace() {
   useEffect(() => installShortcuts((e) => {
     const h = toolById(useApp.getState().tool).handler;
     const map = getMap();
-    return map && h.key ? Boolean(h.key(e, { map, index: () => null })) : false;
+    return map && h.key ? Boolean(h.key(e, { map, index: getIndex })) : false;
   }), []);
   if (loadError) return <div className="fullscreen-state"><Icon name="warning" size={28} /><h1>Progetto non aperto</h1><p>{loadError}</p><a className="btn btn-md btn-default" href="#/">Torna ai progetti</a></div>;
   if (!project || !network || !catalogs) return <div className="fullscreen-state"><span className="spinner lg" /><p>{loading ?? 'Caricamento'}</p></div>;

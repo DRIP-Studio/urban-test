@@ -252,8 +252,7 @@ async function save(): Promise<void> {
       else scheduleSave(200);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        set({ saveStatus: 'conflict' });
-        toast.error('Conflitto di salvataggio', 'Lo scenario è stato modificato in un\'altra finestra. Le tue modifiche restano in locale: ricarica lo scenario per vedere la versione salvata.');
+        await rebaseOnServer(project.id, scenario.id, ops);
       } else if (e instanceof ApiError && e.status === 0) {
         set({ saveStatus: 'offline' });
         scheduleSave(5000);
@@ -266,6 +265,26 @@ async function save(): Promise<void> {
   })();
   await saving;
   saving = null;
+}
+
+/**
+ * Another window saved first: replay our operations that the server does not have
+ * on top of the saved version (operation-log rebase). Nothing is lost: operations
+ * that no longer apply stay in the scenario and are reported as not applicable.
+ */
+async function rebaseOnServer(pid: string, sid: string, localOps: readonly Operation[]): Promise<void> {
+  const { baseline } = get();
+  if (!baseline) return;
+  const server = await api.get<StoredScenario>(`/api/projects/${encodeURIComponent(pid)}/scenarios/${encodeURIComponent(sid)}`);
+  const known = new Set(server.operations.map((o) => o.id));
+  const mine = localOps.filter((o) => !known.has(o.id));
+  const merged: StoredScenario = { ...server, operations: [...server.operations, ...mine] };
+  const author = get().user?.name ?? 'Utente locale';
+  const history = new ScenarioHistory(baseline, merged, author, () => newId('op'));
+  set({ scenario: { ...merged, revision: server.revision }, history, saveStatus: mine.length ? 'dirty' : 'saved' });
+  syncFromHistory();
+  toast.warn('Scenario aggiornato da un’altra finestra', mine.length ? `Le tue ${mine.length} modifiche sono state riapplicate sopra la versione salvata.` : 'Caricata la versione salvata.');
+  if (mine.length) scheduleSave(100);
 }
 
 export async function flushSave(): Promise<void> {

@@ -250,7 +250,9 @@ export function TwinView() {
   const preset = (p: Preset) => {
     const viewer = viewerRef.current;
     if (!viewer || !baseline || !network) return;
-    const node = selection?.kind === 'node' ? network.nodes[selection.ids[0]!]?.at : null;
+    const node = selection?.kind === 'node' ? network.nodes[selection.ids[0]!]?.at
+      : selection?.kind === 'roundabout' ? network.roundabouts[selection.ids[0]!]?.center
+      : selection?.kind === 'asset' ? network.assets[selection.ids[0]!]?.at : null;
     const c = node ?? baseline.origin;
     const views: Record<Preset, { h: number; pitch: number; back: number }> = {
       top: { h: 900, pitch: -90, back: 0 }, perspective: { h: 420, pitch: -35, back: 0.006 }, street: { h: 2.2, pitch: -4, back: 0.0004 },

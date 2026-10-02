@@ -19,7 +19,8 @@ import { renderSignalHeads } from './signalsLive';
 
 let index: NetworkIndex | null = null;
 let indexVersion = -1;
-function getIndex(): NetworkIndex | null {
+/** Spatial index of the current scenario network (shared by map events and keyboard-driven tool actions). */
+export function getIndex(): NetworkIndex | null {
   const { network, baseline, netVersion } = useApp.getState();
   if (!network || !baseline) return null;
   if (indexVersion !== netVersion || !index) { index = new NetworkIndex(network, baseline.origin); indexVersion = netVersion; }
