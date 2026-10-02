@@ -112,7 +112,7 @@ export function ToolSettings() {
   const t = useTool();
   const def = toolById(tool);
   switch (tool) {
-    case 'road': case 'curve': return <RoadTemplates />;
+    case 'road': return <RoadTemplates />;
     case 'furniture': return (
       <>
         <Section title="Posizionamento"><Field label="Rotazione aggiuntiva"><NumberField value={t.rotationDeg} unit="°" step={15} decimals={0} ariaLabel="Rotazione" onCommit={(v) => useTool.setState({ rotationDeg: v })} /></Field></Section>

@@ -3,31 +3,15 @@ import { commit, newId, select } from '../state/store';
 import { toast } from '../state/toasts';
 import { distribute, makeDrawTool } from './draw';
 import { cutTool, makeJunctionPicker, nodeTool, sectionTool } from './edit';
+import { roadPen } from './roadPen';
 import { roundaboutTool } from './roundabout';
 import { furnitureTool, signTool } from './place';
-import { planRoad, spline } from './roadOps';
 import { selectTool } from './select';
 import { useTool } from './toolState';
 import { usePicks } from './picks';
 import type { ToolDef } from './types';
 
 const PROJECT = { kind: 'project' as const, source: 'DRIP Urban scenario' };
-
-const roadDraw = (curve: boolean) => makeDrawTool({
-  shape: 'line', minPoints: 2, curve,
-  finish(points, idx) {
-    const t = useTool.getState();
-    const axis = curve ? spline(idx, points.map((p) => p.at)) : points.map((p) => p.at);
-    const plan = planRoad(idx, points, axis, t.roadTemplate, t.roadName);
-    if (plan.error) { toast.warn('Strada non creata', plan.error); return false; }
-    const ok = commit('batch', { label: curve ? 'Nuova strada in curva' : 'Nuova strada', ops: plan.ops }).ok;
-    if (ok) {
-      const add = plan.ops.find((o) => o.type === 'road.add')!.payload as { road: { id: string } };
-      select({ kind: 'road', ids: [add.road.id] });
-    }
-    return ok;
-  },
-});
 
 const areaDraw = makeDrawTool({
   shape: 'polygon', minPoints: 3, snapEnabled: true,
@@ -92,8 +76,7 @@ const transitDraw = makeDrawTool({
 
 export const TOOLS: readonly ToolDef[] = [
   { id: 'select', label: 'Seleziona', icon: 'select', shortcut: 'V', group: 'draw', modes: ['design', 'analyze', 'traffic', 'transit'], hint: 'Clic per selezionare · Shift+clic aggiunge · Shift+trascina per riquadro · trascina un oggetto selezionato per spostarlo', handler: selectTool },
-  { id: 'road', label: 'Strada', icon: 'road', shortcut: 'R', group: 'draw', modes: ['design'], hint: 'Clic per i vertici · si aggancia a nodi e strade · doppio clic o Invio per finire · Alt disattiva lo snap', cursor: 'crosshair', handler: roadDraw(false) },
-  { id: 'curve', label: 'Curva', icon: 'curve', shortcut: 'C', group: 'draw', modes: ['design'], hint: 'Punti di controllo di una spline · Invio per finire', cursor: 'crosshair', handler: roadDraw(true) },
+  { id: 'road', label: 'Strada', icon: 'road', shortcut: 'R', group: 'draw', modes: ['design'], hint: 'Clic: vertice · clic e trascina: curva · Shift: 15° · Backspace: togli punto · Invio o doppio clic: crea · Alt: niente snap', cursor: 'crosshair', handler: roadPen },
   { id: 'nodes', label: 'Nodi', icon: 'node', shortcut: 'N', group: 'draw', modes: ['design'], hint: 'Seleziona una strada · trascina estremi e vertici · i punti chiari inseriscono un vertice · clic destro elimina', handler: nodeTool },
   { id: 'cut', label: 'Taglia', icon: 'cut', shortcut: 'X', group: 'draw', modes: ['design'], hint: 'Clic sull\'asse per dividere la strada', cursor: 'crosshair', handler: cutTool },
   { id: 'section', label: 'Sezione', icon: 'section', shortcut: 'S', group: 'civil', modes: ['design'], hint: 'Clic su una strada per modificare corsie, marciapiedi, sosta, ciclabili', handler: sectionTool },

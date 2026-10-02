@@ -68,6 +68,31 @@ export class NetworkIndex {
   }
 
   axis(id: string): geom.V[] { return this.axes.get(id) ?? []; }
+
+  /** Where a new polyline crosses existing roads: distance along the new line and along the crossed road. */
+  crossings(line: readonly geom.V[], accept: (roadId: string) => boolean): { roadId: string; s: number; along: number; at: geom.V }[] {
+    const out: { roadId: string; s: number; along: number; at: geom.V }[] = [];
+    let s0 = 0;
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1]!, b = line[i]!;
+      const seg = geom.dist(a, b);
+      const mid = geom.lerp(a, b, 0.5);
+      for (const id of this.near(this.roads, mid, seg / 2 + 1)) {
+        if (!accept(id)) continue;
+        const ax = this.axes.get(id)!;
+        let r0 = 0;
+        for (let j = 1; j < ax.length; j++) {
+          const c = ax[j - 1]!, d = ax[j]!;
+          const L = geom.dist(c, d);
+          const hit = geom.intersectLines(a, geom.sub(b, a), c, geom.sub(d, c));
+          if (hit && hit.s > 0 && hit.s < 1 && hit.t > 0 && hit.t < 1) out.push({ roadId: id, s: s0 + hit.s * seg, along: r0 + hit.t * L, at: hit.at });
+          r0 += L;
+        }
+      }
+      s0 += seg;
+    }
+    return out.sort((x, y) => x.s - y.s);
+  }
 }
 
 /** Snap a pointer position. `from` enables angle snapping for drawing tools. */

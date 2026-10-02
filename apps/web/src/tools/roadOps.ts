@@ -1,4 +1,4 @@
-import { ROAD_TEMPLATES, geom, roadFromTemplate, type LngLat, type RoadNode } from '@drip-urban/core';
+import { ROAD_TEMPLATES, geom, isPedestrianRoad, roadFromTemplate, type LngLat, type RoadNode } from '@drip-urban/core';
 import { newId } from '../state/store';
 import type { NetworkIndex, SnapResult } from './snap';
 
@@ -57,11 +57,30 @@ export function planRoad(idx: NetworkIndex, points: readonly SnapResult[], axisL
   const from = endpoint(first);
   const to = endpoint(last);
   if (from === to) return { ops: [], error: 'Inizio e fine coincidono' };
-  const axis = [...axisLL];
-  axis[0] = first.at;
-  axis[axis.length - 1] = last.at;
-  const id = newId('r');
-  const road = roadFromTemplate(t, id, from, to, axis, name.trim() || t.label);
-  ops.push({ type: 'road.add', payload: { road, nodes: newNodes } });
+  const axisM = axisLL.map((p) => idx.frame.toMetric(p) as geom.V);
+  axisM[0] = idx.frame.toMetric(first.at) as geom.V;
+  axisM[axisM.length - 1] = idx.frame.toMetric(last.at) as geom.V;
+  const L = geom.lengthOf(axisM);
+  // Every crossing with an existing road becomes a real junction: both roads are split there.
+  const skip = new Set([first.roadId, last.roadId].filter(Boolean) as string[]);
+  const cuts = idx.crossings(axisM, (id) => {
+    const r = idx.net.roads[id];
+    return Boolean(r) && !skip.has(id) && !r!.tags?.roundabout && !isPedestrianRoad(r!);
+  }).filter((c) => c.s > 2 && c.s < L - 2);
+  const stops: { s: number; node: string }[] = [{ s: 0, node: from }];
+  for (const c of cuts) {
+    if (c.s - stops[stops.length - 1]!.s < 2) continue;
+    const node = endpoint({ at: idx.frame.toLngLat(c.at), kind: 'edge', roadId: c.roadId, along: c.along });
+    stops.push({ s: c.s, node });
+  }
+  stops.push({ s: L, node: to });
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i]!, b = stops[i + 1]!;
+    const piece = geom.slice(axisM, a.s, b.s).map((p) => idx.frame.toLngLat(p));
+    if (piece.length < 2) continue;
+    const id = newId('r');
+    const road = roadFromTemplate(t, id, a.node, b.node, piece, name.trim() || t.label);
+    ops.push({ type: 'road.add', payload: { road, nodes: newNodes.filter((n) => n.id === a.node || n.id === b.node) } });
+  }
   return { ops };
 }
