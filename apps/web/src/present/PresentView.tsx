@@ -39,8 +39,16 @@ export function PresentView() {
     if (!baseline || !net) return null;
     return { a: scenarioMetrics(new NetworkReplayer().derive(baseline, []).net, baseline, permeable), b: scenarioMetrics(net, baseline, permeable) };
   }, [baseline, net, permeable]);
-  const initial = useMemo(() => project?.bbox as [number, number, number, number], [project]);
-  if (!project || !baseline || !catalogs) return null;
+  // Open on the area that the scenario changes (falls back to the whole project).
+  const initial = useMemo((): [number, number, number, number] | undefined => {
+    const changed = engine.lastPhysical?.surfaces.features.filter((f) => f.properties.state === 'project') ?? [];
+    const pts = changed.flatMap((f) => f.geometry.coordinates[0] ?? []);
+    if (!pts.length) return project?.bbox as [number, number, number, number] | undefined;
+    const xs = pts.map((p) => p[0]!), ys = pts.map((p) => p[1]!);
+    const pad = 0.0008;
+    return [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
+  }, [project]);
+  if (!project || !baseline || !catalogs || !initial) return null;
   const save = async (d: PresentationDoc) => {
     setDoc(d);
     try { await api.put(`/api/projects/${project.id}/docs/presentation`, d); } catch (e) { toast.error('Scene non salvate', e instanceof Error ? e.message : String(e)); }
@@ -90,7 +98,7 @@ export function PresentView() {
       </aside>
       <section className="present-stage">
         {before && after && buildings ? (
-          <BeforeAfter editorial={civic} materials={catalogs.materials.items} initial={initial} camera={goto}
+          <BeforeAfter editorial={civic} materials={catalogs.materials.items} initial={initial} camera={goto} insetRight={250}
             before={{ surfaces: before.surfaces, markings: before.markings, buildings, label: 'Oggi' }}
             after={{ surfaces: after.surfaces, markings: after.markings, buildings, label: scenario?.isBaseline ? 'Oggi' : 'Progetto' }} />
         ) : <Skeleton lines={6} />}

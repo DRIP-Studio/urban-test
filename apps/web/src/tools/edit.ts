@@ -150,9 +150,13 @@ export const roundaboutTool: ToolHandler = makeJunctionPicker(null, (nodeId) => 
 
 export const sectionTool: ToolHandler = {
   click(e, ctx) {
+    // Rendered features first; fall back to the spatial index so a click near a kerb still finds the road.
     const hit = pickAt(ctx.map, e.point);
-    if (hit?.kind !== 'road') { toast.info('Sezione', 'Clicca su una strada per aprirne la sezione.'); return; }
-    select(hit);
+    let roadId = hit?.kind === 'road' ? hit.ids[0] : undefined;
+    const idx = ctx.index();
+    if (!roadId && idx) roadId = idx.nearestRoad(idx.frame.toMetric(e.lngLat) as geom.V, 12)?.id;
+    if (!roadId) { toast.info('Sezione', 'Clicca su una strada per aprirne la sezione.'); return; }
+    select({ kind: 'road', ids: [roadId] });
     if (useApp.getState().dock !== 'section') setDock('section');
   },
 };

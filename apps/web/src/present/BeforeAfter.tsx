@@ -34,8 +34,8 @@ function style(data: StateData, materials: readonly MaterialItem[], editorial: b
   };
 }
 
-export function BeforeAfter({ before, after, materials, initial, editorial = false, camera }: {
-  before: StateData; after: StateData; materials: readonly MaterialItem[]; initial: [number, number, number, number]; editorial?: boolean; camera?: Camera | null;
+export function BeforeAfter({ before, after, materials, initial, editorial = false, camera, insetRight = 0 }: {
+  before: StateData; after: StateData; materials: readonly MaterialItem[]; initial: [number, number, number, number]; editorial?: boolean; camera?: Camera | null; /** px covered by overlays on the right. */ insetRight?: number;
 }) {
   const [mode, setMode] = useState<CompareMode>('slider');
   const [pos, setPos] = useState(50);
@@ -44,7 +44,7 @@ export function BeforeAfter({ before, after, materials, initial, editorial = fal
   const maps = useRef<{ a: MLMap; b: MLMap } | null>(null);
   useEffect(() => {
     if (!aRef.current || !bRef.current) return;
-    const opts = { bounds: [[initial[0], initial[1]], [initial[2], initial[3]]] as [[number, number], [number, number]], fitBoundsOptions: { padding: 40 }, attributionControl: { compact: true }, maxZoom: 21 };
+    const opts = { bounds: [[initial[0], initial[1]], [initial[2], initial[3]]] as [[number, number], [number, number]], fitBoundsOptions: { padding: { top: 60, bottom: 40, left: 40, right: 40 + insetRight } }, attributionControl: { compact: true }, maxZoom: 21 };
     const a = new maplibregl.Map({ container: aRef.current, style: style(before, materials, editorial), ...opts });
     const b = new maplibregl.Map({ container: bRef.current, style: style(after, materials, editorial), ...opts });
     let syncing = false;
@@ -61,7 +61,7 @@ export function BeforeAfter({ before, after, materials, initial, editorial = fal
     const ro = new ResizeObserver(() => { a.resize(); b.resize(); });
     ro.observe(aRef.current.parentElement!);
     return () => { ro.disconnect(); a.remove(); b.remove(); maps.current = null; };
-  }, [before, after, materials, initial, editorial]);
+  }, [before, after, materials, initial, editorial, insetRight]);
   useEffect(() => {
     if (camera && maps.current) maps.current.b.flyTo({ ...camera, duration: 1200 });
   }, [camera]);
