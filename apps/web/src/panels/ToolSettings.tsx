@@ -1,3 +1,4 @@
+import { PavingLibrary } from './PavingLibrary';
 import { useMemo, useState } from 'react';
 import { ROAD_TEMPLATES, type AreaKind, type ZoneKind } from '@drip-urban/core';
 import { useApp } from '../state/store';
@@ -140,6 +141,7 @@ export function ToolSettings() {
       </Section>
     );
     case 'roundabout': return <RoundaboutPlacePanel />;
+    case 'paving': return <PavingLibrary />;
     case 'select': return <ProjectSummary />;
     default: return (
       <Section title={def.label}>

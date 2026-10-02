@@ -262,7 +262,14 @@ function buildJunctionEntry(
   if (!g) return { deps, g: null, surfaces: [], lines: [] };
   const state: PhysState = spec || arms.some((a) => roadState(a.road) === 'project') ? 'project' : 'existing';
   const surfaces: PhysPolygon[] = [{ id: `j:${nodeId}`, kind: 'junction', ring: toLL(g.surface), nodeId, state, material: 'asphalt', z: Z.junction!, heightM: 0 }];
-  g.corners.forEach((c, i) => surfaces.push({ id: `jc:${nodeId}:${i}`, kind: 'corner', ring: toLL(c), nodeId, state, material: DEFAULT_MATERIAL.corner!, z: Z.corner!, heightM: HEIGHT.corner! }));
+  // A corner continues the sidewalk of the arm on its left (arm frame): repaving the sidewalk repaves it.
+  const cornerMaterial = (i: number): string => {
+    const arm = arms[g.cornerArm[i]!];
+    const els = arm?.road.section.elements ?? [];
+    const el = arm ? (arm.atStart ? els[0] : els[els.length - 1]) : undefined;
+    return el?.kind === 'sidewalk' && el.material ? el.material : DEFAULT_MATERIAL.corner!;
+  };
+  g.corners.forEach((c, i) => surfaces.push({ id: `jc:${nodeId}:${i}`, kind: 'corner', ring: toLL(c), nodeId, state, material: cornerMaterial(i), z: Z.corner!, heightM: HEIGHT.corner! }));
   const lines: PhysLine[] = g.kerbs.map((k, i) => ({ id: `jk:${nodeId}:${i}`, kind: 'kerb', line: toLL(k), nodeId, state }));
   return { deps, g, surfaces, lines };
 }

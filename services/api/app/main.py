@@ -459,14 +459,14 @@ def withdraw(pub: str) -> dict:
 
 @app.get("/catalog/signs.json")
 def signs_catalog() -> FileResponse:
-    return FileResponse(SETTINGS.signs_dir / "catalog.json", media_type="application/json")
+    return FileResponse(SETTINGS.signs_dir / "catalog.json", media_type="application/json", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/catalog/{name}.json")
 def catalog(name: str) -> FileResponse:
     if name not in {"furniture", "materials"}:
         raise HTTPException(404)
-    return FileResponse(SETTINGS.signs_dir.parents[1] / name / "catalog.json", media_type="application/json")
+    return FileResponse(SETTINGS.signs_dir.parents[1] / name / "catalog.json", media_type="application/json", headers={"Cache-Control": "no-cache"})
 
 
 app.mount("/signs", StaticFiles(directory=SETTINGS.signs_dir / "clean"), name="signs")

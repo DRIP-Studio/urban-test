@@ -70,7 +70,7 @@ export function MapView() {
       boxZoom: false, doubleClickZoom: false, dragRotate: true, pitchWithRotate: true, canvasContextAttributes: { antialias: true },
     });
     setMapInstance(map);
-    installImageLoader(map);
+    installImageLoader(map, catalogs.materials.items);
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
 

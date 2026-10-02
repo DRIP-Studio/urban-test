@@ -19,6 +19,8 @@ export interface ToolState {
   recentSigns: string[];
   favoriteSigns: string[];
   arraySpacingM: number;
+  /** Material applied by the paving tool. */
+  pavingMaterial: string;
   arrayItem: string;
   /** Pending roundabout preview. */
   rb: { center: LngLat; nodeId: string | null; placed: boolean; type: RoundaboutType; outerDiameterM: number; circulatoryWidthM: number; lanes: 1 | 2; apronWidthM: number; aspect: number; orientationDeg: number; islandMaterial: string; splitters: boolean; crossings: boolean } | null;
@@ -33,12 +35,12 @@ export const useTool = create<ToolState>(() => ({
   roadTemplate: 'local', roadName: '', areaKind: 'plaza', areaMaterial: 'stone', zoneKind: 'ztl',
   furnitureId: 'vegetation.tree', signId: 'it.sign.dare_precedenza', rotationDeg: 0, poleId: null,
   recentSigns: saved.recentSigns ?? [], favoriteSigns: saved.favoriteSigns ?? [],
-  arraySpacingM: 8, arrayItem: 'vegetation.tree', rb: null, measure: null,
+  arraySpacingM: 8, pavingMaterial: saved.pavingMaterial ?? 'porphyry', arrayItem: 'vegetation.tree', rb: null, measure: null,
   routePick: { from: null, to: null, target: 'from' },
 }));
 
 useTool.subscribe((s) => {
-  try { localStorage.setItem('drip-urban:tools', JSON.stringify({ recentSigns: s.recentSigns, favoriteSigns: s.favoriteSigns })); } catch { /* ignore */ }
+  try { localStorage.setItem('drip-urban:tools', JSON.stringify({ recentSigns: s.recentSigns, favoriteSigns: s.favoriteSigns, pavingMaterial: s.pavingMaterial })); } catch { /* ignore */ }
 });
 
 export const resetDraft = () => useTool.setState({ draft: [], cursor: null, measure: null });

@@ -1,3 +1,5 @@
+import type { MaterialItem } from '../api/types';
+import { patternImage } from './patterns';
 import type { Map as MLMap } from 'maplibre-gl';
 
 /** Images are generated or rasterised on demand (styleimagemissing) — never placeholders. */
@@ -65,9 +67,17 @@ function signalImage(kind: string, state: string): ImageData {
  */
 const signCache = new Map<string, Promise<ImageData>>();
 
-export function installImageLoader(map: MLMap): void {
+export function installImageLoader(map: MLMap, materials: readonly MaterialItem[]): void {
+  const byId = new Map(materials.map((m) => [m.id, m]));
   map.setMissingStyleImageResolver(async (id) => {
     if (map.hasImage(id)) return;
+    if (id.startsWith('mat:')) {
+      const [, mid = '', z = '18'] = id.split(':');
+      const m = byId.get(mid);
+      const img = m ? patternImage(m, Number(z)) : null;
+      if (img) map.addImage(id, img, { pixelRatio: 2 });
+      return;
+    }
     if (id.startsWith('sig:')) {
       const [, kind = 'vehicle', state = 'off'] = id.split(':');
       map.addImage(id, signalImage(kind, state), { pixelRatio: 2 });

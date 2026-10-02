@@ -4,6 +4,7 @@ import { toast } from '../state/toasts';
 import { distribute, makeDrawTool } from './draw';
 import { cutTool, makeJunctionPicker, nodeTool, sectionTool } from './edit';
 import { roadPen } from './roadPen';
+import { pavingTool } from './paving';
 import { roundaboutTool } from './roundabout';
 import { furnitureTool, signTool } from './place';
 import { selectTool } from './select';
@@ -87,6 +88,7 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'crossing', label: 'Attraversamento', icon: 'crossing', shortcut: 'K', group: 'street', modes: ['design'], hint: 'Due clic da un bordo all\'altro della carreggiata', cursor: 'crosshair', handler: crossingDraw },
   { id: 'furniture', label: 'Arredo', icon: 'furniture', shortcut: 'F', group: 'space', modes: ['design'], hint: 'Scegli l\'elemento · si allinea alla strada più vicina (Alt per libero) · Q/E o Shift+rotella ruota', cursor: 'crosshair', handler: furnitureTool },
   { id: 'array', label: 'Distribuisci', icon: 'array', shortcut: 'Y', group: 'space', modes: ['design'], hint: 'Disegna un percorso: oggetti ogni N metri (alberi, lampioni, dissuasori)', cursor: 'crosshair', handler: arrayDraw },
+  { id: 'paving', label: 'Pavimentazione', icon: 'material', shortcut: 'M', group: 'space', modes: ['design'], hint: 'Clic: pavimenta la superficie · Shift+clic: tutti i marciapiedi della strada · Alt+clic: preleva il materiale', cursor: 'crosshair', handler: pavingTool },
   { id: 'area', label: 'Superficie', icon: 'area', shortcut: 'A', group: 'space', modes: ['design'], hint: 'Piazze, verde, sosta, giardini della pioggia: clic per i vertici, Invio per chiudere', cursor: 'crosshair', handler: areaDraw },
   { id: 'zone', label: 'Zone', icon: 'zone', shortcut: 'Z', group: 'space', modes: ['design', 'traffic'], hint: 'ZTL, zona 30, strada scolastica, cantiere: disegna il perimetro', cursor: 'crosshair', handler: zoneDraw },
   { id: 'measure', label: 'Misura', icon: 'measure', shortcut: 'U', group: 'analysis', modes: ['design', 'analyze', 'traffic', 'transit'], hint: 'Clic per misurare distanze; con 3+ punti anche l\'area · Esc per azzerare', cursor: 'crosshair', handler: measureDraw },

@@ -1,6 +1,6 @@
 import { LocalFrame, planRoundabout, type LngLat, type Roundabout } from '@drip-urban/core';
 import { fc, type Feature } from '../engine/geojson';
-import { setSource } from '../map/mapStore';
+import { setSource, useMapUi } from '../map/mapStore';
 import { commit, newId, select, setTool, useApp } from '../state/store';
 import type { NetworkIndex } from './snap';
 import { useTool, type ToolState } from './toolState';
@@ -85,22 +85,20 @@ function anchorAt(idx: NetworkIndex | null, at: LngLat, mpp: number): { center: 
   return { center: at, nodeId: null };
 }
 
-const metresPerPixel = (lat: number, zoom: number) => (156543.03 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
-
 export const roundaboutTool: ToolHandler = {
   activate() { drawPreview(useTool.getState().rb); },
   deactivate() { if (!useTool.getState().rb?.placed) useTool.setState({ rb: null }); setSource('draft', null); },
   move(e, ctx) {
     const cur = useTool.getState().rb;
     if (cur?.placed) return;
-    const a = anchorAt(ctx.index(), e.lngLat, metresPerPixel(e.lngLat[1], ctx.map.getZoom()));
+    const a = anchorAt(ctx.index(), e.lngLat, useMapUi.getState().mpp);
     const next: Pending = { ...DEFAULT_RB, ...(cur ?? {}), ...a, placed: false };
     useTool.setState({ rb: next });
     drawPreview(next);
   },
   click(e, ctx) {
     const cur = useTool.getState().rb;
-    const a = anchorAt(ctx.index(), e.lngLat, metresPerPixel(e.lngLat[1], ctx.map.getZoom()));
+    const a = anchorAt(ctx.index(), e.lngLat, useMapUi.getState().mpp);
     const next: Pending = { ...DEFAULT_RB, ...(cur ?? {}), ...a, placed: true };
     useTool.setState({ rb: next });
     drawPreview(next);

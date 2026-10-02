@@ -1,6 +1,7 @@
 import type { ExpressionSpecification, Map as MLMap } from 'maplibre-gl';
 import type { MaterialItem } from '../api/types';
 import { fc } from '../engine/geojson';
+import { PATTERNS } from './patterns';
 
 /** Every GeoJSON source of the workstation. One owner each (see sources.ts). */
 export const SOURCES = [
@@ -71,6 +72,12 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'buildings-fill', type: 'fill', source: 'buildings', paint: { 'fill-color': dark ? '#2b2e33' : '#d6d1c7', 'fill-opacity': 0.95 } });
   L({ id: 'buildings-line', type: 'line', source: 'buildings', minzoom: 15, paint: { 'line-color': dark ? '#3a3e44' : '#b9b3a7', 'line-width': 0.6 } });
   L({ id: 'surfaces-fill', type: 'fill', source: 'surfaces', layout: { 'fill-sort-key': ['get', 'z'] }, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1], 'fill-antialias': false } });
+  // Real-scale paving textures over the flat colour (one image per zoom step; see patterns.ts).
+  const patterned = materials.filter((m) => PATTERNS.has(m.pattern)).map((m) => m.id);
+  const pat = (z: number): ExpressionSpecification => ['concat', 'mat:', ['get', 'material'], `:${z}`];
+  L({ id: 'surfaces-pattern', type: 'fill', source: 'surfaces', minzoom: 17.5, filter: ['in', ['get', 'material'], ['literal', patterned]],
+    layout: { 'fill-sort-key': ['get', 'z'] },
+    paint: { 'fill-pattern': ['step', ['zoom'], pat(18), 18.5, pat(19), 19.5, pat(20), 20.5, pat(21), 21.5, pat(22)], 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 17.5, 0, 18.2, 1] } });
   L({ id: 'surfaces-outline', type: 'line', source: 'surfaces', minzoom: 17, filter: ['in', ['get', 'kind'], ['literal', ['area', 'roundabout_island', 'splitter', 'median', 'green']]], paint: { 'line-color': dark ? '#4a4f55' : '#8f8a80', 'line-width': 0.6 } });
   L({ id: 'markings-fill', type: 'fill', source: 'markings', minzoom: 15.5, paint: { 'fill-color': ['case', ['==', ['get', 'material'], 'road_marking_yellow'], '#f2c230', '#f4f3ef'], 'fill-antialias': true } });
   L({ id: 'kerbs-line', type: 'line', source: 'lines', minzoom: 16, filter: ['==', ['get', 'kind'], 'kerb'], paint: { 'line-color': dark ? '#6c7178' : '#77746d', 'line-width': ['interpolate', ['linear'], ['zoom'], 16, 0.4, 20, 1.4] } });

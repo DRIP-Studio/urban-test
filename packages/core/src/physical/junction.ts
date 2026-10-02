@@ -44,6 +44,8 @@ export interface JunctionGeometry {
   readonly surface: V[];
   /** Sidewalk corner rings between consecutive arms. */
   readonly corners: V[][];
+  /** For each corner, the index (in the arms passed in) of the arm whose left side it continues. */
+  readonly cornerArm: number[];
   /** Kerb lines (carriageway edge fillets) — used for kerbs in 2D/3D. */
   readonly kerbs: V[][];
 }
@@ -94,8 +96,9 @@ export function buildJunction(nodeId: string, node: V, arms: readonly Arm[], cor
 
   const surface: V[] = [];
   const corners: V[][] = [];
+  const cornerArm: number[] = [];
   const kerbs: V[][] = [];
-  for (const p of pairs) {
+  for (const [pi, p] of pairs.entries()) {
     const { a, b } = p;
     const SA = setback.get(a)!, SB = setback.get(b)!;
     // Cut line of arm a: right edge then left edge.
@@ -108,11 +111,12 @@ export function buildJunction(nodeId: string, node: V, arms: readonly Arm[], cor
     if (hasWalk) {
       const outer = cornerPath(a, b, node, a.outLeft, b.outRight, p.saOut, p.sbOut, p.meetOut, SA, SB, re);
       corners.push([...inner, ...[...outer].reverse()]);
+      cornerArm.push(pi);
     }
   }
   const setbacks = new Map<string, number>();
   for (const arm of arms) setbacks.set(armKey(arm), setback.get(arm)!);
-  return { nodeId, setbacks, surface, corners, kerbs };
+  return { nodeId, setbacks, surface, corners, cornerArm, kerbs };
 }
 
 /**
