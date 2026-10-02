@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GeoJSONSource, Map as MLMap } from 'maplibre-gl';
 import { LAYERS, setLayerOpacity, setLayerVisible, type SourceId } from './layers';
-import type { FeatureCollection } from '../engine/geojson';
+import type { Feature, FeatureCollection } from '../engine/geojson';
 import { fc } from '../engine/geojson';
 
 interface MapUiState {
@@ -40,6 +40,33 @@ export function setMapInstance(m: MLMap | null): void { map = m; }
 export function setSource(id: SourceId, data: FeatureCollection | null): void {
   const s = map?.getSource(id) as GeoJSONSource | undefined;
   s?.setData((data ?? fc()) as never);
+}
+
+const synced = new WeakMap<MLMap, Map<string, Map<string, string>>>();
+/**
+ * Like setSource, but after the first call only features whose content changed are sent
+ * (by `properties.id`). For large sources rebuilt from the network on every edit.
+ */
+export function syncSource(id: SourceId, data: FeatureCollection): void {
+  if (!map) return;
+  const s = map.getSource(id) as GeoJSONSource | undefined;
+  if (!s) return;
+  let perMap = synced.get(map);
+  if (!perMap) synced.set(map, (perMap = new Map()));
+  const next = new Map<string, string>();
+  for (const f of data.features) next.set(String(f.properties.id), JSON.stringify(f));
+  const prev = perMap.get(id);
+  perMap.set(id, next);
+  if (!prev) { void s.setData(data as never); return; }
+  const add = data.features.filter((f) => prev.get(String(f.properties.id)) !== next.get(String(f.properties.id)));
+  const remove = [...prev.keys()].filter((k) => !next.has(k));
+  if (add.length || remove.length) void s.updateData({ add: add as never, remove });
+}
+
+/** Incremental update by feature id (sources declare promoteId: 'id'). */
+export function updateSource(id: SourceId, diff: { add?: Feature[]; remove?: string[] }): void {
+  const s = map?.getSource(id) as GeoJSONSource | undefined;
+  void s?.updateData({ add: diff.add as never, remove: diff.remove });
 }
 
 export function toggleLayer(id: string, visible?: boolean): void {

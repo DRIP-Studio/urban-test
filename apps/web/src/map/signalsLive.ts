@@ -33,5 +33,5 @@ export function setSignalPreview(p: { plan: SignalPlan; t: number } | null): voi
   renderSignalHeads();
 }
 
-engine.onPhysical((m) => { heads = m.payload.heads; renderSignalHeads(); });
+engine.onPhysical((m) => { heads = m.diff.heads; renderSignalHeads(); });
 engine.onSim((f) => { simT = f ? f.metrics.t : null; renderSignalHeads(); });

@@ -1,5 +1,6 @@
 import type { CityBaseline, Operation, SimFrame, SimOptions } from '@drip-urban/core';
-import type { EngineRequest, EngineResponse, PhysicalPayload } from './protocol';
+import type { Feature, Geometry } from './geojson';
+import type { EngineRequest, EngineResponse, LayerDiff, PhysicalPayload } from './protocol';
 
 type PhysicalListener = (p: Extract<EngineResponse, { type: 'physical' }>) => void;
 type SimListener = (f: SimFrame | null) => void;
@@ -13,7 +14,30 @@ export class Engine {
   private simListeners = new Set<SimListener>();
   private latestRev = 0;
   private ready: Promise<void> = Promise.resolve();
-  lastPhysical: PhysicalPayload | null = null;
+  /** Current physical model, kept in sync by applying every worker diff in order. */
+  private layers = { surfaces: new Map<string, Feature>(), markings: new Map<string, Feature>(), lines: new Map<string, Feature>() };
+  private heads: PhysicalPayload['heads'] = [];
+  private hasPhysical = false;
+  private snapshot: PhysicalPayload | null = null;
+
+  /** Whole model as feature collections (built on demand; surfaces in draw order). */
+  get lastPhysical(): PhysicalPayload | null {
+    if (!this.hasPhysical) return null;
+    if (!this.snapshot) {
+      const fcOf = (m: Map<string, Feature>) => ({ type: 'FeatureCollection' as const, features: [...m.values()] });
+      const surfaces = fcOf(this.layers.surfaces);
+      surfaces.features.sort((a, b) => Number(a.properties.z) - Number(b.properties.z));
+      this.snapshot = { surfaces, markings: fcOf(this.layers.markings), lines: fcOf(this.layers.lines), heads: this.heads } as unknown as PhysicalPayload;
+    }
+    return this.snapshot;
+  }
+
+  private apply(layer: keyof Engine['layers'], d: LayerDiff<Geometry>): void {
+    const m = this.layers[layer];
+    if (d.full) m.clear();
+    for (const id of d.remove) m.delete(id);
+    for (const f of d.add) m.set(String(f.properties.id), f as Feature);
+  }
 
   constructor() {
     this.worker = new Worker(new URL('./engine.worker.ts', import.meta.url), { type: 'module' });
@@ -22,8 +46,13 @@ export class Engine {
 
   private handle(m: EngineResponse): void {
     if (m.type === 'physical') {
-      if (m.rev < this.latestRev) return; // stale
-      this.lastPhysical = m.payload;
+      // Diffs are sequential: every one is applied, even if a newer build is already queued.
+      this.apply('surfaces', m.diff.surfaces as LayerDiff<Geometry>);
+      this.apply('markings', m.diff.markings as LayerDiff<Geometry>);
+      this.apply('lines', m.diff.lines as LayerDiff<Geometry>);
+      this.heads = m.diff.heads;
+      this.hasPhysical = true;
+      this.snapshot = null;
       this.physicalListeners.forEach((l) => l(m));
     } else if (m.type === 'job') {
       const p = this.pending.get(m.id);
@@ -45,6 +74,8 @@ export class Engine {
       this.worker.addEventListener('message', onReady);
     });
     this.latestRev = 0;
+    for (const m of Object.values(this.layers)) m.clear();
+    this.hasPhysical = false; this.snapshot = null;
     this.send({ type: 'init', baseline });
     return this.ready;
   }

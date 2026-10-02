@@ -3,7 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  LocalFrame, ScenarioHistory, buildPhysicalModel, geom, layoutSection,
+  LocalFrame, PhysicalCache, ScenarioHistory, buildPhysicalModel, geom, layoutSection,
   type CityBaseline, type LngLat, type Network, type PhysPolygon, type Roundabout, type Scenario,
 } from '../src/index';
 
@@ -156,5 +156,26 @@ describe('roundabout on a real 4-arm junction', () => {
     const h = new ScenarioHistory(baseline, scenario(), 't', ids);
     const node = fourArmJunction(h.network);
     expect(() => insert(h, node, { outerDiameterM: 18 })).toThrow(/Diametro/);
+  });
+});
+
+describe('incremental physical build', () => {
+  it('a cached rebuild is identical to a fresh build and much faster after one edit', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const cache = new PhysicalCache();
+    const opts = { origin: baseline.origin, features: baseline.features };
+    buildPhysicalModel(h.network, { ...opts, cache });
+    const frame = new LocalFrame(baseline.origin);
+    const road = Object.values(h.network.roads).find((r) => r.oneway === 'no' && !layoutSection(r).pedestrianOnly && geom.lengthOf(r.axis.map((q) => frame.toMetric(q))) > 80)!;
+    h.commit({ type: 'road.setOneway', payload: { roadId: road.id, oneway: 'forward' } });
+    const t = performance.now();
+    const cached = buildPhysicalModel(h.network, { ...opts, cache });
+    const cachedMs = performance.now() - t;
+    const fresh = buildPhysicalModel(h.network, opts);
+    const key = (m: { surfaces: { id: string; ring: unknown }[]; markings: { id: string; ring: unknown }[]; lines: { id: string; line: unknown }[] }) =>
+      JSON.stringify([m.surfaces.map((p) => [p.id, p.ring]).sort(), m.markings.map((p) => [p.id, p.ring]).sort(), m.lines.map((l) => [l.id, l.line]).sort()]);
+    expect(key(cached)).toBe(key(fresh));
+    expect(cached.markings.some((p) => p.roadId === road.id && p.kind === 'arrow')).toBe(true);
+    expect(cachedMs).toBeLessThan(fresh.stats.ms);
   });
 });

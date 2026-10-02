@@ -13,7 +13,7 @@ import { useContextMenu } from '../shell/contextMenu';
 import { BASEMAPS } from './basemaps';
 import { installImageLoader } from './images';
 import { LAYERS, addProjectLayers, setLayerOpacity, setLayerVisible } from './layers';
-import { setMapInstance, setSource, useMapUi } from './mapStore';
+import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
 import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC } from './sources';
 import { renderSignalHeads } from './signalsLive';
 
@@ -79,10 +79,10 @@ export function MapView() {
     const pushNetwork = () => {
       const { network, selection } = useApp.getState();
       if (!network) return;
-      setSource('labels', labelsFC(network));
-      setSource('zones', zonesFC(network));
+      syncSource('labels', labelsFC(network));
+      syncSource('zones', zonesFC(network));
       const a = assetsFC(network, baseline.origin, furnitureById);
-      setSource('asset-fp', a.fp); setSource('asset-pt', a.pt); setSource('signals', a.signals);
+      syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals);
       setSource('selection', selectionFC(selection, network));
     };
     const init = () => {
@@ -101,8 +101,13 @@ export function MapView() {
     };
     map.on('load', init);
 
+    // Only what changed goes to MapLibre: re-indexing the whole city on each edit cost ~350 ms.
     const offPhys = engine.onPhysical((m) => {
-      setSource('surfaces', m.payload.surfaces); setSource('markings', m.payload.markings); setSource('lines', m.payload.lines);
+      for (const id of ['surfaces', 'markings', 'lines'] as const) {
+        const d = m.diff[id];
+        if (d.full) setSource(id, engine.lastPhysical![id]);
+        else if (d.add.length || d.remove.length) updateSource(id, { add: d.add, remove: d.remove });
+      }
     });
     const offApp = useApp.subscribe((st, prev) => {
       if (st.netVersion !== prev.netVersion) pushNetwork();

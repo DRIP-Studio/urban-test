@@ -71,12 +71,86 @@ export interface BuildOptions {
   /** Baseline context: existing crossings from OSM etc. */
   readonly features?: Readonly<Record<string, CityFeature>>;
   readonly defaultCornerRadiusM?: number;
+  /** Reuse geometry of roads and junctions that did not change since the previous build (same objects, same setbacks). */
+  readonly cache?: PhysicalCache;
 }
+
+interface JunctionEntry {
+  readonly deps: readonly unknown[];
+  readonly g: JunctionGeometry | null;
+  readonly surfaces: PhysPolygon[];
+  readonly lines: PhysLine[];
+}
+interface RoadEntry {
+  readonly deps: readonly unknown[];
+  readonly surfaces: PhysPolygon[];
+  readonly lines: PhysLine[];
+  readonly markings: PhysPolygon[];
+}
+
+/**
+ * Memo of per-road and per-junction output across builds. Networks are immutable and replays share
+ * unchanged objects, so object identity of the inputs is a sound dependency key.
+ */
+export class PhysicalCache {
+  origin: LngLat | null = null;
+  metric: MetricCache | null = null;
+  junctions = new Map<string, JunctionEntry>();
+  roads = new Map<string, RoadEntry>();
+  crossings = new Map<string, { deps: readonly unknown[]; out: PhysPolygon[] }>();
+  grid: RoadGrid | null = null;
+  reset(origin: LngLat, frame: LocalFrame): void {
+    this.origin = origin; this.metric = new MetricCache(frame);
+    this.junctions.clear(); this.roads.clear(); this.crossings.clear(); this.grid = null;
+  }
+}
+/** Uniform grid over road axes for nearest-road queries, updated only for roads that changed. */
+export class RoadGrid {
+  private static readonly CELL = 40;
+  private cells = new Map<string, Set<string>>();
+  private placed = new Map<string, { road: Road; keys: string[] }>();
+  constructor(private readonly metric: MetricCache) {}
+  private keysFor(road: Road, pad: number): string[] {
+    const a = this.metric.axis(road);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of a) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const C = RoadGrid.CELL, out: string[] = [];
+    for (let i = Math.floor((x0 - pad) / C); i <= Math.floor((x1 + pad) / C); i++)
+      for (let j = Math.floor((y0 - pad) / C); j <= Math.floor((y1 + pad) / C); j++) out.push(`${i},${j}`);
+    return out;
+  }
+  sync(roads: readonly Road[]): void {
+    const seen = new Set<string>();
+    for (const road of roads) {
+      seen.add(road.id);
+      const was = this.placed.get(road.id);
+      if (was?.road === road) continue;
+      if (was) this.unplace(road.id);
+      const keys = this.keysFor(road, 8);
+      for (const k of keys) (this.cells.get(k) ?? this.cells.set(k, new Set()).get(k)!).add(road.id);
+      this.placed.set(road.id, { road, keys });
+    }
+    for (const id of [...this.placed.keys()]) if (!seen.has(id)) this.unplace(id);
+  }
+  private unplace(id: string): void {
+    for (const k of this.placed.get(id)?.keys ?? []) this.cells.get(k)?.delete(id);
+    this.placed.delete(id);
+  }
+  near(p: V): Road[] {
+    const C = RoadGrid.CELL;
+    const ids = this.cells.get(`${Math.floor(p[0] / C)},${Math.floor(p[1] / C)}`);
+    return ids ? [...ids].map((id) => this.placed.get(id)!.road) : [];
+  }
+}
+
+const sameDeps = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalModel {
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const frame = new LocalFrame(opts.origin);
-  const metric = new MetricCache(frame);
+  const cache = opts.cache;
+  if (cache && (!cache.origin || cache.origin[0] !== opts.origin[0] || cache.origin[1] !== opts.origin[1])) cache.reset(opts.origin, frame);
+  const metric = cache?.metric ?? new MetricCache(frame);
   const toLL = (ring: readonly V[]): LngLat[] => ring.map((p) => frame.toLngLat(p));
   const surfaces: PhysPolygon[] = [];
   const markings: PhysPolygon[] = [];
@@ -92,49 +166,51 @@ export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalMo
   const junctionGeom = new Map<string, JunctionGeometry>();
   const roadIdsAtNodes = new Set<string>();
   for (const road of Object.values(net.roads)) { roadIdsAtNodes.add(road.from); roadIdsAtNodes.add(road.to); }
+  const roadsAtNode = new Map<string, Road[]>();
+  for (const road of Object.values(net.roads)) {
+    (roadsAtNode.get(road.from) ?? roadsAtNode.set(road.from, []).get(road.from)!).push(road);
+    if (road.to !== road.from) (roadsAtNode.get(road.to) ?? roadsAtNode.set(road.to, []).get(road.to)!).push(road);
+  }
+  const seenJunctions = new Set<string>();
   for (const nodeId of roadIdsAtNodes) {
     if (rb.ownedNodes.has(nodeId)) continue;
     const node = net.nodes[nodeId];
     if (!node) continue;
-    const arms = vehicularArms(net, nodeId, metric);
-    if (arms.length < 2) continue;
     const spec = net.junctions[nodeId];
-    const g = buildJunction(nodeId, frame.toMetric(node.at) as V, arms, spec?.cornerRadiusM ?? opts.defaultCornerRadiusM ?? 4);
-    if (!g) continue;
-    junctionGeom.set(nodeId, g);
-    for (const [k, v] of g.setbacks) setbacks.set(k, v);
-    const state: PhysState = spec || arms.some((a) => roadState(a.road) === 'project') ? 'project' : 'existing';
-    if (arms.length >= 2) {
-      surfaces.push({ id: `j:${nodeId}`, kind: 'junction', ring: toLL(g.surface), nodeId, state, material: 'asphalt', z: Z.junction!, heightM: 0 });
+    const radius = spec?.cornerRadiusM ?? opts.defaultCornerRadiusM ?? 4;
+    const deps = [node, spec, radius, ...(roadsAtNode.get(nodeId) ?? [])];
+    let entry = cache?.junctions.get(nodeId);
+    if (!entry || !sameDeps(entry.deps, deps)) {
+      entry = buildJunctionEntry(net, nodeId, node.at, spec, radius, metric, frame, deps);
+      cache?.junctions.set(nodeId, entry);
     }
-    g.corners.forEach((c, i) => surfaces.push({ id: `jc:${nodeId}:${i}`, kind: 'corner', ring: toLL(c), nodeId, state, material: DEFAULT_MATERIAL.corner!, z: Z.corner!, heightM: HEIGHT.corner! }));
-    g.kerbs.forEach((k, i) => lines.push({ id: `jk:${nodeId}:${i}`, kind: 'kerb', line: toLL(k), nodeId, state }));
+    seenJunctions.add(nodeId);
+    if (!entry.g) continue;
+    junctionGeom.set(nodeId, entry.g);
+    for (const [k, v] of entry.g.setbacks) setbacks.set(k, v);
+    surfaces.push(...entry.surfaces);
+    lines.push(...entry.lines);
   }
+  if (cache) for (const id of cache.junctions.keys()) if (!seenJunctions.has(id)) cache.junctions.delete(id);
 
   // 3. Road strips, trimmed at both ends by the junction setbacks.
+  const seenRoads = new Set<string>();
   for (const road of Object.values(net.roads)) {
     if (rb.ringRoadIds.has(road.id)) continue;
-    const axis = metric.axis(road);
-    const L = lengthOf(axis);
     const s0 = setbacks.get(`${road.id}|s`) ?? 0;
     const s1 = setbacks.get(`${road.id}|e`) ?? 0;
-    if (L - s0 - s1 < 0.3) continue;
-    const trimmed = slice(axis, s0, L - s1);
-    if (trimmed.length < 2) continue;
-    const layout = layoutSection(road);
-    const state = roadState(road);
-    for (const pe of layout.elements) {
-      const kind: SurfaceKind = layout.pedestrianOnly ? 'footpath' : pe.el.kind === 'lane' ? 'carriageway' : (pe.el.kind as SurfaceKind);
-      surfaces.push({
-        id: `s:${pe.el.id}`, kind, ring: toLL(band(trimmed, pe.left, pe.right)), roadId: road.id, state,
-        material: pe.el.material ?? DEFAULT_MATERIAL[kind] ?? 'asphalt', z: Z[kind] ?? 4, heightM: HEIGHT[kind] ?? 0,
-      });
+    const deps = [road, s0, s1];
+    let entry = cache?.roads.get(road.id);
+    if (!entry || !sameDeps(entry.deps, deps)) {
+      entry = buildRoadEntry(road, s0, s1, metric, toLL, deps);
+      cache?.roads.set(road.id, entry);
     }
-    if (layout.pedestrianOnly) continue;
-    lines.push({ id: `k:${road.id}:l`, kind: 'kerb', line: toLL(offset(trimmed, layout.cwLeft)), roadId: road.id, state });
-    lines.push({ id: `k:${road.id}:r`, kind: 'kerb', line: toLL(offset(trimmed, layout.cwRight)), roadId: road.id, state });
-    addRoadMarkings(road, trimmed, layout, state, markings, toLL);
+    seenRoads.add(road.id);
+    surfaces.push(...entry.surfaces);
+    lines.push(...entry.lines);
+    markings.push(...entry.markings);
   }
+  if (cache) for (const id of cache.roads.keys()) if (!seenRoads.has(id)) cache.roads.delete(id);
 
   // 4. Junction approach control lines (only where the junction has an explicit control).
   for (const [nodeId, g] of junctionGeom) {
@@ -144,7 +220,7 @@ export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalMo
   }
 
   // 5. Pedestrian crossings: existing OSM crossings + authored junction crossings.
-  addCrossings(net, opts.features ?? {}, metric, setbacks, markings, toLL);
+  addCrossings(net, opts.features ?? {}, metric, setbacks, markings, toLL, cache);
 
   // 6. Authored areas: public space, green infrastructure, parking bays, painted crossings.
   for (const area of Object.values(net.areas)) {
@@ -174,6 +250,44 @@ export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalMo
     surfaces, markings, lines,
     stats: { roads: Object.keys(net.roads).length, junctions: junctionGeom.size, roundabouts: Object.keys(net.roundabouts).length, markings: markings.length, ms: Math.round(t1 - t0) },
   };
+}
+
+function buildJunctionEntry(
+  net: Network, nodeId: string, at: LngLat, spec: JunctionSpec | undefined, radius: number,
+  metric: MetricCache, frame: LocalFrame, deps: readonly unknown[],
+): JunctionEntry {
+  const toLL = (ring: readonly V[]): LngLat[] => ring.map((p) => frame.toLngLat(p));
+  const arms = vehicularArms(net, nodeId, metric);
+  const g = arms.length >= 2 ? buildJunction(nodeId, frame.toMetric(at) as V, arms, radius) : null;
+  if (!g) return { deps, g: null, surfaces: [], lines: [] };
+  const state: PhysState = spec || arms.some((a) => roadState(a.road) === 'project') ? 'project' : 'existing';
+  const surfaces: PhysPolygon[] = [{ id: `j:${nodeId}`, kind: 'junction', ring: toLL(g.surface), nodeId, state, material: 'asphalt', z: Z.junction!, heightM: 0 }];
+  g.corners.forEach((c, i) => surfaces.push({ id: `jc:${nodeId}:${i}`, kind: 'corner', ring: toLL(c), nodeId, state, material: DEFAULT_MATERIAL.corner!, z: Z.corner!, heightM: HEIGHT.corner! }));
+  const lines: PhysLine[] = g.kerbs.map((k, i) => ({ id: `jk:${nodeId}:${i}`, kind: 'kerb', line: toLL(k), nodeId, state }));
+  return { deps, g, surfaces, lines };
+}
+
+function buildRoadEntry(road: Road, s0: number, s1: number, metric: MetricCache, toLL: (r: readonly V[]) => LngLat[], deps: readonly unknown[]): RoadEntry {
+  const out: RoadEntry = { deps, surfaces: [], lines: [], markings: [] };
+  const axis = metric.axis(road);
+  const L = lengthOf(axis);
+  if (L - s0 - s1 < 0.3) return out;
+  const trimmed = slice(axis, s0, L - s1);
+  if (trimmed.length < 2) return out;
+  const layout = layoutSection(road);
+  const state = roadState(road);
+  for (const pe of layout.elements) {
+    const kind: SurfaceKind = layout.pedestrianOnly ? 'footpath' : pe.el.kind === 'lane' ? 'carriageway' : (pe.el.kind as SurfaceKind);
+    out.surfaces.push({
+      id: `s:${pe.el.id}`, kind, ring: toLL(band(trimmed, pe.left, pe.right)), roadId: road.id, state,
+      material: pe.el.material ?? DEFAULT_MATERIAL[kind] ?? 'asphalt', z: Z[kind] ?? 4, heightM: HEIGHT[kind] ?? 0,
+    });
+  }
+  if (layout.pedestrianOnly) return out;
+  out.lines.push({ id: `k:${road.id}:l`, kind: 'kerb', line: toLL(offset(trimmed, layout.cwLeft)), roadId: road.id, state });
+  out.lines.push({ id: `k:${road.id}:r`, kind: 'kerb', line: toLL(offset(trimmed, layout.cwRight)), roadId: road.id, state });
+  addRoadMarkings(road, trimmed, layout, state, out.markings, toLL);
+  return out;
 }
 
 function addRoadMarkings(
@@ -248,7 +362,7 @@ function addApproachLines(
 
 function addCrossings(
   net: Network, features: Readonly<Record<string, CityFeature>>, metric: MetricCache,
-  setbacks: Map<string, number>, out: PhysPolygon[], toLL: (r: readonly V[]) => LngLat[],
+  setbacks: Map<string, number>, out: PhysPolygon[], toLL: (r: readonly V[]) => LngLat[], cache?: PhysicalCache,
 ): void {
   const roads = Object.values(net.roads).filter((r) => !layoutSection(r).pedestrianOnly);
   // Authored junction crossings.
@@ -267,24 +381,34 @@ function addCrossings(
     }
   }
   // Existing crossings from OSM, snapped to the nearest carriageway within 6 m.
+  const grid = cache ? (cache.grid ??= new RoadGrid(metric)) : new RoadGrid(metric);
+  grid.sync(roads);
   for (const f of Object.values(features)) {
     if (f.kind !== 'crossing' || f.geometry !== 'point') continue;
     const p = metric.frame.toMetric(f.coords[0]!) as V;
+    const candidates = grid.near(p).filter((r) => !layoutSection(r).pedestrianOnly);
     let best: { road: Road; along: number; d: number } | null = null;
-    for (const road of roads) {
-      const axis = metric.axis(road);
-      const pr = project(axis, p);
+    for (const road of candidates) {
+      const pr = project(metric.axis(road), p);
       if (pr.d < 6 && (!best || pr.d < best.d)) best = { road, along: pr.along, d: pr.d };
     }
     if (!best) continue;
+    const s0 = setbacks.get(`${best.road.id}|s`) ?? 0, s1 = setbacks.get(`${best.road.id}|e`) ?? 0;
+    const deps = [best.road, best.along, s0, s1];
+    const hit = cache?.crossings.get(f.id);
+    if (hit && sameDeps(hit.deps, deps)) { out.push(...hit.out); continue; }
+    const made: PhysPolygon[] = [];
     const axis = metric.axis(best.road);
     const L = lengthOf(axis);
-    const s0 = setbacks.get(`${best.road.id}|s`) ?? 0, s1 = setbacks.get(`${best.road.id}|e`) ?? 0;
     const half = MARKING.zebraDepthM / 2 + 0.3;
-    const along = Math.min(Math.max(best.along, s0 + half), L - s1 - half);
-    if (L - s0 - s1 < MARKING.zebraDepthM + 0.6) continue;
-    const lay = layoutSection(best.road);
-    zebra(axis, along, lay.cwLeft, lay.cwRight).forEach((r, i) =>
-      out.push({ id: `z:${f.id}:${i}`, kind: 'zebra', ring: toLL(r), roadId: best!.road.id, state: 'existing', material: 'road_marking_white', z: 10, heightM: 0 }));
+    if (L - s0 - s1 >= MARKING.zebraDepthM + 0.6) {
+      const along = Math.min(Math.max(best.along, s0 + half), L - s1 - half);
+      const lay = layoutSection(best.road);
+      const roadId = best.road.id;
+      zebra(axis, along, lay.cwLeft, lay.cwRight).forEach((r, i) =>
+        made.push({ id: `z:${f.id}:${i}`, kind: 'zebra', ring: toLL(r), roadId, state: 'existing', material: 'road_marking_white', z: 10, heightM: 0 }));
+    }
+    cache?.crossings.set(f.id, { deps, out: made });
+    out.push(...made);
   }
 }

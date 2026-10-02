@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
 import {
-  FlowSimulation, NetworkReplayer, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
+  FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
   isochrone, route, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
-import type { EngineRequest, EngineResponse, PhysicalPayload } from './protocol';
+import type { Geometry, LineString, Polygon } from './geojson';
+import type { EngineRequest, EngineResponse, LayerDiff } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -32,19 +33,41 @@ function lineFeature(l: PhysLine) {
   return { type: 'Feature' as const, id: l.id, geometry: { type: 'LineString' as const, coordinates: l.line }, properties: { id: l.id, kind: l.kind, state: l.state, roadId: l.roadId ?? null, nodeId: l.nodeId ?? null } };
 }
 
-function build(ops: readonly Operation[], rev: number): void {
+const physCache = new PhysicalCache();
+type Item = PhysPolygon | PhysLine;
+/** Previous build, per layer: id → source object. Cache hits keep the same object, so identity is the fast path. */
+const prev = { surfaces: new Map<string, Item>(), markings: new Map<string, Item>(), lines: new Map<string, Item>() };
+
+function diffLayer<G extends Geometry, T extends Item = Item>(layer: keyof typeof prev, items: readonly T[], toFeature: (x: T) => { id: string } & object, full: boolean): LayerDiff<G> {
+  const old = prev[layer];
+  const next = new Map<string, Item>();
+  const add: object[] = [];
+  for (const it of items) {
+    next.set(it.id, it);
+    if (full) { add.push(toFeature(it)); continue; }
+    const was = old.get(it.id);
+    if (was === it) continue;
+    if (was && JSON.stringify(was) === JSON.stringify(it)) { next.set(it.id, was); continue; }
+    add.push(toFeature(it));
+  }
+  const remove = full ? [] : [...old.keys()].filter((id) => !next.has(id));
+  prev[layer] = next;
+  return { full, add: add as LayerDiff<G>['add'], remove };
+}
+
+function build(ops: readonly Operation[], rev: number, full: boolean): void {
   if (!baseline) return;
   const t0 = performance.now();
   const r = replayer.derive(baseline, ops);
   net = r.net;
-  const m = buildPhysicalModel(net, { origin: baseline.origin, features: baseline.features });
-  const payload: PhysicalPayload = {
-    surfaces: { type: 'FeatureCollection', features: m.surfaces.sort((a, b) => a.z - b.z).map(polyFeature) },
-    markings: { type: 'FeatureCollection', features: m.markings.map(polyFeature) },
-    lines: { type: 'FeatureCollection', features: m.lines.map(lineFeature) },
+  const m = buildPhysicalModel(net, { origin: baseline.origin, features: baseline.features, cache: physCache });
+  const diff = {
+    surfaces: diffLayer<Polygon, PhysPolygon>('surfaces', m.surfaces, polyFeature, full),
+    markings: diffLayer<Polygon, PhysPolygon>('markings', m.markings, polyFeature, full),
+    lines: diffLayer<LineString, PhysLine>('lines', m.lines, lineFeature, full),
     heads: signalHeads(net, baseline.origin),
   };
-  post({ type: 'physical', rev, payload, stats: { ...m.stats, ms: Math.round(performance.now() - t0) }, failed: r.failed.map((f) => ({ opId: f.op.id, type: f.op.type, messages: f.issues.map((i) => i.message) })) });
+  post({ type: 'physical', rev, diff, stats: { ...m.stats, ms: Math.round(performance.now() - t0) }, failed: r.failed.map((f) => ({ opId: f.op.id, type: f.op.type, messages: f.issues.map((i) => i.message) })) });
 }
 
 function runJob(kind: string, args: Record<string, unknown>): unknown {
@@ -105,8 +128,12 @@ function simLoop(): void {
 self.onmessage = (ev: MessageEvent<EngineRequest>) => {
   const m = ev.data;
   try {
-    if (m.type === 'init') { baseline = m.baseline; replayer.derive(baseline, []); net = null; lastTraffic = null; post({ type: 'ready' }); return; }
-    if (m.type === 'build') { build(m.ops, m.rev); return; }
+    if (m.type === 'init') {
+      baseline = m.baseline; replayer.derive(baseline, []); net = null; lastTraffic = null;
+      prev.surfaces.clear(); prev.markings.clear(); prev.lines.clear();
+      post({ type: 'ready' }); return;
+    }
+    if (m.type === 'build') { build(m.ops, m.rev, Boolean(m.full) || prev.surfaces.size === 0); return; }
     if (m.type === 'job') {
       try { post({ type: 'job', id: m.id, ok: true, result: runJob(m.kind, m.args) }); }
       catch (e) { post({ type: 'job', id: m.id, ok: false, error: e instanceof Error ? e.message : String(e) }); }

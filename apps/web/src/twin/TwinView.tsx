@@ -139,7 +139,7 @@ export function TwinView() {
       heads.current = p.heads;
     };
     if (engine.lastPhysical) apply(engine.lastPhysical);
-    const off = engine.onPhysical((m) => apply(m.payload));
+    const off = engine.onPhysical(() => apply(engine.lastPhysical!));
     return off;
   }, [ready, catalogs]);
 
