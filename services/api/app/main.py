@@ -191,6 +191,16 @@ def baseline(pid: str) -> Response:
     return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip", "Cache-Control": "private, max-age=31536000, immutable"})
 
 
+@app.patch("/api/projects/{pid}/baseline/roads")
+def baseline_patch(pid: str, body: dict = Body(...)) -> dict:
+    """Existing-state update of baseline cross sections (e.g. sidewalks derived from building fronts)."""
+    try:
+        return ps.patch_baseline_roads(pid, body.get("roads"), str(body.get("label") or "Aggiornamento stato esistente"),
+                                       str(body.get("provenanceKey") or ""), body.get("provenance"), _author())
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
 @app.get("/api/projects/{pid}/scenarios/{sid}")
 def scenario(pid: str, sid: str) -> dict:
     try:

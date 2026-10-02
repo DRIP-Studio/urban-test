@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   FlowSimulation, LocalFrame, OperationRejected, ScenarioHistory, analyzeJunction, analyzeNetwork, auditScenario,
-  estimateTraffic, geom, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan,
+  SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan,
   type CityBaseline, type Network, type Scenario,
 } from '../src/index';
 
@@ -155,5 +155,18 @@ describe('traffic, simulation, safety, network, accessibility', () => {
     expect(acc.coverage).toBeLessThanOrEqual(100);
     const iso = isochrone(h.network, baseline.origin, [14.2745, 40.9416], 'walk', 7);
     expect(Object.keys(iso).length).toBeGreaterThan(20);
+  });
+});
+
+describe('existing sidewalks from building fronts', () => {
+  it('derives plausible widths on the real Frattamaggiore network, quickly and declared as derived', () => {
+    const t = performance.now();
+    const r = inferSidewalks(baseline);
+    const ms = performance.now() - t;
+    expect(ms).toBeLessThan(4000);
+    expect(r.roadsWithSidewalks).toBeGreaterThan(300);
+    for (const c of r.changes) for (const w of [c.left, c.right]) if (w !== null) { expect(w).toBeGreaterThanOrEqual(0.9); expect(w).toBeLessThanOrEqual(3); }
+    expect(SIDEWALK_PROVENANCE.kind).toBe('derived');
+    console.log(`sidewalks: ${r.roadsWithSidewalks} roads with, ${r.roadsWithout} without, ${r.totalLengthM} m, ${r.changes.length} changed, ${Math.round(ms)} ms`);
   });
 });

@@ -308,8 +308,80 @@ def restore_snapshot(pid: str, snap_id: str, author: str) -> dict:
             shutil.rmtree(d / "docs", ignore_errors=True)
             shutil.copytree(src / "docs", d / "docs")
         meta = read_json(src / "project.json")
+        # The baseline is versioned (existing-state imports): bring back the revision the snapshot used.
+        rev = int(meta.get("baselineRevision") or 0)
+        current = int(read_json(d / "project.json").get("baselineRevision") or 0)
+        if rev != current:
+            archived = d / "baselines" / f"rev-{rev}.json.gz"
+            if archived.exists():
+                _archive_baseline(d, current)
+                shutil.copy2(archived, d / "baseline.json.gz")
         atomic_write_json(d / "project.json", {**meta, "updatedAt": now_iso()})
         audit(pid, author, "snapshot.restore", {"snapshot": snap_id})
+        return get_meta(pid)
+
+
+SECTION_KINDS = {"sidewalk", "furniture", "parking", "cycle", "bus", "lane", "median", "green", "shoulder", "curb"}
+PROV_KINDS = {"existing", "osm", "measured", "derived", "estimated"}
+
+
+def _archive_baseline(d: Path, rev: int) -> None:
+    target = d / "baselines" / f"rev-{rev}.json.gz"
+    if not target.exists():
+        target.parent.mkdir(exist_ok=True)
+        shutil.copy2(d / "baseline.json.gz", target)
+
+
+def _valid_section(road: dict, section: Any) -> dict:
+    els = section.get("elements") if isinstance(section, dict) else None
+    if not isinstance(els, list) or not els or len(els) > 40:
+        raise ValueError("Sezione non valida")
+    lane_ids = {lane["id"] for lane in road.get("lanes") or []}
+    out = []
+    for e in els:
+        if not isinstance(e, dict) or e.get("kind") not in SECTION_KINDS:
+            raise ValueError("Elemento di sezione non valido")
+        w = e.get("widthM")
+        if not isinstance(w, (int, float)) or not 0.1 <= w <= 30:
+            raise ValueError("Larghezza fuori intervallo (0,1–30 m)")
+        if not isinstance(e.get("id"), str) or len(e["id"]) > 160:
+            raise ValueError("Id elemento non valido")
+        if e.get("laneId") is not None and e["laneId"] not in lane_ids:
+            raise ValueError("Corsia inesistente nella sezione")
+        out.append({k: e[k] for k in ("id", "kind", "widthM", "laneId", "material") if k in e})
+    return {"elements": out}
+
+
+def patch_baseline_roads(pid: str, roads: Any, label: str, provenance_key: str, provenance: Any, author: str) -> dict:
+    """Update the existing state (cross sections only) of baseline roads, e.g. imported sidewalks.
+
+    Operations keep working: they reference road ids, which do not change. A snapshot is taken first and
+    the previous baseline revision is archived, so the update can always be undone from Cronologia.
+    """
+    if not isinstance(roads, dict) or not roads or len(roads) > 20000:
+        raise ValueError("Nessuna strada da aggiornare")
+    if not isinstance(provenance, dict) or provenance.get("kind") not in PROV_KINDS or not str(provenance.get("source") or "").strip():
+        raise ValueError("Provenienza obbligatoria (stato esistente)")
+    if provenance_key not in {"sidewalks", "width"}:
+        raise ValueError("Chiave di provenienza non ammessa")
+    prov = {"kind": provenance["kind"], "source": str(provenance["source"])[:300]}
+    with _lock(pid):
+        d = project_dir(pid)
+        meta = get_meta(pid)
+        base = read_baseline(pid)
+        for rid, sec in roads.items():
+            if rid not in base["roads"]:
+                raise NotFound(f"Strada inesistente nella baseline: {rid}")
+            road = base["roads"][rid]
+            road["section"] = _valid_section(road, sec)
+            road["provenance"] = {**(road.get("provenance") or {}), provenance_key: prov}
+        snapshot(pid, author, f"Prima di: {label}"[:160], automatic=True)
+        rev = int(meta.get("baselineRevision") or 0)
+        _archive_baseline(d, rev)
+        atomic_write_json(d / "baseline.json.gz", base, gz=True)
+        meta = {**read_json(d / "project.json"), "baselineRevision": rev + 1, "updatedAt": now_iso()}
+        atomic_write_json(d / "project.json", meta)
+        audit(pid, author, "baseline.patch", {"label": label[:160], "roads": len(roads), "provenance": prov, "revision": rev + 1})
         return get_meta(pid)
 
 

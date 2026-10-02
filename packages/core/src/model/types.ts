@@ -188,6 +188,8 @@ export interface ProjectMeta {
   readonly crs: 'EPSG:4326';
   readonly timezone: string;
   readonly baselineId: string;
+  /** Incremented when the existing state is updated (e.g. imported sidewalks); 0/absent = as created. */
+  readonly baselineRevision?: number;
   readonly scenarioIds: readonly string[];
   readonly activeScenarioId: string;
 }

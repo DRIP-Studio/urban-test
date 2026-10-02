@@ -137,3 +137,27 @@ def test_provider_keys_are_masked_and_redacted(client):
     assert secret not in msg and "[chiave]" in msg
     # Only providers the product actually uses are offered.
     assert {p["id"] for p in listed} == {"here", "google", "gtfs_rt"}
+
+
+def test_baseline_existing_state_patch_is_validated_versioned_and_restorable(client):
+    pid = client.post("/api/projects", json={"template": "frattamaggiore", "name": "Marciapiedi"}).json()["id"]
+    base = client.get(f"/api/projects/{pid}/baseline").json()  # httpx undoes Content-Encoding: gzip
+    rid, road = next((k, r) for k, r in base["roads"].items() if any(e["kind"] == "lane" for e in r["section"]["elements"]))
+    lanes = [e for e in road["section"]["elements"] if e["kind"] == "lane"]
+    new = {"elements": [{"id": f"{rid}:swl", "kind": "sidewalk", "widthM": 1.7}, *lanes, {"id": f"{rid}:swr", "kind": "sidewalk", "widthM": 2.1}]}
+    prov = {"kind": "derived", "source": "test"}
+    # Validation: unknown kinds, absurd widths and a "project" provenance are refused.
+    assert client.patch(f"/api/projects/{pid}/baseline/roads", json={"roads": {rid: {"elements": [{"id": "x", "kind": "pool", "widthM": 1}]}}, "provenanceKey": "sidewalks", "provenance": prov}).status_code == 400
+    assert client.patch(f"/api/projects/{pid}/baseline/roads", json={"roads": {rid: {"elements": [{"id": "x", "kind": "sidewalk", "widthM": 99}]}}, "provenanceKey": "sidewalks", "provenance": prov}).status_code == 400
+    assert client.patch(f"/api/projects/{pid}/baseline/roads", json={"roads": {rid: new}, "provenanceKey": "sidewalks", "provenance": {"kind": "project", "source": "x"}}).status_code == 400
+    r = client.patch(f"/api/projects/{pid}/baseline/roads", json={"roads": {rid: new}, "label": "Marciapiedi esistenti", "provenanceKey": "sidewalks", "provenance": prov})
+    assert r.status_code == 200, r.text
+    assert r.json()["baselineRevision"] == 1
+    after = client.get(f"/api/projects/{pid}/baseline?rev=1").json()
+    assert after["roads"][rid]["section"]["elements"][0]["widthM"] == 1.7
+    assert after["roads"][rid]["provenance"]["sidewalks"]["kind"] == "derived"
+    # The automatic snapshot taken before the update brings the original baseline back.
+    snap = next(s for s in client.get(f"/api/projects/{pid}/snapshots").json() if s["label"].startswith("Prima di"))
+    client.post(f"/api/projects/{pid}/snapshots/{snap['id']}/restore")
+    restored = client.get(f"/api/projects/{pid}/baseline").json()
+    assert restored["roads"][rid]["section"] == road["section"]

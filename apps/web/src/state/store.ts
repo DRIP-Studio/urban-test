@@ -120,7 +120,8 @@ export async function openProject(pid: string): Promise<void> {
   try {
     const project = await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(pid)}`);
     set({ loading: 'Caricamento della città' });
-    const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(pid)}/baseline`);
+    // The baseline is cached as immutable; its revision changes when the existing state is updated.
+    const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(pid)}/baseline?rev=${project.baselineRevision ?? 0}`);
     set({ loading: 'Costruzione del modello fisico' });
     await engine.init(baseline);
     set({ project, baseline, loading: null, mode: 'design', tool: 'select', selection: null, dock: null });

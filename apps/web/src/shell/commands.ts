@@ -6,6 +6,7 @@ import { TOOLS } from '../tools/registry';
 import { fitBounds, useMapUi } from '../map/mapStore';
 import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
+import { importExistingSidewalks } from '../state/existingState';
 import { useTool } from '../tools/toolState';
 
 export interface Command {
@@ -47,6 +48,7 @@ export const COMMANDS: Command[] = [
   { id: 'layers', label: 'Livelli', group: 'Vista', shortcut: 'Ctrl+L', when: inProject, run: () => setDock('layers') },
   { id: 'history', label: 'Cronologia e versioni', group: 'Progetto', when: inProject, run: () => setDock('history') },
   { id: 'export', label: 'Esporta', group: 'Progetto', shortcut: 'Ctrl+E', when: inProject, run: () => setDock('export') },
+  { id: 'sidewalks', label: 'Importa marciapiedi esistenti (dalle sagome degli edifici)', group: 'Progetto', when: inProject, run: () => void importExistingSidewalks() },
   { id: 'audit', label: 'Verifica progetto (geometria, topologia, semafori)', group: 'Analisi', when: inProject, run: () => { setMode('analyze'); setDock('audit'); } },
   { id: 'settings', label: 'Impostazioni e chiavi API', group: 'Sistema', when: () => true, run: () => setDock('settings') },
   { id: 'qa', label: 'Diagnostica sviluppatore', group: 'Sistema', shortcut: 'Ctrl+Shift+D', when: () => true, run: () => setDock('qa') },
