@@ -1,10 +1,28 @@
-import { add, intersectLines, leftNormal, mul, quadBezier, type V } from '../geo/polyline';
+import { add, dot, intersectLines, leftNormal, mul, sub, unit, type V } from '../geo/polyline';
 import type { Arm } from './topology';
 
 /** Point on an arm edge: `off` metres sideways (left > 0), `s` metres from the node along the arm. */
 function edgePoint(arm: Arm, node: V, off: number, s: number): V {
   return add(add(node, mul(arm.u, s)), mul(leftNormal(arm.u), off));
 }
+
+/**
+ * Kerb radius actually used at a corner whose kerbs meet at `angle` (radians, between the two arms).
+ * Full radius for near-orthogonal corners; acute corners taper to a 0.5 m nose so the roads stay straight
+ * up to the junction instead of bending over 15+ m (a constant radius has tangent length r / tan(θ/2)).
+ */
+export function effectiveRadius(r: number, angle: number): number {
+  if (r <= 0) return 0;
+  const deg = (angle * 180) / Math.PI;
+  const nose = Math.min(0.5, r);
+  if (deg <= 35) return nose;
+  if (deg >= 60) return r;
+  return nose + ((deg - 35) / 25) * (r - nose);
+}
+
+/** Tangent length of a circular fillet of radius r between two directions forming `angle`. */
+const tangentLength = (r: number, angle: number) => (r <= 0 ? 0 : r / Math.tan(angle / 2));
+const angleBetween = (u: V, v: V) => Math.acos(Math.max(-1, Math.min(1, dot(u, v))));
 
 interface CornerPair {
   readonly a: Arm;
@@ -60,11 +78,16 @@ export function buildJunction(nodeId: string, node: V, arms: readonly Arm[], cor
   }
   const r = n >= 3 ? cornerRadius : 0;
   const setback = new Map<Arm, number>();
+  const radius = new Map<CornerPair, number>();
   for (const arm of arms) setback.set(arm, 0);
   for (const p of pairs) {
-    const ra = p.meet ? r : 0, ro = p.meetOut ? r : 0;
-    setback.set(p.a, Math.max(setback.get(p.a)!, p.sa + ra, p.saOut + ro));
-    setback.set(p.b, Math.max(setback.get(p.b)!, p.sb + ra, p.sbOut + ro));
+    const angle = angleBetween(p.a.u, p.b.u);
+    const re = effectiveRadius(r, angle);
+    radius.set(p, re);
+    const T = tangentLength(re, angle);
+    const ta = p.meet ? T : 0, to = p.meetOut ? T : 0;
+    setback.set(p.a, Math.max(setback.get(p.a)!, p.sa + ta, p.saOut + to));
+    setback.set(p.b, Math.max(setback.get(p.b)!, p.sb + ta, p.sbOut + to));
   }
   // Never eat more than 45 % of a short road; the other end needs room too.
   for (const arm of arms) setback.set(arm, Math.min(setback.get(arm)!, arm.length * 0.45));
@@ -77,12 +100,13 @@ export function buildJunction(nodeId: string, node: V, arms: readonly Arm[], cor
     const SA = setback.get(a)!, SB = setback.get(b)!;
     // Cut line of arm a: right edge then left edge.
     surface.push(edgePoint(a, node, a.cwRight, SA), edgePoint(a, node, a.cwLeft, SA));
-    const inner = cornerPath(a, b, node, a.cwLeft, b.cwRight, p.sa, p.sb, p.meet, SA, SB, r);
+    const re = radius.get(p)!;
+    const inner = cornerPath(a, b, node, a.cwLeft, b.cwRight, p.sa, p.sb, p.meet, SA, SB, re);
     surface.push(...inner.slice(1, -1));
     kerbs.push(inner);
     const hasWalk = a.outLeft - a.cwLeft > 0.2 || b.cwRight - b.outRight > 0.2;
     if (hasWalk) {
-      const outer = cornerPath(a, b, node, a.outLeft, b.outRight, p.saOut, p.sbOut, p.meetOut, SA, SB, r);
+      const outer = cornerPath(a, b, node, a.outLeft, b.outRight, p.saOut, p.sbOut, p.meetOut, SA, SB, re);
       corners.push([...inner, ...[...outer].reverse()]);
     }
   }
@@ -91,15 +115,40 @@ export function buildJunction(nodeId: string, node: V, arms: readonly Arm[], cor
   return { nodeId, setbacks, surface, corners, kerbs };
 }
 
-/** From a's left edge at its cut, round the corner, to b's right edge at its cut. */
+/**
+ * From a's left edge at its cut, round the corner, to b's right edge at its cut: straight kerb along a,
+ * circular arc tangent to both kerbs (radius r, centre on the bisector), straight kerb along b.
+ */
 function cornerPath(
-  a: Arm, b: Arm, node: V, offA: number, offB: number,
-  sa: number, sb: number, meet: V | null, SA: number, SB: number, r: number,
+  a: Arm, b: Arm, node: V, offA: number, offB: number, sa: number, sb: number, meet: V | null, SA: number, SB: number, rWanted: number,
 ): V[] {
   const start = edgePoint(a, node, offA, SA);
   const end = edgePoint(b, node, offB, SB);
-  if (!meet || r <= 0) return [start, end];
-  const t0 = edgePoint(a, node, offA, Math.min(SA, sa + r));
-  const t1 = edgePoint(b, node, offB, Math.min(SB, sb + r));
-  return [start, ...quadBezier(t0, meet, t1, 10), end];
+  // Kerbs that would meet beyond a cut (short arms are trimmed to 45 %): no corner to round.
+  if (!meet || sa >= SA - 1e-3 || sb >= SB - 1e-3) return [start, end];
+  const angle = angleBetween(a.u, b.u);
+  // The fillet must end before both cuts: shrink the radius to the room available.
+  const T = Math.min(tangentLength(rWanted, angle), SA - sa, SB - sb);
+  if (T <= 0.05 || rWanted <= 0) return [start, meet, end];
+  const r = T * Math.tan(angle / 2);
+  const p0 = add(meet, mul(a.u, T));
+  const p1 = add(meet, mul(b.u, T));
+  const bis = unit(add(a.u, b.u));
+  const centre = add(meet, mul(bis, r / Math.sin(angle / 2)));
+  const a0 = Math.atan2(p0[1] - centre[1], p0[0] - centre[0]);
+  let a1 = Math.atan2(p1[1] - centre[1], p1[0] - centre[0]);
+  // Take the short way round (the arc spans π − angle).
+  let d = a1 - a0;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  a1 = a0 + d;
+  const steps = Math.max(4, Math.ceil(Math.abs(d) / (Math.PI / 24)));
+  const arc: V[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = a0 + ((a1 - a0) * i) / steps;
+    arc.push([centre[0] + r * Math.cos(t), centre[1] + r * Math.sin(t)]);
+  }
+  const pts: V[] = [start, ...arc, end];
+  // Drop the straight ends that collapse onto the tangent points.
+  return pts.filter((q, i) => i === 0 || Math.hypot(q[0] - pts[i - 1]![0], q[1] - pts[i - 1]![1]) > 1e-3 || i === pts.length - 1);
 }
