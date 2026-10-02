@@ -64,3 +64,6 @@ export function flyTo(center: [number, number], zoom?: number): void {
 export function fitBounds(b: readonly [number, number, number, number], padding = 60): void {
   map?.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding, duration: 600 });
 }
+
+// Development-only handle for automated UI verification.
+if (import.meta.env.DEV) (window as unknown as { __dripMap: unknown }).__dripMap = { getMap, flyTo, useMapUi };

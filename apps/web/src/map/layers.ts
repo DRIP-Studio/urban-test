@@ -34,7 +34,7 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'markings', label: 'Segnaletica orizzontale', category: 'existing', mapLayers: ['markings-fill'], defaultVisible: true, source: 'Generata dal modello corsie (CdS)' },
   { id: 'kerbs', label: 'Cordoli', category: 'existing', mapLayers: ['kerbs-line'], defaultVisible: true, source: 'Modello fisico DRIP' },
   { id: 'labels', label: 'Nomi delle strade', category: 'base', mapLayers: ['labels-text'], defaultVisible: true, source: 'OpenStreetMap' },
-  { id: 'project', label: 'Evidenzia modifiche di progetto', category: 'design', mapLayers: ['project-outline'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#e8772e', label: 'Proposto' }] },
+  { id: 'project', label: 'Evidenzia modifiche di progetto', category: 'design', mapLayers: ['project-outline', 'project-outline-rb'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#e8772e', label: 'Proposto' }] },
   { id: 'assets', label: 'Arredo, verde, segnali, semafori', category: 'design', mapLayers: ['asset-fp-fill', 'asset-fp-line', 'asset-pt-sign', 'asset-pt-dot', 'signals-icon'], defaultVisible: true, source: 'Esistente (OSM) + progetto' },
   { id: 'zones', label: 'Zone (ZTL, 30, pedonali…)', category: 'mobility', mapLayers: ['zones-fill', 'zones-line'], defaultVisible: true, source: 'Scenario attivo' },
   { id: 'traffic', label: 'Traffico', category: 'traffic', mapLayers: ['traffic-line'], defaultVisible: true, source: 'Live (HERE) o stima DRIP — vedi Traffic Studio',
@@ -74,7 +74,9 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'surfaces-outline', type: 'line', source: 'surfaces', minzoom: 17, filter: ['in', ['get', 'kind'], ['literal', ['area', 'roundabout_island', 'splitter', 'median', 'green']]], paint: { 'line-color': dark ? '#4a4f55' : '#8f8a80', 'line-width': 0.6 } });
   L({ id: 'markings-fill', type: 'fill', source: 'markings', minzoom: 15.5, paint: { 'fill-color': ['case', ['==', ['get', 'material'], 'road_marking_yellow'], '#f2c230', '#f4f3ef'], 'fill-antialias': true } });
   L({ id: 'kerbs-line', type: 'line', source: 'lines', minzoom: 16, filter: ['==', ['get', 'kind'], 'kerb'], paint: { 'line-color': dark ? '#6c7178' : '#77746d', 'line-width': ['interpolate', ['linear'], ['zoom'], 16, 0.4, 20, 1.4] } });
-  L({ id: 'project-outline', type: 'line', source: 'surfaces', filter: ['==', ['get', 'state'], 'project'], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.8, 19, 1.8], 'line-opacity': 0.95 } });
+  // Proposed changes are outlined along their kerbs (and roundabout outer edge), not on every internal surface seam.
+  L({ id: 'project-outline', type: 'line', source: 'lines', filter: ['all', ['==', ['get', 'state'], 'project'], ['==', ['get', 'kind'], 'kerb']], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2], 'line-opacity': 0.95 } });
+  L({ id: 'project-outline-rb', type: 'line', source: 'surfaces', filter: ['==', ['get', 'kind'], 'roundabout_ring'], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2] } });
   L({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 } });
   L({ id: 'zones-line', type: 'line', source: 'zones', paint: { 'line-color': ['get', 'color'], 'line-width': 2, 'line-dasharray': [3, 2] } });
   L({ id: 'iso-line', type: 'line', source: 'iso', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['step', ['get', 'minutes'], '#2f7d5b', 5, '#79a84d', 7, '#d6a63b', 10, '#c4643a'], 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2, 18, 7], 'line-opacity': 0.85 } });
@@ -130,5 +132,5 @@ export function setLayerVisible(map: MLMap, def: LayerDef, visible: boolean): vo
 }
 
 export function setLayerOpacity(map: MLMap, def: LayerDef, value: number): void {
-  for (const [layer, prop] of def.opacity ?? []) if (map.getLayer(layer)) map.setPaintProperty(layer, prop as never, value);
+  for (const [layer, prop] of def.opacity ?? []) if (map.getLayer(layer)) map.setPaintProperty(layer, prop as never, value as never);
 }

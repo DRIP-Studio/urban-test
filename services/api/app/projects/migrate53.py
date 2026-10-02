@@ -257,7 +257,9 @@ class Migration:
             if not node:
                 self.note("error", rb.get("name") or rb["id"], "rotatoria 53.0 senza incrocio di origine: da reinserire", rb["id"])
                 continue
-            approaches = [e for e in sc.get("added_edges") or [] if str(e["id"]).startswith(rb["id"] + ":approach")]
+            # Arms of a roundabout built on project roads are added edges that end on its ring nodes.
+            approaches = [e for e in sc.get("added_edges") or [] if e.get("road_class") != "roundabout"
+                          and any(str(n).startswith(rb["id"] + ":n") for n in (e["u"], e["v"]))]
             if not arms and not approaches:
                 self.note("error", rb.get("name") or rb["id"], "nel 53.0 era un anello isolato senza bracci collegati alla rete: non è una rotatoria funzionante, va reinserita su un incrocio", rb["id"])
                 continue

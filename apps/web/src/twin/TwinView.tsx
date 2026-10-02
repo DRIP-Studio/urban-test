@@ -118,7 +118,7 @@ export function TwinView() {
       if (destroyed) { viewer.destroy(); return; }
       viewer.scene.globe.depthTestAgainstTerrain = true;
       viewer.scene.globe.enableLighting = false;
-      viewer.scene.skyAtmosphere.show = true;
+      if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
       viewer.scene.postProcessStages.fxaa.enabled = true;
       viewerRef.current = viewer;
       const [w, s, e, n] = baseline.bbox;

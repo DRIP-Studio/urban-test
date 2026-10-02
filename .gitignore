@@ -12,3 +12,4 @@ playwright-report/
 .playwright-mcp/
 .shots/
 public/cesium/
+apps/web/public/maplibre/

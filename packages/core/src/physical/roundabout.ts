@@ -92,11 +92,26 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
     }
 
     // Arms: every non-ring road ending on a ring node.
-    for (const nodeId of ringNodes) {
-      for (const end of inc.byNode.get(nodeId) ?? []) {
-        if (out.ringRoadIds.has(end.road.id)) continue;
-        const arm = buildArm(end.road, nodeId, end.atStart, metric);
-        if (arm.pedestrian) continue;
+    // Arm angles first: each throat may spread at most to 45 % of the gap to its neighbours,
+    // so adjacent entries can never overlap (no wedges when arms arrive close together).
+    const armsAll = [...ringNodes].flatMap((nodeId) => (inc.byNode.get(nodeId) ?? [])
+      .filter((end) => !out.ringRoadIds.has(end.road.id))
+      .map((end) => buildArm(end.road, nodeId, end.atStart, metric))
+      .filter((a) => !a.pedestrian));
+    const angles = armsAll.map((a) => Math.atan2(a.axis[0]![1] - c[1], a.axis[0]![0] - c[0]));
+    const gapTo = (i: number, dir: 1 | -1): number => {
+      let best = Math.PI;
+      angles.forEach((b, j) => {
+        if (j === i) return;
+        let d = (b - angles[i]!) * dir;
+        while (d <= 0) d += 2 * Math.PI;
+        best = Math.min(best, d);
+      });
+      return best;
+    };
+    for (const [ai, arm] of armsAll.entries()) {
+      {
+        const maxLeft = 0.45 * gapTo(ai, 1), maxRight = 0.45 * gapTo(ai, -1);
         const spec = rb.arms.find((a) => a.roadId === arm.road.id);
         const entryR = spec?.entryRadiusM ?? Math.max(6, rb.outerDiameterM * 0.35);
         // Arm direction measured from the roundabout centre (the ring node sits on the ring).
@@ -117,7 +132,8 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         // Tangent fillets from both carriageway edges onto the outer circle.
         const throat: V[] = [P(sFromC, wr), P(sFromC, wl)];
         const tangent = (w: number, side: 1 | -1): V[] => {
-          const ang = angle + side * (Math.asin(Math.min(0.95, Math.abs(w) / Ro)) + Math.min(0.9, entryR / Ro));
+          const spread = Math.min(side > 0 ? maxLeft : maxRight, Math.asin(Math.min(0.95, Math.abs(w) / Ro)) + Math.min(0.9, entryR / Ro));
+          const ang = angle + side * spread;
           const tp = pointAt(outer, thetaFor(outer, ang));
           const tdir: V = [-Math.sin(ang) * side, Math.cos(ang) * side];
           const meet = intersectLines(P(sFromC, w), mul(u, -1), tp, tdir);

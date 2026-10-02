@@ -83,7 +83,10 @@ async function applyRoute(route: Route): Promise<void> {
   }
 }
 
+let routingStarted = false;
 export function startRouting(): void {
+  if (routingStarted) return; // StrictMode mounts effects twice: one listener only
+  routingStarted = true;
   window.addEventListener('hashchange', () => void applyRoute(parseHash()));
   void applyRoute(parseHash());
   void loadCatalogs();
@@ -109,7 +112,10 @@ async function loadCatalogs(): Promise<void> {
 
 const pendingKey = (pid: string, sid: string) => `drip-urban:pending:${pid}:${sid}`;
 
+let opening: string | null = null;
 export async function openProject(pid: string): Promise<void> {
+  if (opening === pid) return;
+  opening = pid;
   set({ loading: 'Apertura progetto', loadError: null });
   try {
     const project = await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(pid)}`);
@@ -121,6 +127,8 @@ export async function openProject(pid: string): Promise<void> {
     await selectScenario(project.activeScenarioId || project.scenarios.find((s) => !s.isBaseline)?.id || 'baseline');
   } catch (e) {
     set({ loading: null, loadError: e instanceof Error ? e.message : String(e) });
+  } finally {
+    opening = null;
   }
 }
 
@@ -276,3 +284,6 @@ export const setMode = (mode: Mode) => set({ mode, tool: 'select', dock: null })
 export const setTool = (tool: string) => set({ tool });
 export const select = (selection: Selection | null) => set({ selection });
 export const setDock = (dock: string | null) => set((s) => ({ dock: s.dock === dock ? null : dock }));
+
+// Development-only handle for automated UI verification (stripped from production builds).
+if (import.meta.env.DEV) (window as unknown as { __drip: unknown }).__drip = { useApp, commit, undo, redo };

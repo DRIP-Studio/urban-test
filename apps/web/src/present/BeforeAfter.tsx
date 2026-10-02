@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import maplibregl, { type Map as MLMap, type StyleSpecification } from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
+import type { Map as MLMap, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { MaterialItem } from '../api/types';
 import type { FeatureCollection } from '../engine/geojson';
