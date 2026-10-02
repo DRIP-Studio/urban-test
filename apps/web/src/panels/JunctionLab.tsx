@@ -106,7 +106,7 @@ export function JunctionLab() {
         </Field>
         <Field label="Raggio dei cordoli"><NumberField value={spec.cornerRadiusM} unit="m" min={0} max={25} step={0.5} ariaLabel="Raggio cordoli" onCommit={(v) => setSpec({ cornerRadiusM: v })} /></Field>
       </div>
-      <div className="jl-col">
+      <div className="jl-col jl-wide">
         <h3>Bracci</h3>
         <table className="table">
           <thead><tr><th>Strada</th><th>Entrata</th><th>Uscita</th><th>Secondaria</th><th>Attravers.</th></tr></thead>
@@ -128,7 +128,7 @@ export function JunctionLab() {
           {a.groups.map((g) => (
             <li key={g.id}>
               <button type="button" className={`group-row ${group === g.id ? 'is-on' : ''}`} onClick={() => setGroup(group === g.id ? null : g.id)}>
-                <span className="mono">{g.id}</span><span>{g.label}</span><span className="hint">{g.laneIds.length} corsie</span>
+                <span className="mono">{g.id}</span><span>{g.label}</span><span className="hint">{g.laneIds.length} {g.laneIds.length === 1 ? 'corsia' : 'corsie'}</span>
               </button>
               {group === g.id ? a.movements.filter((m) => m.groupId === g.id).map((m) => (
                 <div key={m.id} className="move-row">

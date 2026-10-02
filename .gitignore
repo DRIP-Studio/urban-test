@@ -13,3 +13,6 @@ playwright-report/
 .shots/
 public/cesium/
 apps/web/public/maplibre/
+e2e/.data/
+e2e/.no-legacy/
+e2e-run*.log

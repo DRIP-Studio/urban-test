@@ -1,7 +1,6 @@
 import type { Map as MLMap } from 'maplibre-gl';
 
 /** Images are generated or rasterised on demand (styleimagemissing) — never placeholders. */
-const loading = new Set<string>();
 
 function rasterizeSvg(url: string, size: number): Promise<ImageData> {
   return new Promise((resolve, reject) => {
@@ -59,11 +58,16 @@ function signalImage(kind: string, state: string): ImageData {
   return g.getImageData(0, 0, W * s, H * s);
 }
 
+/**
+ * Generates signal heads and rasterizes sign SVGs on demand. MapLibre 6 awaits this resolver before
+ * drawing, so icons appear on the first frame (a `styleimagemissing` listener can no longer do that).
+ * Sign rasters are cached across style reloads; a failed fetch is retried on the next request.
+ */
+const signCache = new Map<string, Promise<ImageData>>();
+
 export function installImageLoader(map: MLMap): void {
-  map.on('styleimagemissing', (e: { id: string }) => {
-    const id = e.id;
-    if (loading.has(id) || map.hasImage(id)) return;
-    loading.add(id);
+  map.setMissingStyleImageResolver(async (id) => {
+    if (map.hasImage(id)) return;
     if (id.startsWith('sig:')) {
       const [, kind = 'vehicle', state = 'off'] = id.split(':');
       map.addImage(id, signalImage(kind, state), { pixelRatio: 2 });
@@ -71,9 +75,14 @@ export function installImageLoader(map: MLMap): void {
     }
     if (id.startsWith('it.sign.')) {
       const file = id.slice('it.sign.'.length);
-      rasterizeSvg(`/signs/${encodeURIComponent(file)}.svg`, 96)
-        .then((data) => { if (!map.hasImage(id)) map.addImage(id, data, { pixelRatio: 2 }); })
-        .catch(() => { loading.delete(id); });
+      let p = signCache.get(file);
+      if (!p) { p = rasterizeSvg(`/signs/${encodeURIComponent(file)}.svg`, 96); signCache.set(file, p); }
+      try {
+        const data = await p;
+        if (!map.hasImage(id)) map.addImage(id, data, { pixelRatio: 2 });
+      } catch {
+        signCache.delete(file);
+      }
     }
   });
 }

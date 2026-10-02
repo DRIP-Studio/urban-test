@@ -18,6 +18,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "potrace": "^2.1.8"
   }
 }

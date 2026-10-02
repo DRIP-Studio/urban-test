@@ -163,7 +163,7 @@ export function Hub() {
                     <div className="card-body">
                       <span className="card-kind">{KIND_IT[p.kind] ?? p.kind} · {p.city}</span>
                       <h2>{p.name}</h2>
-                      <span className="card-meta">{p.scenarioCount} scenari · {p.opCount} modifiche · {STATUS_IT[p.status] ?? p.status}</span>
+                      <span className="card-meta">{p.scenarioCount} {p.scenarioCount === 1 ? 'scenario' : 'scenari'} · {p.opCount} {p.opCount === 1 ? 'modifica' : 'modifiche'} · {STATUS_IT[p.status] ?? p.status}</span>
                       <span className="card-meta">{p.author} · {new Date(p.updatedAt).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                     </div>
                   </button>

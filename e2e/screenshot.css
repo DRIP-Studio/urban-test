@@ -1,0 +1,2 @@
+/* Values that change on every run (compute time, save clock) are hidden in visual baselines. */
+[title^="Modello fisico"], .topbar [role="status"] { visibility: hidden !important; }
