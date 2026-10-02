@@ -3,8 +3,9 @@ import { flushSave, navigate, redo, setDock, setMode, setTool, undo, useApp, typ
 import { api } from '../api/client';
 import { toast } from '../state/toasts';
 import { TOOLS } from '../tools/registry';
-import { useMapUi } from '../map/mapStore';
+import { fitBounds, useMapUi } from '../map/mapStore';
 import { usePalette } from './palette';
+import { useShortcuts } from './shortcutsState';
 import { useTool } from '../tools/toolState';
 
 export interface Command {
@@ -40,7 +41,6 @@ export const COMMANDS: Command[] = [
   { id: 'duplicate', label: 'Duplica selezione', group: 'Modifica', shortcut: 'Ctrl+D', when: () => !!useApp.getState().selection, run: () => duplicateSelection() },
   { id: 'copy', label: 'Copia', group: 'Modifica', shortcut: 'Ctrl+C', when: () => !!useApp.getState().selection, run: copySelection },
   { id: 'paste', label: 'Incolla nel punto del cursore', group: 'Modifica', shortcut: 'Ctrl+V', when: inProject, run: () => { const p = useMapUi.getState().pointer; if (p) pasteAt(p); } },
-  { id: 'rotate', label: 'Ruota selezione di 15°', group: 'Modifica', when: () => useApp.getState().selection?.kind === 'asset' && useApp.getState().tool === 'select', run: () => rotateAssets(useApp.getState().selection!.ids, 15) },
   { id: 'deselect', label: 'Deseleziona', group: 'Modifica', shortcut: 'Esc', when: inProject, run: () => useApp.setState({ selection: null }) },
   { id: 'snapshot', label: 'Salva una versione', group: 'Progetto', shortcut: 'Ctrl+S', when: inProject, run: () => void saveSnapshot() },
   { id: 'hub', label: 'Torna al Project Hub', group: 'Progetto', when: inProject, run: () => navigate({ view: 'hub' }) },
@@ -51,9 +51,38 @@ export const COMMANDS: Command[] = [
   { id: 'settings', label: 'Impostazioni e chiavi API', group: 'Sistema', when: () => true, run: () => setDock('settings') },
   { id: 'qa', label: 'Diagnostica sviluppatore', group: 'Sistema', shortcut: 'Ctrl+Shift+D', when: () => true, run: () => setDock('qa') },
   { id: 'snapGrid', label: 'Snap alla griglia on/off', group: 'Vista', when: inProject, run: () => useMapUi.setState((s) => ({ snap: { ...s.snap, grid: !s.snap.grid } })) },
+  { id: 'shortcuts', label: 'Scorciatoie da tastiera', group: 'Aiuto', shortcut: '?', when: () => true, run: () => useShortcuts.getState().toggle() },
+  { id: 'search', label: 'Cerca comandi, luoghi, strade', group: 'Vista', shortcut: '/', when: () => true, run: () => usePalette.getState().toggle() },
+  { id: 'frame', label: 'Inquadra la selezione', group: 'Vista', shortcut: 'Shift+F', when: () => !!useApp.getState().selection, run: frameSelection },
+  { id: 'frameAll', label: 'Inquadra tutto il progetto', group: 'Vista', shortcut: '0', when: inProject, run: () => { const b = useApp.getState().baseline; if (b) fitBounds(b.bbox); } },
+  { id: 'focus', label: 'Modalità focus (nascondi pannelli)', group: 'Vista', shortcut: '\\', when: inProject, run: () => useMapUi.setState((s) => ({ focus: !s.focus })) },
+  { id: 'rotateL', label: 'Ruota selezione −15°', group: 'Modifica', shortcut: 'Q', when: () => useApp.getState().selection?.kind === 'asset' && useApp.getState().tool === 'select', run: () => rotateAssets(useApp.getState().selection!.ids, -15) },
+  { id: 'rotateR', label: 'Ruota selezione +15°', group: 'Modifica', shortcut: 'E', when: () => useApp.getState().selection?.kind === 'asset' && useApp.getState().tool === 'select', run: () => rotateAssets(useApp.getState().selection!.ids, 15) },
   ...MODES.map((m): Command => ({ id: `mode.${m.id}`, label: `Modalità ${m.label}`, group: 'Modalità', shortcut: `Alt+${m.key}`, when: inProject, run: () => setMode(m.id) })),
   ...TOOLS.map((t): Command => ({ id: `tool.${t.id}`, label: `Strumento ${t.label}`, group: 'Strumenti', shortcut: t.shortcut, when: () => inProject() && t.modes.includes(useApp.getState().mode), run: () => setTool(t.id) })),
 ];
+
+/** Fits the map to whatever is selected (roads, nodes, objects, roundabouts, areas, zones). */
+function frameSelection(): void {
+  const { selection, network } = useApp.getState();
+  if (!selection || !network) return;
+  const pts: (readonly [number, number])[] = [];
+  for (const id of selection.ids) {
+    if (selection.kind === 'road') pts.push(...(network.roads[id]?.axis ?? []));
+    else if (selection.kind === 'node' && network.nodes[id]) pts.push(network.nodes[id]!.at);
+    else if (selection.kind === 'asset' && network.assets[id]) pts.push(network.assets[id]!.at);
+    else if (selection.kind === 'area') pts.push(...(network.areas[id]?.polygon ?? []));
+    else if (selection.kind === 'zone') pts.push(...(network.zones[id]?.polygon ?? []));
+    else if (selection.kind === 'roundabout' && network.roundabouts[id]) {
+      const rb = network.roundabouts[id]!, d = rb.outerDiameterM / 111_000;
+      pts.push([rb.center[0] - d, rb.center[1] - d], [rb.center[0] + d, rb.center[1] + d]);
+    }
+  }
+  if (!pts.length) return;
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const pad = 0.0002;
+  fitBounds([Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad], 80);
+}
 
 const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
@@ -76,6 +105,15 @@ export function installShortcuts(toolKey: (e: KeyboardEvent) => boolean): () => 
     if (ctrl && k === 's') return run('snapshot');
     if (ctrl && k === 'l') return run('layers');
     if (ctrl && k === 'e') return run('export');
+    if (!ctrl && !e.altKey) {
+      if (e.key === '?') return run('shortcuts');
+      if (e.key === '/') return run('search');
+      if (e.key === '\\') return run('focus');
+      if (e.key === '0') return run('frameAll');
+      if (e.shiftKey && k === 'f') return run('frame');
+      const s = useApp.getState();
+      if ((k === 'q' || k === 'e') && s.selection?.kind === 'asset' && s.tool === 'select') return run(k === 'q' ? 'rotateL' : 'rotateR');
+    }
     if (e.altKey && /^[1-7]$/.test(e.key)) { const m = MODES[Number(e.key) - 1]; if (m) { e.preventDefault(); setMode(m.id); } return; }
     if (e.key === 'Delete' || e.key === 'Backspace') return run('delete');
     if (e.key === 'Escape') { useTool.setState({ draft: [] }); return run('deselect'); }

@@ -180,3 +180,14 @@ h1, h2, h3 { text-wrap: balance; }
 @media (max-width: 1500px) { .search-btn span, .search-btn .kbd { display: none; } .mode { padding: 6px 10px; } }
 @media (max-width: 1280px) { .project-name { display: none; } .save-status { font-size: 0; gap: 0; } .lockup { --lk-h: 15px; } }
 @media (max-width: 1100px) { .lk-product { display: none; } .topbar { padding: 0 var(--s-3); } }
+
+/* ------------------------------------------------------------------ focus mode and shortcuts sheet */
+.workspace.is-focus .rail, .workspace.is-focus .inspector { display: none; }
+.shortcuts { width: min(980px, 100%); gap: var(--s-4); }
+.sc-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-4); }
+.sc-grid { columns: 3 260px; column-gap: var(--s-6); }
+.sc-grid section { break-inside: avoid; margin-bottom: var(--s-5); }
+.sc-grid h3 { margin: 0 0 var(--s-2); font-size: var(--fs-13); font-weight: 500; color: var(--text-2); }
+.sc-grid ul { list-style: none; margin: 0; padding: 0; }
+.sc-grid li { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); padding: 5px 0; border-bottom: 1px solid var(--line-1); font-size: var(--fs-12); }
+.sc-keys { display: inline-flex; gap: 3px; flex: none; }

@@ -16,6 +16,8 @@ interface MapUiState {
   mpp: number;
   snap: { node: boolean; edge: boolean; grid: boolean; angle: boolean };
   gridM: number;
+  /** Focus mode: tool rail and inspector hidden, map edge to edge. */
+  focus: boolean;
 }
 
 const persisted = (() => { try { return JSON.parse(localStorage.getItem('drip-urban:map') ?? '{}') as Partial<MapUiState>; } catch { return {}; } })();
@@ -27,6 +29,7 @@ export const useMapUi = create<MapUiState>(() => ({
   zoom: 15, center: [14.2745, 40.9416], pointer: null, ready: false, mpp: 1,
   snap: persisted.snap ?? { node: true, edge: true, grid: false, angle: true },
   gridM: persisted.gridM ?? 1,
+  focus: false,
 }));
 
 useMapUi.subscribe((s) => {

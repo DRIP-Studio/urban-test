@@ -1,8 +1,9 @@
+import { ShortcutsSheet } from './Shortcuts';
 import { lazy, Suspense, useEffect, type ReactElement } from 'react';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
 import { MapView, captureThumbnail, getIndex } from '../map/MapView';
-import { getMap } from '../map/mapStore';
+import { getMap, useMapUi } from '../map/mapStore';
 import { AnalyzePanel } from '../panels/AnalyzePanel';
 import { CivicPanel } from '../panels/CivicPanel';
 import { ComparePanel } from '../panels/ComparePanel';
@@ -79,6 +80,7 @@ export function Workspace() {
   const mode = useApp((s) => s.mode);
   const dock = useApp((s) => s.dock);
   const catalogs = useApp((s) => s.catalogs);
+  const focus = useMapUi((s) => s.focus);
   useThumbnail();
   useEffect(() => installShortcuts((e) => {
     const h = toolById(useApp.getState().tool).handler;
@@ -91,7 +93,7 @@ export function Workspace() {
   const sheet = dock ? SHEETS[dock] : undefined;
   const map = mode !== 'twin' && mode !== 'present';
   return (
-    <div className={`workspace mode-${mode}`}>
+    <div className={`workspace mode-${mode} ${focus ? 'is-focus' : ''}`}>
       <TopBar />
       <div className="ws-body">
         {map ? <ToolRail /> : null}
@@ -119,6 +121,7 @@ export function Workspace() {
       </div>
       <StatusBar />
       <ContextMenu />
+      <ShortcutsSheet />
     </div>
   );
 }

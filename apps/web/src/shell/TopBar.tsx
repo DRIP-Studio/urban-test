@@ -10,6 +10,7 @@ import { confirmAction } from '../ui/confirm';
 import { TechnicalLockup } from './Brand';
 import { MODES } from './commands';
 import { usePalette } from './palette';
+import { useShortcuts } from './shortcutsState';
 
 const SAVE_LABEL: Record<string, string> = { saved: 'Salvato', dirty: 'Modifiche in corso', saving: 'Salvataggio…', offline: 'Offline · in coda', error: 'Errore di salvataggio', conflict: 'Conflitto' };
 
@@ -131,6 +132,7 @@ export function TopBar() {
         <IconButton icon="layers" label="Livelli" shortcut="Ctrl+L" onClick={() => setDock('layers')} />
         <IconButton icon="clock" label="Cronologia e versioni" onClick={() => setDock('history')} />
         <IconButton icon="export" label="Esporta" shortcut="Ctrl+E" onClick={() => setDock('export')} />
+        <IconButton icon="keyboard" label="Scorciatoie" shortcut="?" onClick={() => useShortcuts.getState().toggle()} />
         <IconButton icon="settings" label="Impostazioni" onClick={() => setDock('settings')} />
       </div>
     </header>
