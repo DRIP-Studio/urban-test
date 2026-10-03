@@ -11,6 +11,8 @@ export interface SnapResult {
 }
 
 const CELL = 60;
+/** Below this distance from a road end, snapping joins the end node instead of splitting the road. */
+export const MERGE_M = 6;
 
 /** Spatial index of the scenario network in the project metric frame, rebuilt per network version. */
 export class NetworkIndex {
@@ -122,6 +124,14 @@ export function snap(map: MLMap, idx: NetworkIndex, lngLat: LngLat, opts: { from
   }
   if (s.snap.edge) {
     const r = idx.nearestRoad(p, 9 * mpp);
+    // Attaching a few metres from an existing junction would leave a road stub shorter than the
+    // junction itself (the geometry folds): join the junction instead.
+    const merge = Math.max(MERGE_M, 10 * mpp);
+    if (r && (r.along < merge || r.length - r.along < merge)) {
+      const road = idx.net.roads[r.id]!;
+      const nid = r.along < merge ? road.from : road.to;
+      return { at: idx.net.nodes[nid]!.at, kind: 'node', nodeId: nid };
+    }
     if (r) {
       // Midpoint snap when close to the middle of the road.
       if (Math.abs(r.along - r.length / 2) < 8 * mpp) {

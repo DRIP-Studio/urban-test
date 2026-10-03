@@ -14,6 +14,7 @@ import { SectionEditor } from '../panels/SectionEditor';
 import { HistorySheet, LayersSheet, QASheet, SettingsSheet } from '../panels/Sheets';
 import { SignalStudio } from '../panels/SignalStudio';
 import { TrafficStudio } from '../panels/TrafficStudio';
+import { ConnectSheet } from '../panels/NetworkTools';
 import { TransitPanel } from '../panels/TransitPanel';
 import { PresentView } from '../present/PresentView';
 import { setDock, useApp } from '../state/store';
@@ -40,6 +41,7 @@ const SHEETS: Record<string, { title: string; render: () => ReactElement }> = {
   settings: { title: 'Impostazioni', render: () => <SettingsSheet /> },
   qa: { title: 'Diagnostica', render: () => <QASheet /> },
   compare: { title: 'Confronto scenari', render: () => <ComparePanel /> },
+  connect: { title: 'Aggancia strade', render: () => <ConnectSheet /> },
 };
 const MODE_TITLE: Record<string, string> = { design: 'Progetta', analyze: 'Analizza', traffic: 'Traffico', transit: 'Trasporto pubblico', civic: 'Civico' };
 

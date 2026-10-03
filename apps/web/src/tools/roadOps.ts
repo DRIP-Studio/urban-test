@@ -1,6 +1,6 @@
 import { ROAD_TEMPLATES, geom, isPedestrianRoad, roadFromTemplate, type LngLat, type RoadNode } from '@drip-urban/core';
 import { newId } from '../state/store';
-import type { NetworkIndex, SnapResult } from './snap';
+import { MERGE_M, type NetworkIndex, type SnapResult } from './snap';
 
 /** Catmull-Rom spline through control points, sampled every ~1.5 m (curve tool). */
 export function spline(idx: NetworkIndex, pts: readonly LngLat[]): LngLat[] {
@@ -69,8 +69,14 @@ export function planRoad(idx: NetworkIndex, points: readonly SnapResult[], axisL
   }).filter((c) => c.s > 2 && c.s < L - 2);
   const stops: { s: number; node: string }[] = [{ s: 0, node: from }];
   for (const c of cuts) {
-    if (c.s - stops[stops.length - 1]!.s < 2) continue;
-    const node = endpoint({ at: idx.frame.toLngLat(c.at), kind: 'edge', roadId: c.roadId, along: c.along });
+    // Crossings too close to the previous junction or to the end would create stubs that fold the geometry.
+    if (c.s - stops[stops.length - 1]!.s < MERGE_M || L - c.s < MERGE_M) continue;
+    // Crossing near an end of the crossed road: go through that existing junction instead of splitting.
+    const crossed = idx.net.roads[c.roadId]!;
+    const crossedLen = geom.lengthOf(idx.axis(c.roadId));
+    const node = c.along < MERGE_M ? crossed.from : crossedLen - c.along < MERGE_M ? crossed.to
+      : endpoint({ at: idx.frame.toLngLat(c.at), kind: 'edge', roadId: c.roadId, along: c.along });
+    if (stops.some((x) => x.node === node)) continue;
     stops.push({ s: c.s, node });
   }
   stops.push({ s: L, node: to });
@@ -78,6 +84,10 @@ export function planRoad(idx: NetworkIndex, points: readonly SnapResult[], axisL
     const a = stops[i]!, b = stops[i + 1]!;
     const piece = geom.slice(axisM, a.s, b.s).map((p) => idx.frame.toLngLat(p));
     if (piece.length < 2) continue;
+    // Pieces that pass through an existing junction end exactly on it (the axis must meet its nodes).
+    const at = (id: string) => idx.net.nodes[id]?.at;
+    if (at(a.node)) piece[0] = at(a.node)!;
+    if (at(b.node)) piece[piece.length - 1] = at(b.node)!;
     const id = newId('r');
     const road = roadFromTemplate(t, id, a.node, b.node, piece, name.trim() || t.label);
     ops.push({ type: 'road.add', payload: { road, nodes: newNodes.filter((n) => n.id === a.node || n.id === b.node) } });

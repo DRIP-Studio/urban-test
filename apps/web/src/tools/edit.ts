@@ -5,7 +5,7 @@ import { setSource } from '../map/mapStore';
 import { commit, newId, select, setDock, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { pickAt } from './select';
-import { snap, type NetworkIndex } from './snap';
+import { snap, type NetworkIndex, type SnapResult } from './snap';
 import { useTool } from './toolState';
 import type { ToolHandler } from './types';
 
@@ -13,7 +13,7 @@ import type { ToolHandler } from './types';
 
 interface Handle { roadId: string; index: number; role: 'end' | 'vertex' | 'mid'; at: LngLat; nodeId?: string }
 let handles: Handle[] = [];
-let dragging: { h: Handle; to: LngLat } | null = null;
+let dragging: { h: Handle; to: LngLat; snap?: SnapResult | null; smooth?: boolean } | null = null;
 
 function refreshHandles(): void {
   const { network, selection } = useApp.getState();
@@ -59,6 +59,8 @@ export const nodeTool: ToolHandler = {
     const idx = ctx.index();
     const p = idx ? snap(ctx.map, idx, e.lngLat, { disable: e.alt }) : { at: e.lngLat, kind: 'free' as const };
     dragging.to = p.kind === 'node' && dragging.h.role !== 'end' ? e.lngLat : p.at;
+    dragging.snap = dragging.h.role === 'end' ? p : null;
+    dragging.smooth = e.shift;
     const r = useApp.getState().network?.roads[dragging.h.roadId];
     if (!r) return;
     const axis = [...r.axis];
@@ -68,12 +70,28 @@ export const nodeTool: ToolHandler = {
   up() {
     if (!dragging) return;
     const { h, to } = dragging;
+    const dragging_snap = dragging.snap ?? null;
+    const dragging_smooth = !!dragging.smooth;
     dragging = null;
     setSource('draft', null);
     const r = useApp.getState().network?.roads[h.roadId];
     if (!r) return;
     if (h.role === 'end' && h.nodeId) {
-      commit('node.move', { nodeId: h.nodeId, to, falloffM: 25 });
+      const sn = dragging_snap;
+      // Dropped on another junction or on a road: join it (a real connection), instead of leaving two
+      // overlapping nodes that routing sees as disconnected.
+      if (sn?.kind === 'node' && sn.nodeId && sn.nodeId !== h.nodeId) {
+        commit('node.merge', { sourceId: h.nodeId, targetId: sn.nodeId });
+      } else if ((sn?.kind === 'edge' || sn?.kind === 'midpoint') && sn.roadId && sn.roadId !== h.roadId) {
+        const nodeId = newId('n');
+        commit('batch', { label: 'Aggancia strada', ops: [
+          { type: 'road.split', payload: { roadId: sn.roadId, at: sn.at, nodeId, newRoadIds: [newId('r'), newId('r')] } },
+          { type: 'node.merge', payload: { sourceId: h.nodeId, targetId: nodeId } },
+        ] });
+      } else {
+        // Default: only the end moves (the roads keep their shape); Shift blends the change over 25 m.
+        commit('node.move', { nodeId: h.nodeId, to, falloffM: dragging_smooth ? 25 : 0 });
+      }
     } else {
       const axis = [...r.axis];
       if (h.role === 'mid') axis.splice(h.index, 0, to); else axis[h.index] = to;

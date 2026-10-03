@@ -227,6 +227,112 @@ export const nodeMove = defineOperation<NodeMovePayload>({
   },
 });
 
+export interface NodeMergePayload { readonly sourceId: string; readonly targetId: string }
+
+/**
+ * Joins two nodes: every road ending at `source` now ends at `target`. Only the last axis vertex of those
+ * roads moves (onto the target); the rest of the network keeps its geometry. Used to connect roads drawn
+ * without snapping, so that routing sees a real junction.
+ */
+export const nodeMerge = defineOperation<NodeMergePayload>({
+  type: 'node.merge',
+  label: () => 'Aggancia strada',
+  validate(net, p) {
+    if (!net.nodes[p.sourceId]) return [err('node.missing', `Nodo ${p.sourceId} inesistente`)];
+    if (!net.nodes[p.targetId]) return [err('node.missing', `Nodo ${p.targetId} inesistente`)];
+    if (p.sourceId === p.targetId) return [err('node.same', 'Stesso nodo')];
+    const loops = Object.values(net.roads).filter((r) => (r.from === p.sourceId && r.to === p.targetId) || (r.to === p.sourceId && r.from === p.targetId));
+    const short = loops.filter((r) => r.axis.length <= 2);
+    if (short.length) return [err('node.loop', 'I due nodi sono gli estremi della stessa strada corta: eliminala invece di unirli', short.map((r) => r.id))];
+    if (Object.values(net.roundabouts).some((rb) => Object.values(net.roads).some((r) => r.tags?.roundabout === rb.id && (r.from === p.sourceId || r.to === p.sourceId)))) {
+      return [err('node.ring', 'I nodi dell\'anello si modificano dalla rotatoria')];
+    }
+    return [];
+  },
+  apply(net, p) {
+    const target = net.nodes[p.targetId]!;
+    const roads = { ...net.roads };
+    for (const r of Object.values(net.roads)) {
+      if (r.from !== p.sourceId && r.to !== p.sourceId) continue;
+      const axis = [...r.axis];
+      let from = r.from, to = r.to;
+      if (r.from === p.sourceId) { from = p.targetId; axis[0] = target.at; }
+      if (r.to === p.sourceId) { to = p.targetId; axis[axis.length - 1] = target.at; }
+      if (from === to) { delete roads[r.id]; continue; }
+      roads[r.id] = markProject({ ...r, from, to, axis }, 'geometry');
+    }
+    const nodes = { ...net.nodes };
+    delete nodes[p.sourceId];
+    const junctions = { ...net.junctions };
+    delete junctions[p.sourceId];
+    return { ...net, roads, nodes, junctions };
+  },
+});
+
+export interface DanglingLink {
+  /** Dead-end node of a road (degree 1). */
+  readonly nodeId: string;
+  readonly roadId: string;
+  readonly kind: 'node' | 'edge';
+  readonly targetNodeId?: string;
+  readonly targetRoadId?: string;
+  readonly along?: number;
+  readonly at: LngLat;
+  readonly distM: number;
+}
+
+/**
+ * Dead ends that are almost touching the network (≤ `tolM`): the nearest node (preferred within
+ * `nodePreferM`) or the nearest point on another road. Roads drawn without snapping show up here.
+ */
+export function danglingLinks(net: Network, tolM = 12, nodePreferM = 6): DanglingLink[] {
+  const f = frameFor(net);
+  const degree = new Map<string, number>();
+  for (const r of Object.values(net.roads)) for (const n of [r.from, r.to]) degree.set(n, (degree.get(n) ?? 0) + 1);
+  const axes = new Map(Object.values(net.roads).map((r) => [r.id, r.axis.map((q) => f.toMetric(q) as V)]));
+  const nodesM = Object.values(net.nodes).map((n) => ({ id: n.id, p: f.toMetric(n.at) as V }));
+  const out: DanglingLink[] = [];
+  for (const [nid, deg] of degree) {
+    if (deg !== 1) continue;
+    const road = Object.values(net.roads).find((r) => r.from === nid || r.to === nid)!;
+    if (road.tags?.roundabout) continue;
+    const p = f.toMetric(net.nodes[nid]!.at) as V;
+    // The road's own other end and its own axis are not targets.
+    const own = new Set([road.from, road.to]);
+    let bestNode: { id: string; d: number } | null = null;
+    for (const n of nodesM) {
+      if (own.has(n.id)) continue;
+      const d = dist(p, n.p);
+      if (d <= tolM && (!bestNode || d < bestNode.d)) bestNode = { id: n.id, d };
+    }
+    let bestEdge: { id: string; d: number; along: number; at: V; length: number } | null = null;
+    for (const [rid, axis] of axes) {
+      if (rid === road.id) continue;
+      const r = net.roads[rid]!;
+      if (r.tags?.roundabout) continue;
+      const pr = project(axis, p);
+      if (pr.d <= tolM && (!bestEdge || pr.d < bestEdge.d)) bestEdge = { id: rid, d: pr.d, along: pr.along, at: pr.at, length: lengthOf(axis) };
+    }
+    // Prefer the node when it is close, or when the edge point is too near the edge's own ends to split.
+    const edgeUsable = bestEdge && bestEdge.along > 1 && bestEdge.along < bestEdge.length - 1;
+    if (bestNode && (bestNode.d <= nodePreferM || !edgeUsable || bestNode.d <= bestEdge!.d + 2)) {
+      out.push({ nodeId: nid, roadId: road.id, kind: 'node', targetNodeId: bestNode.id, at: net.nodes[bestNode.id]!.at, distM: Math.round(bestNode.d * 10) / 10 });
+    } else if (bestEdge && edgeUsable) {
+      out.push({ nodeId: nid, roadId: road.id, kind: 'edge', targetRoadId: bestEdge.id, along: bestEdge.along, at: f.toLngLat(bestEdge.at), distM: Math.round(bestEdge.d * 10) / 10 });
+    }
+  }
+  return out.sort((a, b) => a.distM - b.distM);
+}
+
+/** Operations that connect a dangling end: split the target road if needed, then merge the nodes. */
+export function linkOps(link: DanglingLink, ids: { node: string; roads: [string, string] }): { type: string; payload: unknown }[] {
+  if (link.kind === 'node') return [{ type: 'node.merge', payload: { sourceId: link.nodeId, targetId: link.targetNodeId } }];
+  return [
+    { type: 'road.split', payload: { roadId: link.targetRoadId, at: link.at, nodeId: ids.node, newRoadIds: ids.roads } },
+    { type: 'node.merge', payload: { sourceId: link.nodeId, targetId: ids.node } },
+  ];
+}
+
 // ---------------------------------------------------------------- junctions, signals, zones
 
 export const junctionSet = defineOperation<{ readonly spec: JunctionSpec }>({

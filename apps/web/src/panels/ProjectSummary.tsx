@@ -1,7 +1,7 @@
 import { importExistingSidewalks } from '../state/existingState';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import { setTool, useApp } from '../state/store';
+import { setTool, useApp, setDock } from '../state/store';
 import { Section, Stat } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
@@ -56,6 +56,7 @@ export function ProjectSummary() {
           <button type="button" onClick={() => setTool('junction')}><Icon name="junction" /><span>Analizza un incrocio</span><kbd className="kbd">J</kbd></button>
           <button type="button" onClick={() => setTool('furniture')}><Icon name="tree" /><span>Arredo e verde</span><kbd className="kbd">F</kbd></button>
           <button type="button" onClick={() => void importExistingSidewalks()}><Icon name="ped" /><span>Importa marciapiedi esistenti</span></button>
+          <button type="button" onClick={() => setDock('connect')}><Icon name="connect" /><span>Aggancia strade non collegate</span></button>
         </div>
       </Section>
     </>

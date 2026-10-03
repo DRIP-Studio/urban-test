@@ -243,3 +243,29 @@ export function simplifyRing(ring: readonly V[], tol: number): V[] {
   const out = [...dp(ring.slice(0, half + 1)).slice(0, -1), ...dp([...ring.slice(half), ring[0]!]).slice(0, -1)];
   return out.length >= 3 ? out : [...ring];
 }
+
+/** True when a closed ring crosses itself (O(n²), for small rings such as junction corners). */
+export function ringSelfIntersects(ring: readonly V[]): boolean {
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i]!, b = ring[(i + 1) % n]!;
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      const c = ring[j]!, d = ring[(j + 1) % n]!;
+      const h = intersectLines(a, sub(b, a), c, sub(d, c));
+      if (h && h.s > 1e-6 && h.s < 1 - 1e-6 && h.t > 1e-6 && h.t < 1 - 1e-6) return true;
+    }
+  }
+  return false;
+}
+
+/** Convex hull (monotone chain), counter-clockwise. */
+export function convexHull(points: readonly V[]): V[] {
+  const p = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cr = (o: V, a: V, b: V) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: V[] = [], hi: V[] = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2]!, lo[lo.length - 1]!, q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of [...p].reverse()) { while (hi.length >= 2 && cr(hi[hi.length - 2]!, hi[hi.length - 1]!, q) <= 0) hi.pop(); hi.push(q); }
+  return [...lo.slice(0, -1), ...hi.slice(0, -1)];
+}

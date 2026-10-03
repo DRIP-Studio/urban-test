@@ -1,4 +1,4 @@
-import { add, dot, intersectLines, leftNormal, mul, sub, unit, type V } from '../geo/polyline';
+import { add, convexHull, dot, intersectLines, leftNormal, mul, ringSelfIntersects, sub, unit, type V } from '../geo/polyline';
 import type { Arm } from './topology';
 
 /** Point on an arm edge: `off` metres sideways (left > 0), `s` metres from the node along the arm. */
@@ -109,8 +109,16 @@ export function buildJunction(nodeId: string, node: V, arms: readonly Arm[], cor
     kerbs.push(inner);
     const hasWalk = a.outLeft - a.cwLeft > 0.2 || b.cwRight - b.outRight > 0.2;
     if (hasWalk) {
-      const outer = cornerPath(a, b, node, a.outLeft, b.outRight, p.saOut, p.sbOut, p.meetOut, SA, SB, re);
-      corners.push([...inner, ...[...outer].reverse()]);
+      // When the kerb has no room to round the corner (short arm trimmed), the back of the sidewalk
+      // must not either: an arc behind a straight kerb folds the corner ring over itself.
+      const straightKerb = inner.length <= 3;
+      const outer = straightKerb
+        ? [edgePoint(a, node, a.outLeft, SA), ...(inner.length === 3 && p.meetOut ? [p.meetOut] : []), edgePoint(b, node, b.outRight, SB)]
+        : cornerPath(a, b, node, a.outLeft, b.outRight, p.saOut, p.sbOut, p.meetOut, SA, SB, re);
+      const ring = [...inner, ...[...outer].reverse()];
+      // An arm shorter than the junction needs (two nodes a few metres apart) can fold the corner:
+      // fall back to its convex outline rather than drawing a twisted polygon.
+      corners.push(ringSelfIntersects(ring) ? convexHull(ring) : ring);
       cornerArm.push(pi);
     }
   }
