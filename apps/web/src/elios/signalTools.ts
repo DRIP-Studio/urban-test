@@ -4,6 +4,8 @@ import type { JunctionResult } from '../panels/JunctionLab';
 import { planPayload } from '../panels/SignalStudio';
 import { commit, newId, openDock, select, useApp } from '../state/store';
 import { matchRoads, registerEliosTools } from './tools';
+import { optimizeAllSignals } from '../traffic/signals';
+import { refreshLive } from '../traffic/live';
 
 const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'OBJECT', properties, required });
 
@@ -15,6 +17,26 @@ function nodeArg(a: Record<string, unknown>): string {
 }
 
 registerEliosTools([
+  {
+    name: 'live_traffic', kind: 'read', label: 'Letto il traffico live',
+    description: "Traffico in tempo reale (HERE) dell'area visibile: tratti congestionati, incidenti, cantieri e chiusure. Aggiorna i dati prima di rispondere.",
+    async run() {
+      const s = await refreshLive({ archive: false });
+      if (s.status !== 'ok') return { status: s.status, message: s.message ?? 'Chiave HERE non configurata (Impostazioni → Fornitori)' };
+      const jams = s.flow.filter((f) => Number(f.properties.jamFactor ?? 0) >= 6).length;
+      return { status: 'ok', capturedAt: s.capturedAt, segments: s.flow.length, congestedSegments: jams,
+        incidents: s.incidents.slice(0, 25).map((f) => ({ kind: f.properties.label, roadClosed: f.properties.roadClosed, description: f.properties.description, end: f.properties.end })) };
+    },
+  },
+  {
+    name: 'optimize_all_signals', kind: 'write', label: 'Semafori della rete ottimizzati',
+    description: 'Ricalcola con Webster tutti i piani semaforici dello scenario sui flussi stimati, in un\'unica operazione annullabile; i corridoi coordinati mantengono offset e ciclo comune.',
+    async run() {
+      const r = await optimizeAllSignals();
+      if (!r.plans) throw new Error('Nessun incrocio semaforizzato nello scenario');
+      return r;
+    },
+  },
   {
     name: 'list_signals', kind: 'read', label: 'Letti i semafori',
     description: 'Elenca gli incroci semaforizzati dello scenario: piano, ciclo, fasi, offset, coordinamento.',

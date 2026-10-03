@@ -10,7 +10,7 @@
   "utility": "Servizi e reti",
   "public_space": "Spazio pubblico",
   "signals": "Semafori",
-  "ztl": "Varchi e pannelli ZTL"
+  "ztl": "Varchi, pannelli e PMV"
  },
  "items": [
   {
@@ -1878,6 +1878,47 @@
      "mat": "steel_dark"
     }
    ]
+  },
+  {
+   "id": "traffic.vms",
+   "label": "Pannello a messaggio variabile (PMV) su palo",
+   "category": "ztl",
+   "dims": {
+    "w": 2.4,
+    "d": 0.4,
+    "h": 5.2
+   },
+   "material": "steel_dark",
+   "model": [
+    {
+     "shape": "cylinder",
+     "r": 0.11,
+     "h": 5.2,
+     "at": [
+      0,
+      0,
+      0
+     ],
+     "mat": "steel_dark"
+    },
+    {
+     "shape": "box",
+     "size": [
+      2.4,
+      0.3,
+      1.2
+     ],
+     "at": [
+      0,
+      0,
+      3.9
+     ],
+     "mat": "display"
+    }
+   ],
+   "led": {
+    "kind": "vms"
+   }
   }
  ]
 }

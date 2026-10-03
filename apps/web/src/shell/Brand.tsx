@@ -16,11 +16,12 @@ export function TechnicalLockup({ size = 'md' }: { size?: 'md' | 'lg' }) {
   );
 }
 
-export function CivicLockup({ size = 'md' }: { size?: 'md' | 'lg' }) {
+export function CivicLockup({ size = 'md', reverse = false }: { size?: 'md' | 'lg'; reverse?: boolean }) {
+  const r = reverse ? '-reverse' : '';
   return (
     <div className={`lockup lockup-civic lockup-${size}`}>
-      <img className="lk-fst-full" src="/brand/fst-lockup-full.svg" alt="Frattamaggiore Si Trasforma" />
-      <span className="lk-by">Tecnologia <img src="/brand/drip-wordmark.svg" alt="DRIP" /> Studio</span>
+      <img className="lk-fst-full" src={`/brand/fst-lockup-full${r}.svg`} alt="Frattamaggiore Si Trasforma" />
+      <span className="lk-by">Tecnologia <img src={`/brand/drip-wordmark${r}.svg`} alt="DRIP" /> Studio</span>
     </div>
   );
 }

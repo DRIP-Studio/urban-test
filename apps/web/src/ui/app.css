@@ -49,6 +49,9 @@ h1, h2, h3 { text-wrap: balance; }
 /* ------------------------------------------------------------------ workspace layout */
 .workspace { display: grid; grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h); height: 100%; }
 .ws-body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 0; position: relative; }
+.ws-body > .ws-center { grid-column: 2; }
+.ws-body > .inspector { grid-column: 3; }
+.workspace.mode-present .ws-body > .ws-center, .workspace.mode-twin .ws-body > .ws-center { grid-column: 1; }
 .ws-center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
 .ws-stage { position: relative; min-height: 0; background: var(--ink-1); }
 .map, .map.maplibregl-map { position: absolute; inset: 0; } /* MapLibre's own CSS sets position: relative on the container */

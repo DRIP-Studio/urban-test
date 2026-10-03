@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import {
   FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
-  coordinateCorridor, groupDemand, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
+  coordinateCorridor, groupDemand, optimizeNetworkSignals, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
 import type { Geometry, LineString, Polygon } from './geojson';
@@ -88,6 +88,12 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
       // Webster on the DRIP traffic estimate when one has been computed, else on typical flows per road class.
       const demand = lastTraffic ? groupDemand(a, lastTraffic.flows, net) : undefined;
       return { analysis: a, suggested: suggestSignalPlan(net, a, { demand, permissiveLeft: args.permissiveLeft as boolean | undefined }) };
+    }
+    case 'optimizeSignals': {
+      // Network-wide Webster on the DRIP traffic estimate (computed now if missing).
+      if (!lastTraffic) lastTraffic = estimateTraffic(net, baseline);
+      const flows = lastTraffic.flows;
+      return optimizeNetworkSignals(net, o, (a) => groupDemand(a, flows, net!));
     }
     case 'sidewalks': return sidewalkCoverage(net, baseline);
     case 'coordinate': {

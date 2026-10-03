@@ -82,6 +82,25 @@ function ledImage(state: string): ImageData {
   return g.getImageData(0, 0, W * s, H * s);
 }
 
+/** PMV: amber dot-matrix text, up to three lines, on a black panel. */
+function vmsImage(text: string): ImageData {
+  const lines = text.split('\n').slice(0, 3);
+  const W = 150, H = 26 + lines.length * 17, s = 2;
+  const c = document.createElement('canvas');
+  c.width = W * s; c.height = H * s;
+  const g = c.getContext('2d')!;
+  g.scale(s, s);
+  g.fillStyle = '#26282b'; g.beginPath(); g.roundRect(1, 1, W - 2, H - 2, 6); g.fill();
+  g.fillStyle = '#050505'; g.beginPath(); g.roundRect(6, 6, W - 12, H - 12, 3); g.fill();
+  g.shadowColor = '#ffb020'; g.shadowBlur = 5; g.fillStyle = '#ffb020'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '700 12px "Ginto", system-ui, sans-serif';
+  lines.forEach((l, i) => g.fillText(l, W / 2, 21 + i * 17, W - 18));
+  g.shadowBlur = 0;
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let y = 7; y < H - 7; y += 2) g.fillRect(7, y, W - 14, 0.6);
+  return g.getImageData(0, 0, W * s, H * s);
+}
+
 /**
  * Generates signal heads and rasterizes sign SVGs on demand. MapLibre 6 awaits this resolver before
  * drawing, so icons appear on the first frame (a `styleimagemissing` listener can no longer do that).
@@ -116,6 +135,10 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
       const item = furniture().find((f) => f.id === itemId);
       const img = item ? furnitureSprite(item, byId, mat || undefined) : null;
       if (img) map.addImage(id, img, { pixelRatio: 2 });
+      return;
+    }
+    if (id.startsWith('vms:')) {
+      map.addImage(id, vmsImage(decodeURIComponent(id.slice(4))), { pixelRatio: 2 });
       return;
     }
     if (id.startsWith('led:')) {

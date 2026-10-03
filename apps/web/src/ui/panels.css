@@ -122,7 +122,6 @@
 .badge-status { align-self: flex-start; font-size: var(--fs-10); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fst-civic-text); border: 1px solid var(--fst-civic); background: var(--fst-civic-soft); border-radius: 10px; padding: 1px 7px; }
 .row-actions { display: flex; gap: var(--s-3); margin-top: 2px; }
 .civic-panel > .lockup-civic { padding: var(--s-4) var(--s-4) 0; }
-.civic-panel .lk-fst-full { filter: brightness(0) invert(0.94); }
 .doc-list { display: flex; flex-direction: column; gap: 6px; }
 .doc-row { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 6px; }
 .export-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -396,3 +395,4 @@
 .pole-list li.is-sel { box-shadow: inset 0 0 0 1px var(--drip-accent); }
 .pole-list img { width: 28px; height: 28px; object-fit: contain; }
 .pole-list .link { text-align: left; background: none; border: 0; color: var(--text-1); padding: 0; }
+.empty-actions { margin-top: 10px; display: flex; justify-content: center; }

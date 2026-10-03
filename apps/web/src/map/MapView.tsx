@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { MapMouseEvent, RasterSourceSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useLive } from '../traffic/live';
 import { engine } from '../engine/engine';
 import { useApp } from '../state/store';
 import { selectionFC } from '../tools/select';
@@ -150,6 +151,8 @@ export function MapView() {
     map.on('load', init);
     // ZTL LED panels follow the clock: refresh their state every minute.
     const ledTimer = window.setInterval(() => { if (map.loaded()) pushNetwork(); }, 60_000);
+    // PMV in live mode follow each traffic refresh.
+    const offLive = useLive.subscribe((s, prev) => { if (s.capturedAt !== prev.capturedAt || s.status !== prev.status) { if (map.loaded()) pushNetwork(); } });
 
     // Only what changed goes to MapLibre: re-indexing the whole city on each edit cost ~350 ms.
     const offPhys = engine.onPhysical((m) => {
@@ -219,7 +222,7 @@ export function MapView() {
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(el.current);
     return () => {
-      offPhys(); offApp(); offUi(); ro.disconnect(); window.clearInterval(ledTimer);
+      offPhys(); offApp(); offUi(); ro.disconnect(); window.clearInterval(ledTimer); offLive();
       canvas.removeEventListener('wheel', onWheel, { capture: true });
       useMapUi.setState({ ready: false });
       setMapInstance(null);

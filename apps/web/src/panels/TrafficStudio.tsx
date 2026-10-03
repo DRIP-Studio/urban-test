@@ -1,19 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_TRAFFIC, type SimFrame, type TrafficParams, type TrafficResult } from '@drip-urban/core';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
 import { fc, type Feature } from '../engine/geojson';
-import { getMap, setSource, toggleLayer } from '../map/mapStore';
+import { flyTo, getMap, setSource, toggleLayer } from '../map/mapStore';
+import { optimizeAllSignals, type OptimizeSummary } from '../traffic/signals';
+import { drawLive, refreshLive, setLiveAuto, useLive, vmsMessage } from '../traffic/live';
+import { Icon } from '../ui/Icon';
 import { vehiclesFC } from '../map/sources';
-import { setTool, useApp } from '../state/store';
+import { select, setTool, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Select, Slider, Stat } from '../ui/controls';
+import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Select, Slider, Stat, Toggle } from '../ui/controls';
 import { Navigator } from './Navigator';
 
 type Tab = 'live' | 'history' | 'estimate' | 'simulation' | 'navigator';
 const DAYS = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
 
-interface LiveResult { status: 'ok' | 'not_configured' | 'error'; provider: string; capturedAt?: string; message?: string; features: Feature[] }
 interface TrafficDoc { captures?: { at: string; day: number; hour: number; meanRatio: number; segments: number }[] }
 
 function drawEstimate(t: TrafficResult | null): void {
@@ -37,44 +39,77 @@ function viewBbox(): number[] | null {
 }
 
 function Live() {
+  const live = useLive();
   const project = useApp((s) => s.project);
-  const [res, setRes] = useState<LiveResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const load = async () => {
-    const bb = viewBbox();
-    if (!bb || !project) return;
-    setBusy(true);
-    try {
-      const r = await api.get<LiveResult>(`/api/traffic/live?bbox=${bb.map((x) => x.toFixed(5)).join(',')}`);
-      setRes(r);
-      if (r.status === 'ok') {
-        setSource('traffic', fc(r.features.map((f, i) => ({ ...f, id: i, properties: { ...f.properties, ratio: Number(f.properties.speedKmh) / Math.max(1, Number(f.properties.freeFlowKmh)) } }))));
-        // Archive an aggregate of this real capture: the history tab is built only from these.
-        const ratios = r.features.map((f) => Number(f.properties.speedKmh) / Math.max(1, Number(f.properties.freeFlowKmh)));
-        const now = new Date();
-        const doc = (await api.get<TrafficDoc | null>(`/api/projects/${project.id}/docs/traffic`)) ?? {};
-        const captures = [...(doc.captures ?? []), { at: now.toISOString(), day: (now.getDay() + 6) % 7, hour: now.getHours(), meanRatio: ratios.reduce((s, x) => s + x, 0) / Math.max(1, ratios.length), segments: ratios.length }].slice(-2000);
-        await api.put(`/api/projects/${project.id}/docs/traffic`, { ...doc, captures });
-      }
-    } catch (e) { toast.error('Traffico live', e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
-  };
-  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (project && live.status === 'idle') void refreshLive(); }, [project]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { drawLive(); }, []);
+  const res = live;
   return (
-    <Section title="Traffico in tempo reale">
-      {res?.status === 'not_configured' ? (
-        <Empty icon="traffic" title="Fonte live non configurata">
-          Nessun dato in tempo reale viene mostrato senza un fornitore reale. Inserisci la chiave HERE Traffic in Impostazioni, oppure usa la scheda Stima (dichiarata come tale).
-        </Empty>
-      ) : res?.status === 'error' ? (
-        <Empty icon="warning" title="Fornitore non raggiungibile">{res.message}</Empty>
-      ) : res?.status === 'ok' ? (
-        <>
-          <div className="stats-row"><Stat label="Tratti con dato" value={res.features.length} prov="live" /><Stat label="Rilevato" value={res.capturedAt ? new Date(res.capturedAt).toLocaleTimeString('it-IT') : '—'} /></div>
-          <p className="muted">Fonte: {res.provider}. Copertura limitata alla rete monitorata dal fornitore; i tratti senza colore non hanno dato.</p>
-        </>
+    <>
+      <Section title="Traffico in tempo reale">
+        {res.status === 'not_configured' ? (
+          <Empty icon="traffic" title="Fonte live non configurata">
+            Nessun dato in tempo reale viene mostrato senza un fornitore reale. Inserisci la chiave HERE Traffic in Impostazioni, oppure usa la scheda Stima (dichiarata come tale).
+          </Empty>
+        ) : res.status === 'error' ? (
+          <Empty icon="warning" title="Fornitore non raggiungibile">{res.message}</Empty>
+        ) : res.status === 'ok' ? (
+          <>
+            <div className="stats-row">
+              <Stat label="Tratti con dato" value={res.flow.length} prov="live" />
+              <Stat label="Eventi" value={res.incidents.length} prov="live" />
+              <Stat label="Rilevato" value={res.capturedAt ? new Date(res.capturedAt).toLocaleTimeString('it-IT') : '—'} />
+            </div>
+            <p className="muted">Fonte: {res.provider}. Copertura limitata alla rete monitorata dal fornitore; i tratti senza colore non hanno dato.</p>
+          </>
+        ) : null}
+        <Toggle label={`Aggiornamento automatico (ogni ${live.intervalMin} min e quando sposti la mappa)`} checked={live.auto} onChange={(v) => setLiveAuto(v)} />
+        {live.auto ? (
+          <Field label="Intervallo"><Segmented<string> label="Intervallo" size="sm" value={String(live.intervalMin)} onChange={(v) => setLiveAuto(true, Number(v))}
+            options={[{ value: '2', label: '2 min' }, { value: '3', label: '3 min' }, { value: '5', label: '5 min' }, { value: '10', label: '10 min' }]} /></Field>
+        ) : null}
+        <Button icon="refresh" busy={live.busy} onClick={() => void refreshLive()}>Aggiorna area visibile</Button>
+      </Section>
+      {res.status === 'ok' && res.incidents.length ? (
+        <Section title="Incidenti, cantieri e chiusure" count={res.incidents.length}>
+          <ul className="issue-list">{res.incidents.slice(0, 40).map((f) => {
+            const c = f.geometry.type === 'Point' ? (f.geometry.coordinates as number[]) : (f.geometry.coordinates as number[][])[0]!;
+            return (
+              <li key={String(f.properties.id)}>
+                <Icon name={f.properties.roadClosed ? 'warning' : 'traffic'} size={14} />
+                <span><strong>{String(f.properties.label)}</strong>{f.properties.roadClosed ? ' · strada chiusa' : ''}{f.properties.description ? ` · ${String(f.properties.description)}` : ''}
+                  {f.properties.end ? <span className="muted"> · fino al {new Date(String(f.properties.end)).toLocaleString('it-IT')}</span> : null}</span>
+                <button type="button" className="link" onClick={() => flyTo([c[0]!, c[1]!], 17)}>Mostra</button>
+              </li>
+            );
+          })}</ul>
+        </Section>
       ) : null}
-      <Button icon="refresh" busy={busy} onClick={() => void load()}>Aggiorna area visibile</Button>
+      <VmsSection />
+    </>
+  );
+}
+
+/** Variable-message panels of the scenario: message now (manual or from live traffic). */
+function VmsSection() {
+  const net = useApp((s) => s.network);
+  const catalogs = useApp((s) => s.catalogs);
+  const live = useLive();
+  const vms = useMemo(() => {
+    const ids = new Set(catalogs?.furniture.items.filter((i) => i.led?.kind === 'vms').map((i) => i.id));
+    return Object.values(net?.assets ?? {}).filter((a) => ids.has(a.type) && a.state !== 'removed');
+  }, [net, catalogs]);
+  return (
+    <Section title="Pannelli a messaggio variabile (PMV)" count={vms.length}>
+      {vms.length ? (
+        <ul className="vms-list">{vms.map((a) => (
+          <li key={a.id}>
+            <pre className="vms-text">{vmsMessage(a, live)}</pre>
+            <span className="muted">{a.properties.vmsMode === 'live' ? 'Automatico da traffico live' : 'Testo manuale'}</span>
+            <button type="button" className="link" onClick={() => { select({ kind: 'asset', ids: [a.id] }); flyTo([a.at[0], a.at[1]], 18.5); }}>Seleziona</button>
+          </li>
+        ))}</ul>
+      ) : <p className="muted">Nessun PMV nello scenario. Inseriscilo da Arredo → «Varchi, pannelli e PMV»: in modalità automatica mostra code, incidenti e chiusure entro 2 km dal traffico live.</p>}
     </Section>
   );
 }
@@ -143,7 +178,36 @@ function Estimate() {
           <p className="muted">{res.project.method}</p>
         </Section>
       ) : null}
+      <NetworkSignals />
     </>
+  );
+}
+
+/** Network-wide retiming of every signal plan (Webster on the estimate, corridors on a common cycle). */
+export function NetworkSignals() {
+  const plans = useApp((s) => Object.keys(s.network?.signalPlans ?? {}).length);
+  const [busy, setBusy] = useState(false);
+  const [last, setLast] = useState<OptimizeSummary | null>(null);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await optimizeAllSignals();
+      setLast(r);
+      if (r.applied) toast.success('Semafori ottimizzati', `${r.plans} piani · ciclo medio ${r.before} → ${r.after} s · annullabile con Ctrl+Z`);
+    } catch (e) { toast.error('Ottimizzazione non riuscita', e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Section title="Rete semaforica" count={plans}>
+      <p className="muted">Ricalcola tutti i piani con Webster sui flussi stimati: fasi senza conflitti, ciclo ottimo, verdi proporzionali. Restano invariati logica, svolte permesse, lanterne rimosse e corridoi coordinati (ciclo comune, offset mantenuti).</p>
+      {last ? (
+        <>
+          <div className="stats-row"><Stat label="Piani" value={last.plans} /><Stat label="Ciclo medio prima" value={last.before} unit="s" /><Stat label="Ciclo medio dopo" value={last.after} unit="s" /></div>
+          {last.saturated.length ? <p className="warn-line">Vicini alla saturazione (Y &gt; 0,85): {last.saturated.slice(0, 6).join(', ')}{last.saturated.length > 6 ? '…' : ''}. Valuta corsie dedicate o rotatoria.</p> : null}
+        </>
+      ) : null}
+      <Button icon="sparkle" busy={busy} disabled={!plans} onClick={() => void run()}>Ottimizza tutti i semafori</Button>
+    </Section>
   );
 }
 
@@ -214,7 +278,7 @@ export function TrafficStudio() {
   useEffect(() => { if (tab === 'navigator') setTool('route'); else setTool('select'); }, [tab]);
   return (
     <div className="panel-stack">
-      <Segmented<Tab> label="Fonte traffico" size="sm" value={tab} onChange={(v) => { setTab(v); if (v !== 'live' && v !== 'estimate') setSource('traffic', null); }}
+      <Segmented<Tab> label="Fonte traffico" size="sm" value={tab} onChange={(v) => { setTab(v); if (v !== 'live') { setLiveAuto(false); setSource('incidents', null); } if (v !== 'live' && v !== 'estimate') setSource('traffic', null); }}
         options={[{ value: 'live', label: 'Live' }, { value: 'history', label: 'Storico' }, { value: 'estimate', label: 'Stima' }, { value: 'simulation', label: 'Simulazione' }, { value: 'navigator', label: 'Navigatore' }]} />
       {tab === 'live' ? <Live /> : tab === 'history' ? <History /> : tab === 'estimate' ? <Estimate /> : tab === 'simulation' ? <Simulation /> : <Navigator />}
     </div>

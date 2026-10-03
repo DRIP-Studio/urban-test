@@ -418,7 +418,11 @@ def traffic_live(bbox: str) -> dict:
         assert len(b) == 4 and (b[2] - b[0]) * (b[3] - b[1]) < 0.05
     except (ValueError, AssertionError) as exc:
         raise HTTPException(400, "bbox non valido o troppo grande") from exc
-    return providers.here_flow(b)
+    flow = providers.here_flow(b)
+    if flow.get("status") == "ok":
+        inc = providers.here_incidents(b)
+        flow["incidents"] = inc.get("features", []) if inc.get("status") == "ok" else []
+    return flow
 
 
 @app.get("/api/environment")
@@ -585,9 +589,12 @@ def elios_chat(body: dict = Body(...)) -> dict:
 # ------------------------------------------------------------------ civic
 
 @app.get("/api/civic/fst/{kind}")
-def fst_public(kind: str) -> dict:
+def fst_public(kind: str, bbox: str | None = None, refresh: bool = False) -> dict:
     try:
-        return civic.fst_public(kind)
+        b = [float(x) for x in bbox.split(",")] if bbox else None
+        if b is not None and len(b) != 4:
+            raise ValueError("bbox non valido")
+        return civic.fst_public(kind, b, refresh)
     except ValueError as exc:
         raise _err(exc) from exc
 
@@ -602,7 +609,8 @@ def publish(pid: str, body: dict = Body(...)) -> dict:
     try:
         ps.get_meta(pid)
         rec = civic.publish(pid, body)
-        ps.audit(pid, _author(), "civic.publish", {"publication": rec["id"], "scenarioId": rec["scenarioId"]})
+        ps.audit(pid, _author(), "civic.publish", {"publication": rec["id"], "scenarioId": rec["scenarioId"], "title": rec["title"],
+                                                     "status": rec["status"], "reportIds": rec["reportIds"], "portal": rec["portal"]})
         return {k: v for k, v in rec.items() if k != "geometry"}
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc

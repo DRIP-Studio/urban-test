@@ -7,7 +7,7 @@ import { PATTERNS } from './patterns';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -44,6 +44,8 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'zones', label: 'Zone (ZTL, 30, pedonali…)', category: 'mobility', mapLayers: ['zones-fill', 'zones-line'], defaultVisible: true, source: 'Scenario attivo' },
   { id: 'traffic', label: 'Traffico', category: 'traffic', mapLayers: ['traffic-line'], defaultVisible: true, source: 'Live (HERE) o stima DRIP — vedi Traffic Studio',
     legend: [{ color: '#3fae6b', label: 'Scorrevole' }, { color: '#e2b13c', label: 'Rallentato' }, { color: '#e1703a', label: 'Intenso' }, { color: '#b9312a', label: 'Congestionato' }] },
+  { id: 'incidents', label: 'Incidenti, cantieri e chiusure', category: 'traffic', mapLayers: ['incidents-line', 'incidents-circle', 'incidents-label'], defaultVisible: true, source: 'HERE Traffic v7 (live)',
+    legend: [{ color: '#b9312a', label: 'Strada chiusa / incidente' }, { color: '#e1703a', label: 'Lavori, corsia chiusa' }, { color: '#d9a441', label: 'Altro evento' }] },
   { id: 'vehicles', label: 'Veicoli simulati', category: 'traffic', mapLayers: ['vehicles-fill'], defaultVisible: true, source: 'DRIP Flow (simulazione)' },
   { id: 'route', label: 'Percorso', category: 'mobility', mapLayers: ['route-line', 'route-casing', 'compare-line'], defaultVisible: true, source: 'Navigatore DRIP sullo scenario' },
   { id: 'iso', label: 'Accessibilità / isocrone', category: 'analysis', mapLayers: ['iso-line'], defaultVisible: true, source: 'Analisi DRIP',
@@ -52,7 +54,7 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'crashes', label: 'Sinistri importati', category: 'safety', mapLayers: ['crashes-circle'], defaultVisible: true, source: 'Dataset importato dall\'utente' },
   { id: 'junction', label: 'Junction Lab (movimenti e conflitti)', category: 'safety', mapLayers: ['moves-line', 'moves-arrow', 'conflicts-circle', 'plan-signals-icon'], defaultVisible: true, source: 'Analisi incrocio e piani semaforici',
     legend: [{ color: '#d0614f', label: 'Attraversamento' }, { color: '#d9a441', label: 'Immissione' }, { color: '#83b4d1', label: 'Diversione' }] },
-  { id: 'civic', label: 'Segnalazioni e progetti FST', category: 'analysis', mapLayers: ['civic-fill', 'civic-line', 'civic-point'], defaultVisible: true, source: 'Piattaforma Frattamaggiore Si Trasforma (API pubblica)', legend: [{ color: '#7a1f32', label: 'Progetto FST' }, { color: '#d9a441', label: 'Segnalazione' }] },
+  { id: 'civic', label: 'Segnalazioni e progetti FST', category: 'analysis', mapLayers: ['civic-fill', 'civic-line', 'civic-point'], defaultVisible: true, source: 'Piattaforma Frattamaggiore Si Trasforma (API pubblica)', legend: [{ color: '#7a1f32', label: 'Progetto FST' }, { color: '#d9a441', label: 'Segnalazione' }, { color: '#5587a2', label: 'Segnalazione presa in carico' }] },
   { id: 'transit', label: 'Linee e fermate TPL', category: 'transit', mapLayers: ['transit-lines-casing', 'transit-lines-line', 'transit-lines-rail', 'transit-stops-circle', 'transit-stops-label', 'rt-vehicles-circle'], defaultVisible: true, source: 'GTFS importato / linee di progetto',
     legend: [{ color: '#d0614f', label: 'Metropolitana' }, { color: '#1d1d1b', label: 'Treno' }, { color: '#8b0209', label: 'Tram' }, { color: '#e8772e', label: 'BRT' }, { color: '#5587a2', label: 'Bus' }] },
   { id: 'bikeshare', label: 'Bike sharing', category: 'transit', mapLayers: ['bike-stations-circle', 'bike-stations-label'], defaultVisible: true, source: 'Stazioni di progetto', legend: [{ color: '#2f7d5b', label: 'Stazione (stalli)' }] },
@@ -108,6 +110,10 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'traffic-line', type: 'line', source: 'traffic', layout: { 'line-cap': 'round' }, paint: {
     'line-color': ['step', ['get', 'ratio'], '#b9312a', 0.35, '#e1703a', 0.55, '#e2b13c', 0.8, '#3fae6b'],
     'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 16, 4, 19, 8], 'line-offset': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 5], 'line-opacity': 0.9 } });
+  const incColor = ['case', ['get', 'roadClosed'], '#b9312a', ['match', ['get', 'kind'], 'accident', '#b9312a', ['construction', 'laneRestriction'], '#e1703a', '#d9a441']];
+  L({ id: 'incidents-line', type: 'line', source: 'incidents', filter: ['==', ['geometry-type'], 'LineString'], layout: { 'line-cap': 'round' }, paint: { 'line-color': incColor as never, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 18, 7], 'line-dasharray': [1, 1.4], 'line-opacity': 0.95 } });
+  L({ id: 'incidents-circle', type: 'circle', source: 'incidents', filter: ['has', 'pin'], paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 9], 'circle-color': incColor as never, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+  L({ id: 'incidents-label', type: 'symbol', source: 'incidents', filter: ['has', 'pin'], minzoom: 14, layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'], 'text-size': 11, 'text-offset': [0, 1.3], 'text-anchor': 'top' }, paint: { 'text-color': '#b9312a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 } });
   L({ id: 'heat-layer', type: 'heatmap', source: 'heat', maxzoom: 18, paint: {
     'heatmap-weight': ['/', ['get', 'score'], 100], 'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 12, 0.8, 17, 2],
     'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 12, 14, 17, 50],
@@ -127,7 +133,7 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'rt-vehicles-circle', type: 'circle', source: 'rt-vehicles', paint: { 'circle-radius': 6, 'circle-color': '#5fc0a8', 'circle-stroke-color': '#0d0d0d', 'circle-stroke-width': 1.5 } });
   L({ id: 'civic-fill', type: 'fill', source: 'civic', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#7a1f32', 'fill-opacity': 0.16 } });
   L({ id: 'civic-line', type: 'line', source: 'civic', filter: ['!=', ['geometry-type'], 'Point'], paint: { 'line-color': '#7a1f32', 'line-width': 2.4, 'line-dasharray': [2, 1] } });
-  L({ id: 'civic-point', type: 'circle', source: 'civic', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': ['match', ['get', 'kind'], 'report', '#d9a441', '#7a1f32'], 'circle-stroke-color': '#f5f3ef', 'circle-stroke-width': 2 } });
+  L({ id: 'civic-point', type: 'circle', source: 'civic', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': ['match', ['get', 'kind'], 'report', '#d9a441', 'task', '#5587a2', '#7a1f32'], 'circle-stroke-color': '#f5f3ef', 'circle-stroke-width': 2 } });
   // Catalogue furniture is drawn by the volume symbol (asset-3d); the footprint only shows removed items.
   L({ id: 'asset-fp-fill', type: 'fill', source: 'asset-fp', minzoom: 15, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.15, ['boolean', ['get', 'sprite'], false], 0, ['==', ['get', 'category'], 'vegetation'], 0.78, 0.95] } });
   L({ id: 'asset-fp-extrude', type: 'fill-extrusion', source: 'asset-fp', minzoom: 15, layout: { visibility: 'none' }, filter: ['!=', ['get', 'state'], 'removed'], paint: { 'fill-extrusion-color': mat, 'fill-extrusion-height': ['coalesce', ['get', 'h'], 1], 'fill-extrusion-opacity': 0.95 } });

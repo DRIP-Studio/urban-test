@@ -181,6 +181,7 @@ function AccessSection() {
       {cfg.identityProviders.map((p) => <ProviderEditor key={p.id} p={p} onChange={setProvider} />)}
       <p className="muted">Ruoli Keycloak riconosciuti: drip-urban-admin, drip-urban-publisher, drip-urban-editor, drip-urban-viewer (realm o client). Indirizzo di ritorno da registrare sul client: <span className="mono">{location.origin}/api/auth/oidc/callback</span></p>
       <Field label="Piattaforma DRIP (licenze, aggiornamenti)"><TextField value={cfg.platformUrl} ariaLabel="URL piattaforma" onCommit={(v) => void save({ platformUrl: v.trim() })} /></Field>
+      <Field label="Piattaforma civica (Frattamaggiore Si Trasforma o altro comune)"><TextField value={cfg.fstUrl ?? ''} ariaLabel="URL piattaforma civica" placeholder="https://frattamaggioresitrasforma.studiodrip.it" onCommit={(v) => void save({ fstUrl: v.trim() })} /></Field>
       <div className="grid-2">
         <Field label="Canale aggiornamenti"><Select value={cfg.updates.channel} ariaLabel="Canale" options={[{ value: 'stable', label: 'Stabile' }, { value: 'beta', label: 'Beta' }]} onChange={(v) => void save({ updates: { ...cfg.updates, channel: v } })} /></Field>
         <Field label="Applicazione licenza"><Select value={cfg.licenseEnforcement} ariaLabel="Applicazione licenza" options={[{ value: 'soft', label: 'Solo avvisi' }, { value: 'strict', label: 'Blocca funzioni fuori piano' }]} onChange={(v) => void save({ licenseEnforcement: v })} /></Field>

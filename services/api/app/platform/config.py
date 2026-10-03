@@ -58,6 +58,8 @@ DEFAULTS: dict[str, Any] = {
     # soft: an expired/missing licence only shows a banner. strict: features outside the plan are refused.
     "licenseEnforcement": "soft",
     "trialDays": 30,
+    # Civic platform (Frattamaggiore Si Trasforma or another municipality on the same WordPress plugin).
+    "fstUrl": "https://frattamaggioresitrasforma.studiodrip.it",
 }
 
 _lock = threading.Lock()
@@ -70,6 +72,8 @@ def _path():
 def _env_overrides(cfg: dict) -> dict:
     if os.environ.get("DRIP_PLATFORM_URL"):
         cfg["platformUrl"] = os.environ["DRIP_PLATFORM_URL"].rstrip("/")
+    if os.environ.get("DRIP_FST_URL"):
+        cfg["fstUrl"] = os.environ["DRIP_FST_URL"].rstrip("/")
     if os.environ.get("DRIP_URBAN_AUTH") in {"open", "protected"}:
         cfg["authMode"] = os.environ["DRIP_URBAN_AUTH"]
     drip = next((p for p in cfg["identityProviders"] if p["id"] == "drip"), None)
@@ -95,7 +99,7 @@ def load() -> dict:
     return _env_overrides(cfg)
 
 
-EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement"}
+EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement", "fstUrl"}
 
 
 def save(patch: dict) -> dict:
@@ -110,6 +114,8 @@ def save(patch: dict) -> dict:
                 raise ValueError("Ruolo non valido")
             if k == "platformUrl" and not str(v).startswith(("https://", "http://localhost", "http://127.0.0.1")):
                 raise ValueError("La piattaforma DRIP richiede un indirizzo https://")
+            if k == "fstUrl" and v and not str(v).startswith("https://"):
+                raise ValueError("La piattaforma civica richiede un indirizzo https://")
             if k == "identityProviders":
                 for p in v:
                     if p.get("issuer") and not str(p["issuer"]).startswith(("https://", "http://localhost", "http://127.0.0.1")):

@@ -1,4 +1,5 @@
-import { LocalFrame, geom, layoutSection, type Area, type Oneway, type Road } from '@drip-urban/core';
+import { LocalFrame, geom, layoutSection, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
 import { commit, select, setDock, setTool, useApp } from '../state/store';
 import { deleteSelection, duplicateSelection, movePlate, plateOnPoleOps, polePlates } from '../state/actions';
 import { useMemo, useState } from 'react';
@@ -107,6 +108,24 @@ function PoleSection({ assetId }: { assetId: string }) {
   );
 }
 
+/** PMV: manual text (3 × 16 characters) or automatic from live traffic (incidents, closures, queues). */
+function VmsSection({ asset }: { asset: Asset }) {
+  const live = useLive();
+  const mode = asset.properties.vmsMode === 'live' ? 'live' : 'manual';
+  const set = (props: Record<string, unknown>) => commit('asset.update', { assetId: asset.id, changes: { properties: { ...asset.properties, ...props } } });
+  return (
+    <Section title="Pannello a messaggio variabile">
+      <Segmented<string> label="Modalità PMV" value={mode} onChange={(v) => set({ vmsMode: v })} options={[{ value: 'manual', label: 'Testo manuale' }, { value: 'live', label: 'Da traffico live' }]} />
+      <Field label={mode === 'live' ? 'Testo di riserva (se il live non è disponibile)' : 'Messaggio (max 3 righe × 16 caratteri)'}>
+        <TextField multiline value={String(asset.properties.vmsText ?? '')} ariaLabel="Messaggio PMV" onCommit={(v) => set({ vmsText: sanitizeVms(v) })} placeholder={'ZTL ATTIVA\nDALLE 8 ALLE 20'} />
+      </Field>
+      <pre className="vms-text">{vmsMessage(asset, live)}</pre>
+      {mode === 'live' && live.status !== 'ok' ? <p className="muted">Avvia il traffico live (Traffico → Live, anche in automatico) per aggiornare il messaggio.</p> : null}
+      <p className="muted">Art. 78 Reg. CdS e DM 9/6/1995: messaggi brevi, solo informazioni sulla circolazione.</p>
+    </Section>
+  );
+}
+
 function AssetInspector({ ids }: { ids: readonly string[] }) {
   const net = useApp((s) => s.network)!;
   const catalogs = useApp((s) => s.catalogs);
@@ -147,6 +166,7 @@ function AssetInspector({ ids }: { ids: readonly string[] }) {
         <p className="mono muted">{a.at[1].toFixed(6)}, {a.at[0].toFixed(6)}</p>
       </Section>
       {sign ? <PoleSection assetId={a.id} /> : null}
+      {item?.led?.kind === 'vms' ? <VmsSection asset={a} /> : null}
       <div className="inspector-actions">
         <Button icon="crosshair" onClick={() => flyTo([a.at[0], a.at[1]], 19.5)}>Centra</Button>
         <Button icon="duplicate" onClick={() => duplicateSelection()}>Duplica</Button>

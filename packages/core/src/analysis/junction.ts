@@ -549,3 +549,42 @@ export function rescalePlan(plan: SignalPlan, cycleS: number): SignalPlan {
   phases[i] = { ...phases[i]!, greenS: Math.max(5, phases[i]!.greenS + drift) };
   return { ...plan, cycleS: phases.reduce((t, p) => t + p.greenS + p.yellowS + p.allRedS, 0), phases };
 }
+
+export interface SignalOptimization {
+  readonly plan: SignalPlan;
+  readonly analysis: JunctionAnalysis;
+  readonly beforeCycleS: number;
+  readonly design: SignalDesign;
+  /** Cycle forced by a coordinated corridor (common cycle = the longest Webster cycle of the corridor). */
+  readonly corridorCycleS?: number;
+}
+
+/**
+ * Network-wide retiming ("ottimizza tutti i semafori"): Webster on every signal plan with the given
+ * demand, keeping what the designer decided (mode, permitted lefts, removed heads, coordination).
+ * Coordinated corridors keep their offsets and get a common cycle — the longest of the corridor —
+ * so the green wave survives; greens are rescaled in proportion.
+ */
+export function optimizeNetworkSignals(net: Network, frameOrigin: LngLat, demandFor?: (a: JunctionAnalysis) => Readonly<Record<string, number>> | undefined): SignalOptimization[] {
+  const out: SignalOptimization[] = [];
+  for (const plan of Object.values(net.signalPlans)) {
+    const a = analyzeJunction(net, frameOrigin, plan.nodeId);
+    if (!a || !a.groups.length) continue;
+    const { design, ...s } = suggestSignalPlan(net, a, { demand: demandFor?.(a), permissiveLeft: plan.permissiveLeft });
+    out.push({
+      plan: { ...s, id: plan.id, name: plan.name, mode: plan.mode, offsetS: plan.offsetS, actuation: plan.actuation, permissiveLeft: plan.permissiveLeft, disabledHeads: plan.disabledHeads, coordination: plan.coordination },
+      analysis: a, beforeCycleS: plan.cycleS, design,
+    });
+  }
+  const corridors = new Map<string, number[]>();
+  out.forEach((o, i) => { const c = o.plan.coordination; if (c) corridors.set(c.id, [...(corridors.get(c.id) ?? []), i]); });
+  for (const idx of corridors.values()) {
+    const cycle = Math.max(...idx.map((i) => out[i]!.plan.cycleS));
+    for (const i of idx) {
+      const o = out[i]!;
+      const p = rescalePlan(o.plan, cycle);
+      out[i] = { ...o, plan: { ...p, offsetS: Math.round(o.plan.offsetS % p.cycleS) }, corridorCycleS: p.cycleS };
+    }
+  }
+  return out;
+}

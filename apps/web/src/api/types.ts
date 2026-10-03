@@ -98,7 +98,7 @@ export interface IdentityProviderCfg {
   readonly id: string; readonly label: string; readonly kind: string; readonly issuer: string; readonly clientId: string; readonly scopes: string; readonly enabled: boolean; readonly hasClientSecret?: boolean;
 }
 export interface PlatformConfig {
-  readonly authMode: 'open' | 'protected'; readonly sessionHours: number; readonly platformUrl: string; readonly identityProviders: readonly IdentityProviderCfg[];
+  readonly authMode: 'open' | 'protected'; readonly sessionHours: number; readonly platformUrl: string; readonly fstUrl?: string; readonly identityProviders: readonly IdentityProviderCfg[];
   readonly roleMapping: Record<string, Role>; readonly defaultRole: Role; readonly localLogin: boolean; readonly updates: { autoCheck: boolean; channel: string };
   readonly licenseEnforcement: 'soft' | 'strict';
 }

@@ -144,6 +144,42 @@ def here_flow(bbox: list[float]) -> dict:
         return {"status": "error", "provider": "HERE", "message": redact(str(exc))[:300], "features": []}
 
 
+INCIDENT_IT = {"accident": "Incidente", "congestion": "Coda", "construction": "Lavori", "disabledVehicle": "Veicolo in panne",
+               "massTransit": "Trasporto pubblico", "plannedEvent": "Evento programmato", "roadHazard": "Pericolo",
+               "roadClosure": "Strada chiusa", "laneRestriction": "Corsia chiusa", "weather": "Meteo", "other": "Altro"}
+
+
+def here_incidents(bbox: list[float]) -> dict:
+    """HERE Traffic v7 incidents (accidents, closures, works) with their shape; same key as the flow."""
+    key = provider_secret("here")
+    if not key:
+        return {"status": "not_configured", "provider": "HERE", "features": []}
+    w, s, e, n = bbox
+
+    def fetch():
+        r = httpx.get("https://data.traffic.hereapi.com/v7/incidents", timeout=20,
+                      params={"in": f"bbox:{w},{s},{e},{n}", "locationReferencing": "shape", "apiKey": key})
+        r.raise_for_status()
+        feats = []
+        for res in r.json().get("results", []):
+            d = res.get("incidentDetails") or {}
+            pts = [[p["lng"], p["lat"]] for link in ((res.get("location") or {}).get("shape") or {}).get("links", []) for p in link.get("points", [])]
+            if not pts:
+                continue
+            kind = d.get("type") or "other"
+            feats.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": pts} if len(pts) > 1 else {"type": "Point", "coordinates": pts[0]},
+                          "properties": {"id": str(d.get("id") or len(feats)), "kind": kind, "label": INCIDENT_IT.get(kind, kind),
+                                         "description": ((d.get("description") or {}).get("value") or (d.get("summary") or {}).get("value") or "")[:300],
+                                         "criticality": d.get("criticality"), "roadClosed": bool(d.get("roadClosed")),
+                                         "start": d.get("startTime"), "end": d.get("endTime")}})
+        return {"status": "ok", "provider": "HERE Traffic API v7 (incidents)", "features": feats}
+
+    try:
+        return _cached(f"herei:{w:.4f},{s:.4f},{e:.4f},{n:.4f}", 120, fetch)
+    except httpx.HTTPError as exc:
+        return {"status": "error", "provider": "HERE", "message": redact(str(exc))[:300], "features": []}
+
+
 def weather_and_air(lat: float, lon: float) -> dict:
     """Open-Meteo forecast + CAMS air quality (modelled, not measured at street level)."""
 

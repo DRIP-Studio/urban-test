@@ -167,3 +167,35 @@ def test_3d_model_upload_validates_and_serves(client):
     assert got.status_code == 200 and got.content == glb
     assert client.delete(f"/api/projects/{pid}/models/{rec['id']}").json()["ok"]
     assert client.get(f"/api/projects/{pid}/models").json() == []
+
+
+def test_fst_reports_filtered_to_project_area_and_configurable_portal(client, monkeypatch):
+    _admin(client)
+    import app.civic as civic
+    seen = []
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"items": [
+                {"id": 1, "title": "Buca", "geometry": {"type": "Point", "coordinates": [14.27, 40.94]}},
+                {"id": 2, "title": "Lontano", "geometry": {"type": "Point", "coordinates": [12.5, 41.9]}},
+                {"id": 3, "title": "Area", "geometry": {"type": "Polygon", "coordinates": [[[14.271, 40.941], [14.272, 40.941], [14.272, 40.942]]]}},
+            ]}
+
+    def fake_get(url, timeout=None, headers=None):
+        seen.append(url)
+        return Resp()
+
+    monkeypatch.setattr(civic.httpx, "get", fake_get)
+    civic._fst_cache.clear()
+    r = client.get("/api/civic/fst/reports?bbox=14.2,40.9,14.3,41.0").json()
+    assert r["status"] == "ok" and [x["id"] for x in r["items"]] == [1, 3] and r["total"] == 3
+    assert seen[-1].startswith("https://frattamaggioresitrasforma.studiodrip.it/wp-json/fst-mobile/v1/maps/reports")
+    assert client.put("/api/platform/config", json={"fstUrl": "http://insecure.example"}).status_code == 400
+    assert client.put("/api/platform/config", json={"fstUrl": "https://comune.example.it"}).status_code == 200
+    client.get("/api/civic/fst/reports")
+    assert seen[-1].startswith("https://comune.example.it/")
+    client.put("/api/platform/config", json={"fstUrl": "https://frattamaggioresitrasforma.studiodrip.it"})

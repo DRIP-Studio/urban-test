@@ -1,5 +1,6 @@
 import { LocalFrame, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
+import { vmsMessage } from '../traffic/live';
 import { fc, type Feature, type LineString, type Point, type Polygon } from '../engine/geojson';
 
 const close = (r: readonly LngLat[]) => [...r.map((p) => [p[0], p[1]]), [r[0]![0], r[0]![1]]];
@@ -88,6 +89,11 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
       continue;
     }
     const item = furniture.get(a.type);
+    if (item?.led?.kind === 'vms') {
+      // PMV: manual text or the live-traffic message (art. 78 Reg. CdS).
+      sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `vms:${encodeURIComponent(vmsMessage(a))}` } });
+      continue;
+    }
     if (item?.led) {
       // Variable-message panel of a ZTL gate: shows the zone state now (art. 7 CdS, varchi elettronici).
       const zone = net.zones[String(a.properties.zoneId ?? '')];

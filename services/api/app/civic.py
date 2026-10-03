@@ -84,6 +84,9 @@ def publish(project_id: str, body: dict) -> dict:
         "costSource": (body.get("costSource") or "").strip()[:300] or None,
         "documents": body.get("documents") or [], "metrics": body.get("metrics") or [], "geometry": geo,
         "bbox": body.get("bbox"), "sources": body.get("sources") or [],
+        # FST reports this scenario answers: sent with the publication.created webhook so the portal can link them.
+        "reportIds": [int(x) for x in (body.get("reportIds") or []) if str(x).isdigit()][:200],
+        "portal": fst_origin(),
     }
     atomic_write_json(SETTINGS.publications_dir / f"{pub_id}.json", record)
     return record
@@ -118,18 +121,39 @@ FST_ORIGIN = "https://frattamaggioresitrasforma.studiodrip.it"
 _fst_cache: dict[str, tuple[float, dict]] = {}
 
 
-def fst_public(kind: str) -> dict:
-    """Read-only public data of the FST civic platform (reports / projects). Never writes to it."""
+def fst_origin() -> str:
+    from app.platform import config
+    return (config.load().get("fstUrl") or FST_ORIGIN).rstrip("/")
+
+
+def _first_point(geometry: dict | None) -> list[float] | None:
+    c = (geometry or {}).get("coordinates")
+    while isinstance(c, list) and c and isinstance(c[0], list):
+        c = c[0]
+    return c if isinstance(c, list) and len(c) >= 2 and all(isinstance(x, (int, float)) for x in c[:2]) else None
+
+
+def fst_public(kind: str, bbox: list[float] | None = None, refresh: bool = False) -> dict:
+    """Read-only public data of the FST civic platform (reports / projects). Never writes to it.
+
+    With a bbox only the items inside the project area are returned (the platform serves the whole city)."""
     if kind not in {"reports", "projects"}:
         raise ValueError("Tipo non valido")
-    hit = _fst_cache.get(kind)
-    if hit and time.time() - hit[0] < 300:
-        return hit[1]
-    try:
-        r = httpx.get(f"{FST_ORIGIN}/wp-json/fst-mobile/v1/maps/{kind}", timeout=15, headers={"User-Agent": SETTINGS.user_agent, "Accept": "application/json"})
-        r.raise_for_status()
-        data = {"status": "ok", "source": f"{FST_ORIGIN} (API pubblica fst-mobile/v1)", "fetchedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "items": r.json().get("items", [])}
-    except (httpx.HTTPError, ValueError) as exc:
-        return {"status": "error", "message": f"Piattaforma FST non raggiungibile: {exc}"[:300], "items": []}
-    _fst_cache[kind] = (time.time(), data)
+    origin = fst_origin()
+    key = f"{origin}|{kind}"
+    hit = _fst_cache.get(key)
+    if hit and not refresh and time.time() - hit[0] < 300:
+        data = hit[1]
+    else:
+        try:
+            r = httpx.get(f"{origin}/wp-json/fst-mobile/v1/maps/{kind}", timeout=15, headers={"User-Agent": SETTINGS.user_agent, "Accept": "application/json"})
+            r.raise_for_status()
+            data = {"status": "ok", "source": f"{origin} (API pubblica fst-mobile/v1)", "portal": origin, "fetchedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "items": r.json().get("items", [])}
+        except (httpx.HTTPError, ValueError) as exc:
+            return {"status": "error", "message": f"Piattaforma FST non raggiungibile: {exc}"[:300], "items": []}
+        _fst_cache[key] = (time.time(), data)
+    if bbox:
+        w, s, e, n = bbox
+        inside = [it for it in data["items"] if (p := _first_point(it.get("geometry"))) and w <= p[0] <= e and s <= p[1] <= n]
+        data = {**data, "items": inside, "total": len(data["items"])}
     return data
