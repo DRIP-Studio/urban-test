@@ -50,6 +50,10 @@ export interface JunctionAnalysis {
   readonly conflicts: readonly ConflictPoint[];
   /** Pairs of group ids that may not be green together. */
   readonly incompatible: readonly (readonly [string, string])[];
+  /** Pairs of movement keys `<groupId>:<turn>` that may not be green together (directional control). */
+  readonly movementConflicts: readonly (readonly [string, string])[];
+  /** Subset of movementConflicts a left turn may run yielding to opposing traffic (svolta permessa). */
+  readonly permissivePairs: readonly (readonly [string, string])[];
   readonly crossingRoadIds: readonly string[];
 }
 
@@ -181,6 +185,13 @@ export function analyzeJunction(net: Network, frameOrigin: LngLat, nodeId: strin
   // Conflicts between movements from different approaches.
   const conflicts: ConflictPoint[] = [];
   const incompatible = new Set<string>();
+  const movementConflicts = new Set<string>();
+  const permissivePairs = new Set<string>();
+  const armBearing = new Map(arms.map((x) => [x.road.id, Math.atan2(x.u[0], x.u[1])]));
+  const opposite = (r1: string, r2: string) => {
+    const d = Math.abs(((armBearing.get(r1) ?? 0) - (armBearing.get(r2) ?? 0) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+    return d > (135 * Math.PI) / 180;
+  };
   const mPaths = withGroups.map((m) => m.path.map((q) => frame.toMetric(q) as V));
   for (let i = 0; i < withGroups.length; i++) {
     for (let j = i + 1; j < withGroups.length; j++) {
@@ -202,6 +213,13 @@ export function analyzeJunction(net: Network, frameOrigin: LngLat, nodeId: strin
       conflicts.push({ id: `C${conflicts.length + 1}`, kind, at: frame.toLngLat(at), a: a.id, b: b.id, severity });
       if (kind !== 'diverge' && a.groupId && b.groupId && a.groupId !== b.groupId) {
         incompatible.add([a.groupId, b.groupId].sort().join('|'));
+        const ka = `${a.groupId}:${a.turn}`, kb = `${b.groupId}:${b.turn}`;
+        const key = [ka, kb].sort().join('|');
+        movementConflicts.add(key);
+        // A left turn against the opposing through/right flow may be permitted (it yields).
+        const leftVsOpposing = (x: Movement, y: Movement) => x.turn === 'left' && y.turn !== 'left' && opposite(x.fromRoadId, y.fromRoadId);
+        if (kind === 'crossing' && (leftVsOpposing(a, b) || leftVsOpposing(b, a))) permissivePairs.add(key);
+        if (kind === 'merge' && (a.turn === 'left' || b.turn === 'left') && opposite(a.fromRoadId, b.fromRoadId)) permissivePairs.add(key);
       }
     }
   }
@@ -210,6 +228,8 @@ export function analyzeJunction(net: Network, frameOrigin: LngLat, nodeId: strin
     arms: arms.map((a) => ({ roadId: a.road.id, name: a.road.name || 'senza nome', inbound: lanesOf(a, true).length, outbound: lanesOf(a, false).length, bearingDeg: (Math.atan2(a.u[0], a.u[1]) * 180) / Math.PI })),
     movements: withGroups, groups, conflicts,
     incompatible: [...incompatible].map((k) => k.split('|') as [string, string]),
+    movementConflicts: [...movementConflicts].map((k) => k.split('|') as [string, string]),
+    permissivePairs: [...permissivePairs].map((k) => k.split('|') as [string, string]),
     crossingRoadIds: spec?.crossingRoadIds ?? [],
   };
 }
@@ -217,46 +237,153 @@ export function analyzeJunction(net: Network, frameOrigin: LngLat, nodeId: strin
 /** Yellow time (s) from approach speed, Italian practice: 3 s up to 50 km/h, 4 s above. */
 export const yellowFor = (speedKmh: number): number => (speedKmh > 50 ? 4 : 3);
 
-/**
- * Proposes a conflict-free plan: groups are coloured greedily into phases,
- * green split proportionally to demand (or evenly without data).
- */
-export function suggestSignalPlan(net: Network, a: JunctionAnalysis, opts: { cycleS?: number; demand?: Readonly<Record<string, number>> } = {}): SignalPlan {
-  const bad = new Set(a.incompatible.map(([x, y]) => `${x}|${y}`));
-  const ok = (x: string, y: string) => !bad.has([x, y].sort().join('|'));
-  const order = [...a.groups].sort((g1, g2) => (opts.demand?.[g2.id] ?? 0) - (opts.demand?.[g1.id] ?? 0));
-  const phases: string[][] = [];
-  for (const g of order) {
-    const ph = phases.find((p) => p.every((x) => ok(x, g.id)));
-    if (ph) ph.push(g.id); else phases.push([g.id]);
-  }
-  const cycle = opts.cycleS ?? Math.min(120, Math.max(60, 30 + phases.length * 18));
-  const maxSpeed = Math.max(...a.arms.map((arm) => net.roads[arm.roadId]?.speedKmh ?? 50));
-  const Y = yellowFor(maxSpeed), R = 2;
-  const available = cycle - phases.length * (Y + R);
-  const weight = (p: string[]) => Math.max(1, ...p.map((g) => opts.demand?.[g] ?? 1));
-  const total = phases.reduce((s, p) => s + weight(p), 0);
-  let greens = phases.map((p) => Math.max(7, Math.round((available * weight(p)) / total)));
-  const drift = cycle - phases.length * (Y + R) - greens.reduce((s, g) => s + g, 0);
-  greens = greens.map((g, i) => (i === 0 ? g + drift : g));
-  const servedRoads = (p: string[]) => new Set(p.flatMap((g) => {
-    const grp = a.groups.find((x) => x.id === g)!;
-    return [grp.roadId, ...a.movements.filter((m) => m.groupId === g).map((m) => m.toRoadId)];
-  }));
-  const signalPhases: SignalPhase[] = phases.map((p, i) => ({
-    id: `F${i + 1}`, name: `Fase ${i + 1}`, greenGroups: p, greenS: greens[i]!, yellowS: Y, allRedS: R,
-    pedestrianRoadIds: a.crossingRoadIds.filter((rid) => !servedRoads(p).has(rid)),
-  }));
-  return { id: `plan:${a.nodeId}`, nodeId: a.nodeId, name: 'Piano semaforico', mode: 'fixed_time', cycleS: cycle, offsetS: 0, phases: signalPhases };
+/** Turns of a group that are green in a phase (directional control), or [] if the group is red. */
+export function activeTurns(phase: SignalPhase, group: Pick<LaneGroup, 'id' | 'turns'>): readonly TurnKind[] {
+  if (!phase.greenGroups.includes(group.id)) return [];
+  return phase.greenMovements?.[group.id]?.filter((t) => group.turns.includes(t)) ?? group.turns;
 }
 
-/** Signal state of a group at time t (s) — used by simulation and the Twin. */
-export function signalState(plan: SignalPlan, groupId: string, t: number): 'green' | 'yellow' | 'red' {
-  let s = (((t - plan.offsetS) % plan.cycleS) + plan.cycleS) % plan.cycleS;
+export interface PlanIssue { readonly phase?: string; readonly message: string; readonly kind: 'conflict' | 'cycle' | 'unserved' | 'timing' }
+
+/**
+ * Checks a plan against the junction geometry, movement by movement: two movements in conflict may not
+ * be green together, unless the plan allows permitted left turns and the pair is a left turn against
+ * opposing traffic. Every lane group must get green at least once; the phases must add up to the cycle.
+ */
+export function planIssues(plan: SignalPlan, a: Pick<JunctionAnalysis, 'groups' | 'movementConflicts' | 'permissivePairs'>): PlanIssue[] {
+  const issues: PlanIssue[] = [];
+  const permissive = new Set(plan.permissiveLeft ? a.permissivePairs.map(([x, y]) => [x, y].sort().join('|')) : []);
+  const conflict = new Set(a.movementConflicts.map(([x, y]) => [x, y].sort().join('|')));
+  const total = plan.phases.reduce((t, p) => t + p.greenS + p.yellowS + p.allRedS, 0);
+  if (Math.abs(total - plan.cycleS) > 0.5) issues.push({ kind: 'cycle', message: `La somma delle fasi (${Math.round(total)} s) deve essere uguale al ciclo (${plan.cycleS} s)` });
   for (const ph of plan.phases) {
-    if (s < ph.greenS) return ph.greenGroups.includes(groupId) ? 'green' : 'red';
+    const keys = a.groups.flatMap((g) => activeTurns(ph, g).map((t) => `${g.id}:${t}`));
+    for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+      const k = [keys[i]!, keys[j]!].sort().join('|');
+      if (conflict.has(k) && !permissive.has(k)) issues.push({ kind: 'conflict', phase: ph.name, message: `${ph.name}: verdi in conflitto (${keys[i]} × ${keys[j]})` });
+    }
+    if (ph.yellowS < 3) issues.push({ kind: 'timing', phase: ph.name, message: `${ph.name}: giallo minimo 3 s` });
+    if (ph.greenS < 5) issues.push({ kind: 'timing', phase: ph.name, message: `${ph.name}: verde minimo 5 s` });
+  }
+  for (const g of a.groups) {
+    const served = new Set(plan.phases.flatMap((ph) => activeTurns(ph, g)));
+    const missing = g.turns.filter((t) => !served.has(t));
+    if (missing.length === g.turns.length) issues.push({ kind: 'unserved', message: `${g.label}: mai verde` });
+    else if (missing.length) issues.push({ kind: 'unserved', message: `${g.label}: manca il verde per ${missing.map((t) => TURN_IT[t]).join(', ')}` });
+  }
+  return issues;
+}
+
+/** Saturation flow per lane (veh/h of green), HCM/Italian practice, adjusted for turning movements. */
+const SAT_PER_LANE = 1800;
+const turnFactor = (turns: readonly TurnKind[]) => (turns.length === 1 && turns[0] === 'left' ? 0.92 : turns.length === 1 && turns[0] === 'right' ? 0.85 : turns.includes('left') ? 0.9 : 1);
+/** Default approach volume (veh/h per inbound lane) when no traffic estimate is available. */
+const DEFAULT_VPH: Record<string, number> = { motorway: 1200, trunk: 900, primary: 700, secondary: 550, tertiary: 420, unclassified: 260, residential: 180, living_street: 80, service: 80 };
+
+export interface SignalDesign {
+  readonly cycleS: number;
+  readonly lostTimeS: number;
+  readonly criticalRatio: number;
+  readonly phases: readonly { readonly groups: readonly string[]; readonly y: number; readonly greenS: number }[];
+  readonly method: string;
+}
+
+/**
+ * Proposes a conflict-free plan by Webster's method.
+ *
+ * 1. Phasing: groups of the same axis (opposite approaches) run together; with `permissiveLeft` the left
+ *    turns join their axis, otherwise they get protected phases. Groups are assigned greedily, most loaded first.
+ * 2. Flow ratios y = q/s per group (q from `demand` veh/h, else from road class), critical y per phase.
+ * 3. Cycle C₀ = (1.5 L + 5) / (1 − Y), limited to 40–120 s; greens split in proportion to critical y,
+ *    with a minimum that lets pedestrians cross at 1.0 m/s.
+ */
+export function suggestSignalPlan(net: Network, a: JunctionAnalysis, opts: { cycleS?: number; demand?: Readonly<Record<string, number>>; permissiveLeft?: boolean } = {}): SignalPlan & { design: SignalDesign } {
+  const permissive = opts.permissiveLeft ?? false;
+  const allowed = new Set(permissive ? a.permissivePairs.map(([x, y]) => [x, y].sort().join('|')) : []);
+  const badMov = new Set(a.movementConflicts.map(([x, y]) => [x, y].sort().join('|')).filter((k) => !allowed.has(k)));
+  const groupOk = (g1: LaneGroup, g2: LaneGroup) => g1.turns.every((t1) => g2.turns.every((t2) => !badMov.has([`${g1.id}:${t1}`, `${g2.id}:${t2}`].sort().join('|'))));
+  const q = (g: LaneGroup) => {
+    const d = opts.demand?.[g.id];
+    if (d !== undefined) return d;
+    const road = net.roads[g.roadId];
+    return (DEFAULT_VPH[road?.roadClass ?? ''] ?? 250) * g.laneIds.length * (g.turns.length === 1 && g.turns[0] !== 'through' ? 0.35 : 1);
+  };
+  const sat = (g: LaneGroup) => SAT_PER_LANE * g.laneIds.length * turnFactor(g.turns);
+  const y = (g: LaneGroup) => Math.min(0.9, q(g) / sat(g));
+  const axisOf = (g: LaneGroup) => {
+    const b = ((a.arms.find((x) => x.roadId === g.roadId)?.bearingDeg ?? 0) % 180 + 180) % 180;
+    return Math.round(b / 45) % 4;
+  };
+  // Through/right first (they define the axis phases), then protected lefts; heavier first.
+  const order = [...a.groups].sort((g1, g2) => {
+    const l1 = g1.turns.length === 1 && g1.turns[0] === 'left' ? 1 : 0, l2 = g2.turns.length === 1 && g2.turns[0] === 'left' ? 1 : 0;
+    return l1 - l2 || axisOf(g1) - axisOf(g2) || y(g2) - y(g1);
+  });
+  const phases: LaneGroup[][] = [];
+  for (const g of order) {
+    const fit = phases.filter((p) => p.every((x) => groupOk(x, g)));
+    const sameAxis = fit.find((p) => p.some((x) => axisOf(x) === axisOf(g)));
+    const ph = sameAxis ?? fit[0];
+    if (ph) ph.push(g); else phases.push([g]);
+  }
+  const maxSpeed = Math.max(...a.arms.map((arm) => net.roads[arm.roadId]?.speedKmh ?? 50));
+  const Y = yellowFor(maxSpeed), R = 2, startLoss = 2;
+  const lost = phases.length * (startLoss + R) + phases.length * Math.max(0, Y - 3);
+  const crit = phases.map((p) => Math.max(...p.map(y)));
+  const Ysum = Math.min(0.9, crit.reduce((t, v) => t + v, 0));
+  const webster = (1.5 * lost + 5) / (1 - Ysum);
+  const cycle = Math.round(opts.cycleS ?? Math.min(120, Math.max(40, webster)));
+  // Pedestrian minimum: crossing width at 1.0 m/s + 4 s to step off (DM 5/11/2001, practice).
+  const pedMin = (p: LaneGroup[]) => {
+    const served = new Set(p.flatMap((g) => [g.roadId, ...a.movements.filter((m) => m.groupId === g.id).map((m) => m.toRoadId)]));
+    const widths = a.crossingRoadIds.filter((rid) => !served.has(rid)).map((rid) => (net.roads[rid]?.section.elements.reduce((t, e) => t + (e.kind === 'sidewalk' ? 0 : e.widthM), 0) ?? 7));
+    return widths.length ? Math.ceil(Math.max(...widths) / 1.0 + 4) : 7;
+  };
+  const available = cycle - phases.length * (Y + R);
+  let greens = phases.map((p, i) => Math.max(pedMin(p), Math.round((available * crit[i]!) / Math.max(1e-6, crit.reduce((t, v) => t + v, 0)))));
+  const drift = cycle - phases.length * (Y + R) - greens.reduce((t, g) => t + g, 0);
+  const heaviest = crit.indexOf(Math.max(...crit));
+  greens = greens.map((g, i) => (i === heaviest ? Math.max(5, g + drift) : g));
+  const realCycle = greens.reduce((t, g) => t + g, 0) + phases.length * (Y + R);
+  const servedRoads = (p: LaneGroup[]) => new Set(p.flatMap((g) => [g.roadId, ...a.movements.filter((m) => m.groupId === g.id).map((m) => m.toRoadId)]));
+  const signalPhases: SignalPhase[] = phases.map((p, i) => ({
+    id: `F${i + 1}`, name: `Fase ${i + 1}`, greenGroups: p.map((g) => g.id), greenS: greens[i]!, yellowS: Y, allRedS: R,
+    pedestrianRoadIds: a.crossingRoadIds.filter((rid) => !servedRoads(p).has(rid)),
+  }));
+  return {
+    id: `plan:${a.nodeId}`, nodeId: a.nodeId, name: 'Piano semaforico', mode: 'fixed_time', cycleS: realCycle, offsetS: 0, phases: signalPhases,
+    permissiveLeft: permissive,
+    design: {
+      cycleS: realCycle, lostTimeS: lost, criticalRatio: Math.round(Ysum * 100) / 100,
+      phases: phases.map((p, i) => ({ groups: p.map((g) => g.id), y: Math.round(crit[i]! * 100) / 100, greenS: greens[i]! })),
+      method: opts.demand ? 'Webster su flussi stimati DRIP' : 'Webster su flussi tipici per classe di strada',
+    },
+  };
+}
+
+/** Demand per lane group (veh/h) from estimated link flows: approach volume split by lane count. */
+export function groupDemand(a: JunctionAnalysis, flows: readonly { roadId: string; forward: boolean; volumeVph: number }[], net: Network): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const g of a.groups) {
+    const road = net.roads[g.roadId];
+    if (!road) continue;
+    const towardsNode = road.to === a.nodeId;
+    const f = flows.find((x) => x.roadId === g.roadId && x.forward === towardsNode);
+    if (!f) continue;
+    const lanesIn = a.groups.filter((x) => x.roadId === g.roadId).reduce((t, x) => t + x.laneIds.length, 0) || 1;
+    out[g.id] = (f.volumeVph * g.laneIds.length) / lanesIn;
+  }
+  return out;
+}
+
+/** Signal state of a group (optionally of one turn of it) at time t (s) — simulation, map, Twin. */
+export function signalState(plan: SignalPlan, groupId: string, t: number, turn?: TurnKind): 'green' | 'yellow' | 'red' {
+  let s = (((t - plan.offsetS) % plan.cycleS) + plan.cycleS) % plan.cycleS;
+  const on = (ph: SignalPhase) => ph.greenGroups.includes(groupId) && (!turn || !ph.greenMovements?.[groupId] || ph.greenMovements[groupId]!.includes(turn));
+  for (const ph of plan.phases) {
+    if (s < ph.greenS) return on(ph) ? 'green' : 'red';
     s -= ph.greenS;
-    if (s < ph.yellowS) return ph.greenGroups.includes(groupId) ? 'yellow' : 'red';
+    if (s < ph.yellowS) return on(ph) ? 'yellow' : 'red';
     s -= ph.yellowS + ph.allRedS;
     if (s < 0) return 'red';
   }
@@ -280,12 +407,22 @@ export interface SignalHead {
   readonly nodeId: string;
   /** Lane group id for vehicle heads, `ped:<roadId>` for pedestrian heads. */
   readonly groupId: string;
+  /** Key used to switch the head off (SignalPlan.disabledHeads). */
+  readonly key: string;
+  /** Turn controlled by a directional (arrow) head. */
+  readonly turn?: TurnKind;
   readonly kind: 'vehicle' | 'arrow_left' | 'arrow_right' | 'arrow_straight' | 'pedestrian';
   readonly at: LngLat;
   readonly bearingDeg: number;
 }
 
-/** Physical signal heads of every plan: one per lane group at the stop line, two pedestrian heads per signalised crossing. */
+const ARROW: Record<TurnKind, SignalHead['kind']> = { left: 'arrow_left', right: 'arrow_right', through: 'arrow_straight', uturn: 'arrow_left' };
+
+/**
+ * Physical signal heads of every plan: one per lane group at the stop line (arrow heads when a group's
+ * turns are switched separately), two pedestrian heads per signalised crossing. Heads listed in
+ * `disabledHeads` are not installed.
+ */
 export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
   const frame = new LocalFrame(frameOrigin);
   const metric = new MetricCache(frame);
@@ -293,10 +430,26 @@ export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
   for (const plan of Object.values(net.signalPlans)) {
     const a = analyzeJunction(net, frameOrigin, plan.nodeId);
     if (!a) continue;
+    const off = new Set(plan.disabledHeads ?? []);
     for (const g of a.groups) {
+      if (off.has(g.id)) continue;
+      // Directional heads when some phase switches only part of the group's turns.
+      const split = plan.phases.some((ph) => ph.greenGroups.includes(g.id) && ph.greenMovements?.[g.id] && ph.greenMovements[g.id]!.length < g.turns.length);
+      if (split && g.turns.length > 1) {
+        const b = (g.bearingDeg * Math.PI) / 180;
+        const right: V = [Math.cos(b), -Math.sin(b)];
+        const stop = frame.toMetric(g.stopAt) as V;
+        g.turns.forEach((turn, i) => {
+          const key = `${g.id}:${turn}`;
+          if (off.has(key)) return;
+          const p = add(stop, mul(right, (i - (g.turns.length - 1) / 2) * 0.9));
+          out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, key, turn, kind: ARROW[turn], at: frame.toLngLat(p), bearingDeg: g.bearingDeg });
+        });
+        continue;
+      }
       const only = g.turns.length === 1 ? g.turns[0] : null;
       const kind = only === 'left' ? 'arrow_left' : only === 'right' ? 'arrow_right' : 'vehicle';
-      out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, kind, at: g.stopAt, bearingDeg: g.bearingDeg });
+      out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, key: g.id, kind, at: g.stopAt, bearingDeg: g.bearingDeg });
     }
     const pedRoads = new Set(plan.phases.flatMap((p) => p.pedestrianRoadIds));
     if (!pedRoads.size) continue;
@@ -304,13 +457,95 @@ export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
     const arms = vehicularArms(net, plan.nodeId, metric);
     const geo = buildJunction(plan.nodeId, frame.toMetric(node.at) as V, arms, net.junctions[plan.nodeId]?.cornerRadiusM ?? 4);
     for (const arm of arms) {
-      if (!pedRoads.has(arm.road.id) || !geo) continue;
+      if (!pedRoads.has(arm.road.id) || !geo || off.has(`ped:${arm.road.id}`)) continue;
       const s = (geo.setbacks.get(armKey(arm)) ?? 0) + 2.5;
       const { p, t } = sampleAt(arm.axis, s);
-      for (const off of [arm.cwLeft + 0.6, arm.cwRight - 0.6]) {
-        out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: `ped:${arm.road.id}`, kind: 'pedestrian', at: frame.toLngLat(add(p, mul(leftNormal(t), off))), bearingDeg: 0 });
-      }
+      [arm.cwLeft + 0.6, arm.cwRight - 0.6].forEach((o, side) => {
+        const key = `ped:${arm.road.id}:${side}`;
+        if (off.has(key)) return;
+        out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: `ped:${arm.road.id}`, key, kind: 'pedestrian', at: frame.toLngLat(add(p, mul(leftNormal(t), o))), bearingDeg: 0 });
+      });
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------- coordination (green wave)
+
+export interface CoordinationResult {
+  readonly cycleS: number;
+  readonly offsets: readonly { readonly planId: string; readonly offsetS: number; readonly distanceM: number; readonly travelS: number }[];
+  /** Green band (s) through every junction in the main direction, and in the opposite one for two-way. */
+  readonly bandwidthS: number;
+  readonly bandwidthBackS: number | null;
+}
+
+/** Duration (s) of the green of the plan's coordinated (main) phase: the first phase. */
+const mainGreen = (p: SignalPlan) => p.phases[0]?.greenS ?? 0;
+
+/** Green interval [start, end) of the main phase within the cycle, given the offset. */
+function band(p: SignalPlan, offset: number, cycle: number): [number, number] {
+  return [offset % cycle, (offset % cycle) + mainGreen(p)];
+}
+
+/**
+ * Offsets for a corridor of signalised junctions (ordered upstream → downstream) so that a platoon at
+ * `speedKmh` meets green everywhere: offset_i = offset_{i−1} + d_i / v (mod C), common cycle C.
+ * For two-way corridors each offset is snapped to the value (forward ideal or simultaneous/alternate
+ * system) that maximises the smaller of the two bands.
+ */
+export function coordinateCorridor(net: Network, frameOrigin: LngLat, plans: readonly SignalPlan[], speedKmh: number, cycleS: number, direction: 'oneway' | 'twoway'): CoordinationResult {
+  const frame = new LocalFrame(frameOrigin);
+  const v = speedKmh / 3.6;
+  const pos = plans.map((p) => frame.toMetric(net.nodes[p.nodeId]!.at) as V);
+  const dists = pos.map((q, i) => (i === 0 ? 0 : dist(pos[i - 1]!, q)));
+  const cum = dists.map((_, i) => dists.slice(0, i + 1).reduce((t, d) => t + d, 0));
+  const ideal = cum.map((d) => d / v);
+  let offsets = ideal.map((t) => ((t % cycleS) + cycleS) % cycleS);
+  const bandOf = (offs: number[], back: boolean) => {
+    // Window that stays green at every junction for a vehicle starting at the reference.
+    let lo = -Infinity, hi = Infinity;
+    plans.forEach((p, i) => {
+      const travel = back ? (ideal[ideal.length - 1]! - ideal[i]!) : ideal[i]!;
+      const [s, e] = band(p, offs[i]!, cycleS);
+      // Shift the band to the cycle closest to the arrival time.
+      const k = Math.round((travel - s) / cycleS);
+      lo = Math.max(lo, s + k * cycleS - travel);
+      hi = Math.min(hi, e + k * cycleS - travel);
+    });
+    return Math.max(0, hi - lo);
+  };
+  if (direction === 'twoway') {
+    // Try, junction by junction, the forward-ideal offset or its half-cycle shift (alternate system).
+    for (let i = 1; i < plans.length; i++) {
+      const candidates = [offsets[i]!, (offsets[i]! + cycleS / 2) % cycleS, 0];
+      let best = offsets[i]!, score = -1;
+      for (const c of candidates) {
+        const trial = [...offsets];
+        trial[i] = c;
+        const sc = Math.min(bandOf(trial.slice(0, i + 1), false), bandOf(trial.slice(0, i + 1), true));
+        if (sc > score) { score = sc; best = c; }
+      }
+      offsets[i] = best;
+    }
+  }
+  offsets = offsets.map((o) => Math.round(o));
+  return {
+    cycleS,
+    offsets: plans.map((p, i) => ({ planId: p.id, offsetS: offsets[i]!, distanceM: Math.round(dists[i]!), travelS: Math.round(ideal[i]! * 10) / 10 })),
+    bandwidthS: Math.round(bandOf(offsets, false)),
+    bandwidthBackS: direction === 'twoway' ? Math.round(bandOf(offsets, true)) : null,
+  };
+}
+
+/** Scales the greens of a plan to a new cycle, keeping yellow and all-red. */
+export function rescalePlan(plan: SignalPlan, cycleS: number): SignalPlan {
+  const fixed = plan.phases.reduce((t, p) => t + p.yellowS + p.allRedS, 0);
+  const greens = plan.phases.reduce((t, p) => t + p.greenS, 0);
+  const avail = Math.max(plan.phases.length * 5, cycleS - fixed);
+  const phases = plan.phases.map((p) => ({ ...p, greenS: Math.max(5, Math.round((p.greenS / Math.max(1, greens)) * avail)) }));
+  const drift = cycleS - fixed - phases.reduce((t, p) => t + p.greenS, 0);
+  const i = phases.reduce((bi, p, k) => (p.greenS > phases[bi]!.greenS ? k : bi), 0);
+  phases[i] = { ...phases[i]!, greenS: Math.max(5, phases[i]!.greenS + drift) };
+  return { ...plan, cycleS: phases.reduce((t, p) => t + p.greenS + p.yellowS + p.allRedS, 0), phases };
 }

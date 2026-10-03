@@ -1,8 +1,9 @@
 import { LocalFrame } from '../geo/projection';
 import { add, dist, lengthOf, mul, project, slice, sub, type V } from '../geo/polyline';
 import type {
-  Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, Zone,
+  Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, TurnKind, Zone,
 } from '../model/types';
+import { planIssues, rescalePlan } from '../analysis/junction';
 import { defineOperation, operationSpec, type Issue } from './registry';
 import { makeLanes } from './road-factory';
 import { extractRoundabout, insertRoundabout, planRoundabout } from './roundabout-insert';
@@ -240,7 +241,18 @@ export const junctionSet = defineOperation<{ readonly spec: JunctionSpec }>({
   apply: (net, p) => ({ ...net, junctions: { ...net.junctions, [p.spec.nodeId]: p.spec } }),
 });
 
-export const signalPlanSet = defineOperation<{ readonly plan: SignalPlan; readonly conflicts: readonly (readonly [string, string])[] }>({
+export interface SignalPlanSetPayload {
+  readonly plan: SignalPlan;
+  /** Group-level conflicts (1.0 payloads). */
+  readonly conflicts: readonly (readonly [string, string])[];
+  /** Movement-level conflicts `<group>:<turn>`; when present they replace `conflicts` (directional control). */
+  readonly movementConflicts?: readonly (readonly [string, string])[];
+  readonly permissivePairs?: readonly (readonly [string, string])[];
+  /** Turns of each group, needed to resolve movement-level checks. */
+  readonly groupTurns?: Readonly<Record<string, readonly TurnKind[]>>;
+}
+
+export const signalPlanSet = defineOperation<SignalPlanSetPayload>({
   type: 'signal.setPlan',
   label: (p) => `Piano semaforico ${p.plan.name}`,
   validate(net, p) {
@@ -248,11 +260,20 @@ export const signalPlanSet = defineOperation<{ readonly plan: SignalPlan; readon
     const total = p.plan.phases.reduce((s, ph) => s + ph.greenS + ph.yellowS + ph.allRedS, 0);
     if (!net.nodes[p.plan.nodeId]) issues.push(err('signal.node', 'Incrocio inesistente'));
     if (!p.plan.phases.length) issues.push(err('signal.phases', 'Il piano deve avere almeno una fase'));
+    if (!(p.plan.cycleS >= 20 && p.plan.cycleS <= 240)) issues.push(err('signal.cycle', 'Ciclo fuori intervallo 20–240 s'));
     if (Math.abs(total - p.plan.cycleS) > 0.5) issues.push(err('signal.cycle', `La somma delle fasi (${total.toFixed(0)} s) deve essere uguale al ciclo (${p.plan.cycleS} s)`));
     for (const ph of p.plan.phases) {
       if (ph.yellowS < 3) issues.push(err('signal.yellow', `Fase ${ph.name}: giallo minimo 3 s`));
       if (ph.greenS < 5) issues.push(err('signal.green', `Fase ${ph.name}: verde minimo 5 s`));
-      for (const [a, b] of p.conflicts) {
+    }
+    if (p.movementConflicts && p.groupTurns) {
+      const turns = p.groupTurns;
+      const groups = Object.entries(turns).map(([id, t]) => ({ id, turns: t }));
+      for (const i of planIssues(p.plan, { groups: groups.map((g) => ({ ...g, label: g.id })) as never, movementConflicts: p.movementConflicts, permissivePairs: p.permissivePairs ?? [] })) {
+        if (i.kind === 'conflict') issues.push(err('signal.conflict', i.message));
+      }
+    } else {
+      for (const ph of p.plan.phases) for (const [a, b] of p.conflicts) {
         if (ph.greenGroups.includes(a) && ph.greenGroups.includes(b)) issues.push(err('signal.conflict', `Fase ${ph.name}: verdi in conflitto (${a} × ${b})`));
       }
     }
@@ -265,6 +286,66 @@ export const signalPlanSet = defineOperation<{ readonly plan: SignalPlan; readon
       signalPlans: { ...net.signalPlans, [p.plan.id]: p.plan },
       junctions: { ...net.junctions, [p.plan.nodeId]: { ...junction, control: 'signal' } },
     };
+  },
+});
+
+/** Switches single signal heads off (or back on) without touching the timing. */
+export const signalSetHeads = defineOperation<{ readonly planId: string; readonly disabledHeads: readonly string[] }>({
+  type: 'signal.setHeads',
+  label: (p) => (p.disabledHeads.length ? `Lanterne rimosse: ${p.disabledHeads.length}` : 'Tutte le lanterne installate'),
+  validate: (net, p) => (net.signalPlans[p.planId] ? [] : [err('signal.missing', 'Piano inesistente')]),
+  apply(net, p) {
+    const plan = net.signalPlans[p.planId]!;
+    return { ...net, signalPlans: { ...net.signalPlans, [plan.id]: { ...plan, disabledHeads: [...new Set(p.disabledHeads)] } } };
+  },
+});
+
+export interface SignalCoordinatePayload {
+  readonly coordination: { readonly id: string; readonly name: string; readonly speedKmh: number; readonly direction: 'oneway' | 'twoway' };
+  readonly cycleS: number;
+  /** Ordered upstream → downstream. */
+  readonly plans: readonly { readonly planId: string; readonly offsetS: number }[];
+}
+
+/** Links the plans of several junctions in one corridor: common cycle, computed offsets. */
+export const signalCoordinate = defineOperation<SignalCoordinatePayload>({
+  type: 'signal.coordinate',
+  label: (p) => `Coordinamento ${p.coordination.name} (${p.plans.length} incroci)`,
+  validate(net, p) {
+    const issues: Issue[] = [];
+    if (p.plans.length < 2) issues.push(err('coord.size', 'Servono almeno due incroci semaforizzati'));
+    const missing = p.plans.filter((x) => !net.signalPlans[x.planId]);
+    if (missing.length) issues.push(err('coord.missing', `Piani inesistenti: ${missing.map((x) => x.planId).join(', ')}`));
+    if (!(p.cycleS >= 30 && p.cycleS <= 180)) issues.push(err('coord.cycle', 'Ciclo comune fuori intervallo 30–180 s'));
+    if (!(p.coordination.speedKmh >= 10 && p.coordination.speedKmh <= 90)) issues.push(err('coord.speed', 'Velocità di progetto 10–90 km/h'));
+    for (const x of p.plans) {
+      const pl = net.signalPlans[x.planId];
+      if (pl && pl.phases.reduce((t, ph) => t + ph.yellowS + ph.allRedS + 5, 0) > p.cycleS) issues.push(err('coord.short', `Ciclo comune troppo corto per ${pl.name}`));
+    }
+    return issues;
+  },
+  apply(net, p) {
+    const signalPlans = { ...net.signalPlans };
+    p.plans.forEach((x, order) => {
+      const pl = rescalePlan(signalPlans[x.planId]!, p.cycleS);
+      signalPlans[x.planId] = { ...pl, offsetS: ((x.offsetS % pl.cycleS) + pl.cycleS) % pl.cycleS, mode: pl.mode === 'fixed_time' ? 'green_wave' : pl.mode, coordination: { ...p.coordination, order } };
+    });
+    return { ...net, signalPlans };
+  },
+});
+
+export const signalUncoordinate = defineOperation<{ readonly coordinationId: string }>({
+  type: 'signal.uncoordinate',
+  label: () => 'Scollega incroci coordinati',
+  validate: (net, p) => (Object.values(net.signalPlans).some((x) => x.coordination?.id === p.coordinationId) ? [] : [err('coord.missing', 'Coordinamento inesistente')]),
+  apply(net, p) {
+    const signalPlans = { ...net.signalPlans };
+    for (const pl of Object.values(signalPlans)) {
+      if (pl.coordination?.id !== p.coordinationId) continue;
+      const { coordination: _c, ...rest } = pl;
+      signalPlans[pl.id] = { ...rest, mode: pl.mode === 'green_wave' ? 'fixed_time' : pl.mode };
+    }
+    return { ...net, signalPlans };
   },
 });
 

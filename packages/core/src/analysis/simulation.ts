@@ -183,7 +183,9 @@ export class FlowSimulation {
       const laneId = lanes[Math.min(veh.lane, lanes.length - 1)]?.id;
       const group = a?.groups.find((gr) => laneId && gr.laneIds.includes(laneId))?.id;
       if (group) {
-        const st = signalState(plan, group, this.t);
+        const nextRoad = this.g.edges[next]!.roadId;
+        const turn = a?.movements.find((m) => m.fromLaneId === laneId && m.toRoadId === nextRoad)?.turn;
+        const st = signalState(plan, group, this.t, turn);
         const dist = stopS - veh.s;
         const canStop = veh.v * veh.v / (2 * VEHICLE_SPECS[veh.cls].decel) < dist;
         if (st === 'red' || (st === 'yellow' && canStop)) return stopS;

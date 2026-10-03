@@ -17,14 +17,14 @@ function stateOf(h: SignalHead, plans: Readonly<Record<string, SignalPlan>>): st
   const plan = preview && preview.plan.nodeId === h.nodeId ? preview.plan : plans[h.planId];
   const t = preview && preview.plan.nodeId === h.nodeId ? preview.t : simT;
   if (!plan || t === null) return 'off';
-  return h.groupId.startsWith('ped:') ? pedestrianState(plan, h.groupId.slice(4), t) : signalState(plan, h.groupId, t);
+  return h.groupId.startsWith('ped:') ? pedestrianState(plan, h.groupId.slice(4), t) : signalState(plan, h.groupId, t, h.turn);
 }
 
 export function renderSignalHeads(): void {
   const plans = useApp.getState().network?.signalPlans ?? {};
   setSource('plan-signals', fc(heads.map((h, i): Feature => ({
     type: 'Feature', id: i, geometry: { type: 'Point', coordinates: [...h.at] },
-    properties: { id: `${h.planId}:${h.groupId}:${i}`, icon: `sig:${h.kind}:${stateOf(h, plans)}` },
+    properties: { id: `${h.planId}:${h.key}:${i}`, planId: h.planId, key: h.key, icon: `sig:${h.kind}:${stateOf(h, plans)}` },
   }))));
 }
 

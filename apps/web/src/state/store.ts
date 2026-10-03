@@ -304,6 +304,8 @@ export const setMode = (mode: Mode) => set({ mode, tool: 'select', dock: null })
 export const setTool = (tool: string) => set({ tool });
 export const select = (selection: Selection | null) => set({ selection });
 export const setDock = (dock: string | null) => set((s) => ({ dock: s.dock === dock ? null : dock }));
+/** Opens a panel without toggling (programmatic callers: Elios, links). */
+export const openDock = (dock: string) => set({ dock });
 
 // Development-only handle for automated UI verification (stripped from production builds).
 if (import.meta.env.DEV) (window as unknown as { __drip: unknown }).__drip = { useApp, commit, undo, redo };

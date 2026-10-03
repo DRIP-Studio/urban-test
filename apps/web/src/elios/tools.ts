@@ -9,13 +9,15 @@ import { LocalFrame, type LngLat, type Road, type Zone } from '@drip-urban/core'
 import { api } from '../api/client';
 import { fitBounds, flyTo, getMap } from '../map/mapStore';
 import { plateOnPoleOps } from '../state/actions';
-import { commit, newId, select, setDock, setMode, undo, useApp, type Mode } from '../state/store';
+import { commit, newId, openDock, select, setMode, undo, useApp, type Mode } from '../state/store';
 
 export type ToolKind = 'read' | 'view' | 'write';
 export interface EliosTool {
   readonly name: string;
   readonly description: string;
   readonly kind: ToolKind;
+  /** Italian label shown in the chat when the tool runs. */
+  readonly label?: string;
   readonly parameters?: Record<string, unknown>;
   run(args: Record<string, unknown>): Promise<unknown> | unknown;
 }
@@ -190,7 +192,7 @@ const REGISTRY: EliosTool[] = [
     name: 'open_panel', kind: 'view',
     description: 'Apre un pannello: section (sezione stradale), junction (Junction Lab), signals (Signal Studio), layers, history, export, settings, compare.',
     parameters: OBJ({ panel: S('Pannello', { enum: ['section', 'junction', 'signals', 'layers', 'history', 'export', 'settings', 'compare'] }) }, ['panel']),
-    run(a) { setDock(String(a.panel)); return { ok: true }; },
+    run(a) { openDock(String(a.panel)); return { ok: true }; },
   },
   {
     name: 'set_speed_limit', kind: 'write',

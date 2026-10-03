@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   FlowSimulation, LocalFrame, OperationRejected, ScenarioHistory, analyzeJunction, analyzeNetwork, auditScenario,
-  SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan,
+  SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan, planIssues, signalHeads, coordinateCorridor, type SignalPlan, type SignalPhase,
   type CityBaseline, type Network, type Scenario,
 } from '../src/index';
 
@@ -97,6 +97,77 @@ describe('junction lab and signals', () => {
       expect(states).toEqual(new Set(['green', 'yellow', 'red']));
     }
     expect(auditScenario(h.network, baseline.origin, null).filter((i) => i.category === 'signals' && i.severity === 'error')).toHaveLength(0);
+  });
+});
+
+describe('signals 2.0: directions, permitted lefts, heads, coordination', () => {
+  const full = (plan: SignalPlan, a: NonNullable<ReturnType<typeof analyzeJunction>>) => ({
+    plan, conflicts: a.incompatible, movementConflicts: a.movementConflicts, permissivePairs: a.permissivePairs,
+    groupTurns: Object.fromEntries(a.groups.map((g) => [g.id, g.turns])),
+  });
+
+  it('proposes a Webster cycle within 40–120 s and fewer phases with permitted left turns', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const a = analyzeJunction(h.network, baseline.origin, signalisableJunction(h.network))!;
+    const protectedPlan = suggestSignalPlan(h.network, a);
+    const permitted = suggestSignalPlan(h.network, a, { permissiveLeft: true });
+    for (const p of [protectedPlan, permitted]) {
+      expect(p.cycleS).toBeGreaterThanOrEqual(40);
+      expect(p.cycleS).toBeLessThanOrEqual(130);
+      expect(planIssues(p, a)).toEqual([]);
+    }
+    expect(permitted.phases.length).toBeLessThanOrEqual(protectedPlan.phases.length);
+    expect(protectedPlan.design.method).toContain('Webster');
+    // A permitted-left plan is accepted with the movement-level payload…
+    h.commit({ type: 'signal.setPlan', payload: full(permitted, a) });
+    // …and refused once permitted lefts are switched off, if it relies on them.
+    if (planIssues({ ...permitted, permissiveLeft: false }, a).length) {
+      expect(() => h.commit({ type: 'signal.setPlan', payload: full({ ...permitted, permissiveLeft: false }, a) })).toThrow(OperationRejected);
+    }
+  });
+
+  it('switches single turns of a group (arrow heads) and single heads off', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const a = analyzeJunction(h.network, baseline.origin, signalisableJunction(h.network))!;
+    const plan = suggestSignalPlan(h.network, a);
+    const g = a.groups.find((x) => x.turns.length > 1)!;
+    expect(g).toBeTruthy();
+    const [keep, ...drop] = g.turns;
+    const i = plan.phases.findIndex((p) => p.greenGroups.includes(g.id));
+    // Phase i: only the first turn of g; the others get a new phase of their own.
+    const phases: SignalPhase[] = plan.phases.map((p, k) => (k === i ? { ...p, greenMovements: { [g.id]: [keep!] } } : p));
+    phases.push({ id: 'Fx', name: 'Fase frecce', greenGroups: [g.id], greenMovements: { [g.id]: drop }, greenS: 8, yellowS: 3, allRedS: 2, pedestrianRoadIds: [] });
+    const directional: SignalPlan = { ...plan, phases, cycleS: phases.reduce((t, p) => t + p.greenS + p.yellowS + p.allRedS, 0) };
+    expect(planIssues(directional, a)).toEqual([]);
+    h.commit({ type: 'signal.setPlan', payload: full(directional, a) });
+    // Arrow heads appear for the split group.
+    const heads = signalHeads(h.network, baseline.origin).filter((x) => x.groupId === g.id);
+    expect(heads.length).toBe(g.turns.length);
+    expect(heads.every((x) => x.turn && x.kind.startsWith('arrow'))).toBe(true);
+    // The first turn is green in phase i, the dropped ones are red there.
+    const startOf = (k: number) => directional.phases.slice(0, k).reduce((t, p) => t + p.greenS + p.yellowS + p.allRedS, 0) + 1;
+    expect(signalState(directional, g.id, startOf(i), keep)).toBe('green');
+    expect(signalState(directional, g.id, startOf(i), drop[0])).toBe('red');
+    // Removing a single head leaves timing intact.
+    h.commit({ type: 'signal.setHeads', payload: { planId: directional.id, disabledHeads: [heads[0]!.key] } });
+    expect(signalHeads(h.network, baseline.origin).filter((x) => x.groupId === g.id).length).toBe(g.turns.length - 1);
+    expect(h.network.signalPlans[directional.id]!.cycleS).toBe(directional.cycleS);
+  });
+
+  it('coordinates two junctions with a common cycle and travel-time offsets', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const nodes = Object.keys(h.network.nodes).filter((id) => { const x = analyzeJunction(h.network, baseline.origin, id); return x && x.arms.length >= 3 && x.groups.length >= 3; }).slice(0, 2);
+    expect(nodes.length).toBe(2);
+    const plans = nodes.map((n) => { const a = analyzeJunction(h.network, baseline.origin, n)!; const p = suggestSignalPlan(h.network, a); h.commit({ type: 'signal.setPlan', payload: full(p, a) }); return h.network.signalPlans[p.id]!; });
+    const r = coordinateCorridor(h.network, baseline.origin, plans, 40, 90, 'oneway');
+    expect(r.offsets[0]!.offsetS).toBe(0);
+    expect(Math.abs(r.offsets[1]!.offsetS - (r.offsets[1]!.distanceM / (40 / 3.6)) % 90)).toBeLessThanOrEqual(1);
+    h.commit({ type: 'signal.coordinate', payload: { coordination: { id: 'c1', name: 'Corridoio', speedKmh: 40, direction: 'oneway' }, cycleS: 90, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS })) } });
+    const linked = Object.values(h.network.signalPlans).filter((p) => p.coordination?.id === 'c1');
+    expect(linked).toHaveLength(2);
+    expect(linked.every((p) => p.cycleS === 90 && p.phases.reduce((t, ph) => t + ph.greenS + ph.yellowS + ph.allRedS, 0) === 90)).toBe(true);
+    h.commit({ type: 'signal.uncoordinate', payload: { coordinationId: 'c1' } });
+    expect(Object.values(h.network.signalPlans).some((p) => p.coordination)).toBe(false);
   });
 });
 

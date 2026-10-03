@@ -268,6 +268,21 @@ export interface SignalPhase {
   readonly allRedS: number;
   /** Pedestrian crossings (road ids) with walk signal in this phase. */
   readonly pedestrianRoadIds: readonly string[];
+  /**
+   * Directional control (lanterne a frecce): for a green group, only these turns are green in this
+   * phase. Absent for a group = every movement of the group is green.
+   */
+  readonly greenMovements?: Readonly<Record<string, readonly TurnKind[]>>;
+}
+
+/** Corridor coordination (green wave) shared by several plans. */
+export interface SignalCoordination {
+  readonly id: string;
+  readonly name: string;
+  /** Position of this junction along the corridor, 0 = reference (upstream). */
+  readonly order: number;
+  readonly speedKmh: number;
+  readonly direction: 'oneway' | 'twoway';
 }
 
 export interface SignalPlan {
@@ -279,6 +294,11 @@ export interface SignalPlan {
   readonly offsetS: number;
   readonly phases: readonly SignalPhase[];
   readonly actuation?: { readonly minGreenS: number; readonly maxGreenS: number; readonly gapOutS: number; readonly extensionS: number };
+  /** Left turns may proceed on green yielding to opposing traffic (svolta permessa, art. 41 CdS). */
+  readonly permissiveLeft?: boolean;
+  /** Heads not installed: lane group id, `ped:<roadId>` (both sides) or `ped:<roadId>:<0|1>`. */
+  readonly disabledHeads?: readonly string[];
+  readonly coordination?: SignalCoordination;
 }
 
 export type ZoneKind = 'ztl' | 'pedestrian' | 'school' | 'zone30' | 'low_emission' | 'parking' | 'work';

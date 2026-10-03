@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import {
   FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
-  isochrone, route, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
+  coordinateCorridor, groupDemand, isochrone, route, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
 import type { Geometry, LineString, Polygon } from './geojson';
@@ -84,7 +84,15 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
     }
     case 'junction': {
       const a = analyzeJunction(net, o, args.nodeId as string);
-      return a ? { analysis: a, suggested: suggestSignalPlan(net, a) } : null;
+      if (!a) return null;
+      // Webster on the DRIP traffic estimate when one has been computed, else on typical flows per road class.
+      const demand = lastTraffic ? groupDemand(a, lastTraffic.flows, net) : undefined;
+      return { analysis: a, suggested: suggestSignalPlan(net, a, { demand, permissiveLeft: args.permissiveLeft as boolean | undefined }) };
+    }
+    case 'coordinate': {
+      const ids = args.planIds as string[];
+      const plans = ids.map((id) => net!.signalPlans[id]).filter((p): p is NonNullable<typeof p> => !!p);
+      return coordinateCorridor(net, o, plans, args.speedKmh as number, args.cycleS as number, args.direction as 'oneway' | 'twoway');
     }
     case 'traffic': {
       lastTraffic = estimateTraffic(net, baseline, args.params as Parameters<typeof estimateTraffic>[2]);

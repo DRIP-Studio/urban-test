@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import { setDock, useApp } from '../state/store';
 import { Icon } from '../ui/Icon';
 import { declarations, toolByName } from './tools';
+import './signalTools';
 
 type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown }; thoughtSignature?: string };
 interface Content { role: 'user' | 'model'; parts: Part[] }
@@ -35,7 +36,7 @@ function describe(result: unknown): string {
   if (!result || typeof result !== 'object') return '';
   const r = result as Record<string, unknown>;
   const bits: string[] = [];
-  for (const k of ['changed', 'placed', 'applied', 'count', 'selected', 'roads']) if (typeof r[k] === 'number') bits.push(`${r[k]}`);
+  for (const k of ['changed', 'placed', 'applied', 'count', 'selected', 'roads', 'phases', 'junctions']) if (typeof r[k] === 'number') bits.push(`${r[k]}`);
   return bits.length ? `· ${bits.join(' · ')}` : '';
 }
 
@@ -72,11 +73,11 @@ export async function askElios(text: string): Promise<void> {
           if (!tool) throw new Error(`Strumento sconosciuto: ${name}`);
           const result = await tool.run(args ?? {});
           responses.push({ functionResponse: { name, response: { result: result ?? { ok: true } } } });
-          if (tool.kind !== 'read') push({ who: 'action', tool: name, ok: true, kind: tool.kind, detail: `${LABEL[name] ?? name} ${describe(result)}` });
+          if (tool.kind !== 'read') push({ who: 'action', tool: name, ok: true, kind: tool.kind, detail: `${tool.label ?? LABEL[name] ?? name} ${describe(result)}` });
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           responses.push({ functionResponse: { name, response: { error: message } } });
-          push({ who: 'action', tool: name, ok: false, kind: tool?.kind ?? 'write', detail: `${LABEL[name] ?? name}: ${message}` });
+          push({ who: 'action', tool: name, ok: false, kind: tool?.kind ?? 'write', detail: `${tool?.label ?? LABEL[name] ?? name}: ${message}` });
         }
       }
       contents = [...contents, { role: 'user', parts: responses }];

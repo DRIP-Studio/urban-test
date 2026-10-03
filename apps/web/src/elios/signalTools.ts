@@ -1,0 +1,82 @@
+import { LocalFrame, rescalePlan, type CoordinationResult } from '@drip-urban/core';
+import { engine } from '../engine/engine';
+import type { JunctionResult } from '../panels/JunctionLab';
+import { planPayload } from '../panels/SignalStudio';
+import { commit, newId, openDock, select, useApp } from '../state/store';
+import { registerEliosTools } from './tools';
+
+const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'OBJECT', properties, required });
+
+function nodeArg(a: Record<string, unknown>): string {
+  const s = useApp.getState();
+  const id = (a.nodeId as string) || (s.selection?.kind === 'node' ? s.selection.ids[0] : undefined);
+  if (!id || !s.network?.nodes[id]) throw new Error('Seleziona un incrocio sulla mappa o indica nodeId');
+  return id;
+}
+
+registerEliosTools([
+  {
+    name: 'list_signals', kind: 'read', label: 'Letti i semafori',
+    description: 'Elenca gli incroci semaforizzati dello scenario: piano, ciclo, fasi, offset, coordinamento.',
+    run() {
+      const net = useApp.getState().network!;
+      return Object.values(net.signalPlans).map((p) => ({ planId: p.id, nodeId: p.nodeId, name: p.name, cycleS: p.cycleS, offsetS: p.offsetS, phases: p.phases.length, mode: p.mode, coordination: p.coordination?.name ?? null, removedHeads: p.disabledHeads?.length ?? 0,
+        roads: [...new Set(Object.values(net.roads).filter((r) => r.from === p.nodeId || r.to === p.nodeId).map((r) => r.name))] }));
+    },
+  },
+  {
+    name: 'design_signal_plan', kind: 'write', label: 'Piano semaforico progettato (Webster)',
+    description: 'Progetta e applica il piano semaforico di un incrocio con il metodo di Webster (fasi senza conflitti, ciclo ottimo, verdi proporzionali ai flussi, verde pedonale a 1 m/s).',
+    parameters: OBJ({ nodeId: { type: 'STRING', description: 'Id del nodo (predefinito: incrocio selezionato)' }, permissiveLeft: { type: 'BOOLEAN', description: 'Svolte a sinistra permesse (meno fasi)' } }),
+    async run(a) {
+      const nodeId = nodeArg(a);
+      const r = await engine.job<JunctionResult | null>('junction', { nodeId, permissiveLeft: !!a.permissiveLeft });
+      if (!r) throw new Error('Il nodo non è un incrocio veicolare con almeno 3 bracci');
+      const { design, ...proposed } = r.suggested;
+      // Keep what the user already decided on this junction: removed heads and corridor coordination.
+      const existing = useApp.getState().network?.signalPlans[proposed.id];
+      const plan = existing?.coordination
+        ? { ...rescalePlan(proposed, existing.cycleS), offsetS: existing.offsetS, coordination: existing.coordination, mode: existing.mode, disabledHeads: existing.disabledHeads }
+        : { ...proposed, disabledHeads: existing?.disabledHeads };
+      const ok = commit('signal.setPlan', planPayload(plan, r.analysis));
+      if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
+      select({ kind: 'node', ids: [nodeId] });
+      openDock('signals');
+      return { planId: plan.id, phases: plan.phases.length, cycleS: plan.cycleS, criticalRatio: design.criticalRatio, method: design.method };
+    },
+  },
+  {
+    name: 'coordinate_signals', kind: 'write', label: 'Semafori collegati in onda verde',
+    description: 'Collega in onda verde i semafori lungo una strada (o i piani indicati): ciclo comune, offset sul tempo di percorrenza.',
+    parameters: OBJ({
+      roadName: { type: 'STRING', description: 'Strada del corridoio' }, planIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Piani da collegare' },
+      speedKmh: { type: 'NUMBER', description: 'Velocità di progetto (predefinita 40)' }, cycleS: { type: 'NUMBER', description: 'Ciclo comune (predefinito: il maggiore)' },
+      direction: { type: 'STRING', enum: ['oneway', 'twoway'], description: 'Banda in un senso o in entrambi' },
+    }),
+    async run(a) {
+      const { network: net, baseline } = useApp.getState();
+      if (!net || !baseline) throw new Error('Nessun progetto aperto');
+      let plans = ((a.planIds as string[] | undefined) ?? []).map((id) => net.signalPlans[id]!).filter(Boolean);
+      if (!plans.length && a.roadName) {
+        const q = String(a.roadName).toLowerCase();
+        const nodes = new Set(Object.values(net.roads).filter((r) => r.name.toLowerCase().includes(q)).flatMap((r) => [r.from, r.to]));
+        plans = Object.values(net.signalPlans).filter((p) => nodes.has(p.nodeId));
+      }
+      if (plans.length < 2) throw new Error('Servono almeno due incroci semaforizzati sul corridoio');
+      // Order along the corridor's main direction (first principal axis of the junctions).
+      const f = new LocalFrame(baseline.origin);
+      const pts = plans.map((p) => f.toMetric(net.nodes[p.nodeId]!.at));
+      const [ax, ay] = pts.reduce(([sx, sy], q) => [sx + q[0], sy + q[1]], [0, 0]).map((v) => v / pts.length) as [number, number];
+      const far = pts.reduce((best, q) => (Math.hypot(q[0] - ax, q[1] - ay) > Math.hypot(best[0] - ax, best[1] - ay) ? q : best), pts[0]!);
+      const ux = far[0] - ax, uy = far[1] - ay;
+      plans = plans.map((p, i) => ({ p, s: (pts[i]![0] - ax) * ux + (pts[i]![1] - ay) * uy })).sort((x, y) => x.s - y.s).map((x) => x.p);
+      const cycleS = Number(a.cycleS) || Math.max(...plans.map((p) => p.cycleS));
+      const speedKmh = Number(a.speedKmh) || 40;
+      const direction = (a.direction as 'oneway' | 'twoway') || 'oneway';
+      const r = await engine.job<CoordinationResult>('coordinate', { planIds: plans.map((p) => p.id), speedKmh, cycleS, direction });
+      const ok = commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${String(a.roadName ?? '')}`.trim(), speedKmh, direction }, cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS })) });
+      if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
+      return { junctions: plans.length, cycleS, bandwidthS: r.bandwidthS, bandwidthBackS: r.bandwidthBackS, offsets: r.offsets };
+    },
+  },
+]);

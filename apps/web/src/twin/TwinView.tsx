@@ -210,7 +210,7 @@ export function TwinView() {
         const plan = plans[h.planId];
         const t = sim.current?.metrics.t;
         if (!plan || t === undefined) return 'off';
-        return h.groupId.startsWith('ped:') ? pedestrianState(plan, h.groupId.slice(4), t) : signalState(plan, h.groupId, t);
+        return h.groupId.startsWith('ped:') ? pedestrianState(plan, h.groupId.slice(4), t) : signalState(plan, h.groupId, t, h.turn);
       }, h.kind === 'pedestrian');
     }
     const expected = assets.filter((a) => a.state !== 'removed' && (items.has(a.type) || signs.has(a.type))).length;

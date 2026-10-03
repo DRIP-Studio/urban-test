@@ -3,7 +3,7 @@ import type { LngLat } from '@drip-urban/core';
 import { api } from '../api/client';
 import { flyTo, getMap, useMapUi } from '../map/mapStore';
 import { deleteSelection, duplicateSelection, pasteAt } from '../state/actions';
-import { select, setDock, setMode, setTool, useApp } from '../state/store';
+import { select, setDock, setMode, setTool, useApp, commit } from '../state/store';
 import { dismiss, useToasts } from '../state/toasts';
 import { GROUP_LABEL, TOOLS } from '../tools/registry';
 import { pickAt } from '../tools/select';
@@ -116,6 +116,12 @@ export function ContextMenu() {
   useEffect(() => { if (hit) select(hit); }, [hit]);
   if (!req) return null;
   const items: { label: string; icon: string; run: () => void; danger?: boolean }[] = [];
+  const map = getMap();
+  const head = map && map.getLayer('plan-signals-icon') ? map.queryRenderedFeatures([[req.point.x - 8, req.point.y - 8], [req.point.x + 8, req.point.y + 8]], { layers: ['plan-signals-icon'] })[0] : undefined;
+  if (head?.properties.planId) {
+    const plan = useApp.getState().network?.signalPlans[String(head.properties.planId)];
+    if (plan) items.push({ label: 'Rimuovi questa lanterna', icon: 'signal', danger: true, run: () => { commit('signal.setHeads', { planId: plan.id, disabledHeads: [...(plan.disabledHeads ?? []), String(head.properties.key)] }); } });
+  }
   if (hit?.kind === 'node') {
     items.push({ label: 'Apri Junction Lab', icon: 'junction', run: () => { setMode('design'); setDock('junction'); } });
     items.push({ label: 'Signal Studio', icon: 'signal', run: () => { setMode('design'); setDock('signals'); } });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LocalFrame, geom, type JunctionAnalysis, type JunctionControl, type JunctionSpec, type SignalPlan } from '@drip-urban/core';
+import { LocalFrame, geom, type JunctionAnalysis, type JunctionControl, type JunctionSpec, type SignalDesign, type SignalPlan } from '@drip-urban/core';
 import { engine } from '../engine/engine';
 import { fc, type Feature } from '../engine/geojson';
 import { setSource, toggleLayer } from '../map/mapStore';
@@ -17,7 +17,7 @@ export const SWEPT_VEHICLES = [
   { id: 'emergency', label: 'Autopompa VVF', width: 2.5, wheelbase: 4.4, front: 1.5 },
 ] as const;
 
-export interface JunctionResult { analysis: JunctionAnalysis; suggested: SignalPlan }
+export interface JunctionResult { analysis: JunctionAnalysis; suggested: SignalPlan & { design: SignalDesign } }
 
 /** Shared loader: Junction Lab and Signal Studio analyse the selected node through the worker. */
 export function useJunctionAnalysis(): { nodeId: string | null; data: JunctionResult | null; loading: boolean; error: string | null } {
