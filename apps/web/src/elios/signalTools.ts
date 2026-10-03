@@ -3,7 +3,7 @@ import { engine } from '../engine/engine';
 import type { JunctionResult } from '../panels/JunctionLab';
 import { planPayload } from '../panels/SignalStudio';
 import { commit, newId, openDock, select, useApp } from '../state/store';
-import { registerEliosTools } from './tools';
+import { matchRoads, registerEliosTools } from './tools';
 
 const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'OBJECT', properties, required });
 
@@ -58,8 +58,7 @@ registerEliosTools([
       if (!net || !baseline) throw new Error('Nessun progetto aperto');
       let plans = ((a.planIds as string[] | undefined) ?? []).map((id) => net.signalPlans[id]!).filter(Boolean);
       if (!plans.length && a.roadName) {
-        const q = String(a.roadName).toLowerCase();
-        const nodes = new Set(Object.values(net.roads).filter((r) => r.name.toLowerCase().includes(q)).flatMap((r) => [r.from, r.to]));
+        const nodes = new Set(matchRoads(net, String(a.roadName)).flatMap((r) => [r.from, r.to]));
         plans = Object.values(net.signalPlans).filter((p) => nodes.has(p.nodeId));
       }
       if (plans.length < 2) throw new Error('Servono almeno due incroci semaforizzati sul corridoio');

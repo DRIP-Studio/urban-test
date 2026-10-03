@@ -1,8 +1,8 @@
 import type { Route, TravelMode } from '@drip-urban/core';
 import { setSource } from '../map/mapStore';
 import { setTool } from '../state/store';
-import { usePicks } from '../tools/picks';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat } from '../ui/controls';
+import { drawRoutePins, usePicks } from '../tools/picks';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, Toggle } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
 const MODES: { value: TravelMode; label: string }[] = [
@@ -19,7 +19,7 @@ function Steps({ r }: { r: Route }) {
 }
 
 export function Navigator() {
-  const { mode, departure, from, to, result, routing } = usePicks();
+  const { mode, departure, from, to, via, addingVia, vehicle, result, routing } = usePicks();
   const set = usePicks.setState;
   const rerun = () => void usePicks.getState().runRoute();
   const t = result?.today, p = result?.project;
@@ -31,13 +31,28 @@ export function Navigator() {
           <Field label="Giorno"><Select value={String(departure.day)} ariaLabel="Giorno" options={DAYS.map((d, i) => ({ value: String(i), label: d }))} onChange={(v) => { set({ departure: { ...departure, day: Number(v) } }); rerun(); }} /></Field>
           <Field label="Partenza"><NumberField value={departure.minutes / 60} unit="h" min={0} max={23.75} step={0.25} ariaLabel="Ora di partenza" onCommit={(v) => { set({ departure: { ...departure, minutes: Math.round(v * 60) } }); rerun(); }} /></Field>
         </div>
+        {mode === 'truck' ? (
+          <div className="grid-2">
+            <Field label="Massa a pieno carico"><NumberField value={vehicle.weightT} unit="t" min={3.5} max={44} step={0.5} decimals={1} ariaLabel="Massa" onCommit={(v) => { set({ vehicle: { ...vehicle, weightT: v } }); rerun(); }} /></Field>
+            <Field label="Altezza"><NumberField value={vehicle.heightM} unit="m" min={2} max={4.5} step={0.1} decimals={2} ariaLabel="Altezza" onCommit={(v) => { set({ vehicle: { ...vehicle, heightM: v } }); rerun(); }} /></Field>
+            <Field label="Larghezza"><NumberField value={vehicle.widthM} unit="m" min={1.8} max={3} step={0.05} decimals={2} ariaLabel="Larghezza" onCommit={(v) => { set({ vehicle: { ...vehicle, widthM: v } }); rerun(); }} /></Field>
+            <Field label="Lunghezza"><NumberField value={vehicle.lengthM} unit="m" min={5} max={18.75} step={0.5} decimals={1} ariaLabel="Lunghezza" onCommit={(v) => { set({ vehicle: { ...vehicle, lengthM: v } }); rerun(); }} /></Field>
+            <Field label="Massa per asse"><NumberField value={vehicle.axleLoadT} unit="t" min={2} max={13} step={0.5} decimals={1} ariaLabel="Massa per asse" onCommit={(v) => { set({ vehicle: { ...vehicle, axleLoadT: v } }); rerun(); }} /></Field>
+            <Field label="Merci pericolose"><Toggle checked={vehicle.hazmat} label="ADR" onChange={(v) => { set({ vehicle: { ...vehicle, hazmat: v } }); rerun(); }} /></Field>
+          </div>
+        ) : null}
         <div className="od">
           <div><span className="pin">A</span>{from ? `${from[1].toFixed(5)}, ${from[0].toFixed(5)}` : 'Clic sulla mappa per l\'origine'}</div>
+          {via.map((v, i) => (
+            <div key={i}><span className="pin is-via">{i + 1}</span>{`${v[1].toFixed(5)}, ${v[0].toFixed(5)}`}
+              <button type="button" className="icon-btn" aria-label={`Togli tappa ${i + 1}`} onClick={() => { set({ via: via.filter((_, j) => j !== i) }); drawRoutePins(); rerun(); }}><Icon name="close" size={12} /></button></div>
+          ))}
           <div><span className="pin">B</span>{to ? `${to[1].toFixed(5)}, ${to[0].toFixed(5)}` : from ? 'Clic per la destinazione' : '—'}</div>
         </div>
         <div className="inspector-actions">
           <Button icon="route" onClick={() => setTool('route')}>Scegli punti</Button>
-          <Button variant="ghost" onClick={() => { set({ from: null, to: null, result: null }); setSource('route', null); setSource('compare', null); setSource('draft', null); }}>Azzera</Button>
+          <Button icon="waypoint" disabled={!from || !to || via.length >= 8} variant={addingVia ? 'primary' : 'default'} onClick={() => { set({ addingVia: !addingVia }); setTool('route'); }}>{addingVia ? 'Clic sulla tappa…' : 'Aggiungi tappa'}</Button>
+          <Button variant="ghost" onClick={() => { set({ from: null, to: null, via: [], addingVia: false, result: null }); setSource('route', null); setSource('compare', null); setSource('draft', null); }}>Azzera</Button>
         </div>
       </Section>
       {routing ? <p className="muted">Calcolo percorso…</p> : null}

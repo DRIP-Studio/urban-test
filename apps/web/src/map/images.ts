@@ -60,6 +60,27 @@ function signalImage(kind: string, state: string): ImageData {
   return g.getImageData(0, 0, W * s, H * s);
 }
 
+/** LED variable-message panel of a ZTL gate: amber dot-matrix text on black, red when active. */
+function ledImage(state: string): ImageData {
+  const W = 120, H = 64, s = 2;
+  const c = document.createElement('canvas');
+  c.width = W * s; c.height = H * s;
+  const g = c.getContext('2d')!;
+  g.scale(s, s);
+  g.fillStyle = '#26282b'; g.beginPath(); g.roundRect(1, 1, W - 2, H - 2, 6); g.fill();
+  g.fillStyle = '#050505'; g.beginPath(); g.roundRect(6, 6, W - 12, H - 12, 3); g.fill();
+  const on = state === 'on';
+  const col = on ? '#ff3b2f' : '#3fdc6a';
+  g.shadowColor = col; g.shadowBlur = 6; g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '800 20px "Ginto", system-ui, sans-serif'; g.fillText('ZTL', W / 2, 24);
+  g.font = '700 11px "Ginto", system-ui, sans-serif'; g.fillText(on ? 'ATTIVA' : 'NON ATTIVA', W / 2, 44);
+  g.shadowBlur = 0;
+  // Dot-matrix grain.
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let y = 7; y < H - 7; y += 2) g.fillRect(7, y, W - 14, 0.6);
+  return g.getImageData(0, 0, W * s, H * s);
+}
+
 /**
  * Generates signal heads and rasterizes sign SVGs on demand. MapLibre 6 awaits this resolver before
  * drawing, so icons appear on the first frame (a `styleimagemissing` listener can no longer do that).
@@ -76,6 +97,10 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
       const m = byId.get(mid);
       const img = m ? patternImage(m, Number(z)) : null;
       if (img) map.addImage(id, img, { pixelRatio: 2 });
+      return;
+    }
+    if (id.startsWith('led:')) {
+      map.addImage(id, ledImage(id.slice(4)), { pixelRatio: 2 });
       return;
     }
     if (id.startsWith('sig:')) {

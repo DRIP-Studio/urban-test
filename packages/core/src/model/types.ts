@@ -48,6 +48,10 @@ export interface Lane {
   readonly speedKmh?: number;
   readonly priority?: 'normal' | 'transit' | 'emergency';
   readonly restriction?: 'none' | 'bus_only' | 'bike_only' | 'closed';
+  /** Preferential lane (corsia preferenziale, art. 7 CdS): also open to taxis and authorised vehicles. */
+  readonly taxiAllowed?: boolean;
+  /** When the restriction applies (e.g. bus lane 7:00–20:00); outside it the lane is general traffic. Absent = always. */
+  readonly restrictionSchedule?: readonly TimeWindow[];
 }
 
 export type CrossSectionElementKind =
@@ -75,6 +79,32 @@ export interface RoadNode {
   readonly at: LngLat;
 }
 
+/** Weekly time window, local time. days: 0 = Monday … 6 = Sunday (as Zone.schedule and RoutingContext). */
+export interface TimeWindow { readonly days: readonly number[]; readonly from: string; readonly to: string }
+
+/**
+ * Traffic restrictions on a road (art. 6–7 CdS): heavy-goods-vehicle bans, mass/size limits, closures.
+ * Absent fields = no restriction. OSM tags (hgv, maxweight, maxheight, motor_vehicle…) are read when
+ * the road has no authored restrictions.
+ */
+export interface RoadRestrictions {
+  /** Heavy goods vehicles (> 3,5 t): no = ban, destination = only to reach a destination on the road, delivery = loading only. */
+  readonly hgv?: 'no' | 'destination' | 'delivery';
+  /** All motor vehicles (divieto di transito generale). */
+  readonly motorVehicle?: 'no' | 'destination';
+  readonly maxWeightT?: number;
+  readonly maxAxleLoadT?: number;
+  readonly maxHeightM?: number;
+  readonly maxWidthM?: number;
+  readonly maxLengthM?: number;
+  /** Dangerous goods (ADR) banned. */
+  readonly hazmat?: boolean;
+  /** When the hgv / motorVehicle ban applies; absent = always. */
+  readonly schedule?: readonly TimeWindow[];
+  /** Free text: exceptions (residenti, carico/scarico 6–10, mezzi d'opera…). */
+  readonly note?: string;
+}
+
 export interface Road {
   readonly id: string;
   readonly from: string;
@@ -88,6 +118,8 @@ export interface Road {
   readonly lanes: readonly Lane[];
   readonly section: CrossSection;
   readonly surface?: string;
+  /** Authored restrictions (project); when absent, OSM tags apply. */
+  readonly restrictions?: RoadRestrictions;
   /** Provenance per attribute name; `geometry` and `width` are always present. */
   readonly provenance: Readonly<Record<string, Provenance>>;
   readonly tags?: Readonly<Record<string, string>>;
@@ -310,9 +342,15 @@ export interface Zone {
   readonly polygon: readonly LngLat[];
   /** Vehicle classes allowed inside (ZTL / pedestrian). */
   readonly allowedModes: readonly TravelMode[];
-  /** Weekly schedule; absent = always active. Hours are local (Europe/Rome). */
-  readonly schedule?: readonly { readonly days: readonly number[]; readonly from: string; readonly to: string }[];
+  /** Weekly schedule; absent = always active. Hours are local (Europe/Rome), days 0 = Monday. */
+  readonly schedule?: readonly TimeWindow[];
   readonly speedKmh?: number;
+  /** Permit categories admitted while active (residenti, disabili, taxi, NCC, elettrici, car sharing…). */
+  readonly permits?: readonly string[];
+  /** Loading/unloading windows: goods vehicles admitted while the zone is active. */
+  readonly deliveryWindows?: readonly TimeWindow[];
+  /** Short text for the LED panels at the gates when active / not active. */
+  readonly ledText?: { readonly on: string; readonly off: string };
 }
 
 export type AreaKind =

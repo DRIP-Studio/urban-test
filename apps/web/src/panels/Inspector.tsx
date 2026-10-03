@@ -1,4 +1,4 @@
-import { LocalFrame, geom, layoutSection, type Area, type Oneway, type Road, type Zone, type ZoneKind } from '@drip-urban/core';
+import { LocalFrame, geom, layoutSection, type Area, type Oneway, type Road } from '@drip-urban/core';
 import { commit, setDock, setTool, useApp } from '../state/store';
 import { deleteSelection, duplicateSelection } from '../state/actions';
 import { flyTo } from '../map/mapStore';
@@ -6,6 +6,7 @@ import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Selec
 import { Icon } from '../ui/Icon';
 import { ToolSettings } from './ToolSettings';
 import { RoundaboutInspector } from './RoundaboutPanel';
+import { LanesSection, RestrictionsSection, ZoneInspector } from './RulesPanels';
 
 const ROAD_CLASS: Record<string, string> = {
   trunk: 'Strada principale extraurbana', trunk_link: 'Rampa', primary: 'Primaria', secondary: 'Secondaria', tertiary: 'Interquartiere', residential: 'Locale',
@@ -43,6 +44,8 @@ function RoadInspector({ road }: { road: Road }) {
           {lay.elements.map((e) => <span key={e.el.id} className={`ms ms-${e.el.kind}`} style={{ flexGrow: e.el.widthM }} title={`${e.el.kind} · ${e.el.widthM} m`} />)}
         </div>
       </Section>
+      <LanesSection road={road} />
+      <RestrictionsSection roads={[road]} />
       <Section title="Provenienza dei dati" defaultOpen={false}>
         <ul className="prov-list">
           {Object.entries(road.provenance).map(([k, p]) => <li key={k}><span>{k}</span><ProvBadge kind={p.kind} /><span className="muted">{p.source}</span></li>)}
@@ -137,43 +140,18 @@ function AreaInspector({ area }: { area: Area }) {
   );
 }
 
-const ZONE_KINDS: { value: ZoneKind; label: string }[] = [
-  { value: 'ztl', label: 'ZTL' }, { value: 'pedestrian', label: 'Area pedonale' }, { value: 'school', label: 'Strada scolastica' }, { value: 'zone30', label: 'Zona 30' },
-  { value: 'low_emission', label: 'Basse emissioni' }, { value: 'parking', label: 'Zona sosta' }, { value: 'work', label: 'Cantiere / chiusura' },
-];
-const MODE_LABEL: Record<string, string> = { car: 'Auto', truck: 'Mezzi pesanti', bus: 'Bus', bike: 'Bici', walk: 'Pedoni', emergency: 'Emergenza' };
-const DAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
-
-function ZoneInspector({ zone }: { zone: Zone }) {
-  const set = (changes: Partial<Zone>) => commit('zone.set', { zone: { ...zone, ...changes } });
-  const sch = zone.schedule?.[0];
+function MultiRoadInspector({ ids }: { ids: readonly string[] }) {
+  const net = useApp((s) => s.network)!;
+  const roads = ids.map((id) => net.roads[id]).filter((r): r is Road => !!r);
+  const speeds = [...new Set(roads.map((r) => r.speedKmh))];
   return (
     <>
-      <Section title={zone.name}>
-        <Field label="Nome"><TextField value={zone.name} ariaLabel="Nome zona" onCommit={(v) => set({ name: v })} /></Field>
-        <Field label="Tipo"><Select value={zone.kind} ariaLabel="Tipo zona" options={ZONE_KINDS} onChange={(v) => set({ kind: v })} /></Field>
-        <Field label="Veicoli ammessi">
-          <div className="chips">
-            {Object.entries(MODE_LABEL).map(([m, l]) => (
-              <button key={m} type="button" className={`chip ${zone.allowedModes.includes(m as never) ? 'is-on' : ''}`} aria-pressed={zone.allowedModes.includes(m as never)}
-                onClick={() => set({ allowedModes: zone.allowedModes.includes(m as never) ? zone.allowedModes.filter((x) => x !== m) : [...zone.allowedModes, m as never] })}>{l}</button>
-            ))}
-          </div>
-        </Field>
-        <Toggle label="Attiva solo in alcuni orari" checked={!!sch} onChange={(v) => set({ schedule: v ? [{ days: [0, 1, 2, 3, 4, 5, 6], from: '20:00', to: '02:00' }] : undefined })} />
-        {sch ? (
-          <>
-            <div className="chips">{DAYS.map((d, i) => <button key={d} type="button" className={`chip ${sch.days.includes(i) ? 'is-on' : ''}`} onClick={() => set({ schedule: [{ ...sch, days: sch.days.includes(i) ? sch.days.filter((x) => x !== i) : [...sch.days, i].sort() }] })}>{d}</button>)}</div>
-            <div className="grid-2">
-              <Field label="Dalle"><TextField value={sch.from} ariaLabel="Dalle" onCommit={(v) => /^\d{2}:\d{2}$/.test(v) && set({ schedule: [{ ...sch, from: v }] })} /></Field>
-              <Field label="Alle"><TextField value={sch.to} ariaLabel="Alle" onCommit={(v) => /^\d{2}:\d{2}$/.test(v) && set({ schedule: [{ ...sch, to: v }] })} /></Field>
-            </div>
-          </>
-        ) : null}
-        {zone.kind === 'zone30' || zone.kind === 'school' || zone.kind === 'low_emission' ? <Field label="Limite"><NumberField value={zone.speedKmh ?? 30} unit="km/h" min={10} max={50} step={5} decimals={0} ariaLabel="Limite" onCommit={(v) => set({ speedKmh: v })} /></Field> : null}
-        <p className="muted">La zona entra nel navigatore, nella stima del traffico e nella simulazione dello scenario.</p>
+      <Section title={`${roads.length} strade selezionate`}>
+        <p className="muted">{[...new Set(roads.map((r) => r.name).filter(Boolean))].slice(0, 4).join(', ')}</p>
+        <Field label="Velocità per tutte"><NumberField value={speeds.length === 1 ? speeds[0]! : Number.NaN} unit="km/h" min={5} max={130} step={5} decimals={0} ariaLabel="Velocità" onCommit={(v) => commit('batch', { label: `Limite ${v} km/h su ${roads.length} strade`, ops: roads.map((r) => ({ type: 'road.update', payload: { roadId: r.id, changes: { speedKmh: v } } })) })} /></Field>
       </Section>
-      <div className="inspector-actions"><Button icon="trash" variant="danger" onClick={deleteSelection}>Elimina zona</Button></div>
+      <RestrictionsSection roads={roads} />
+      <div className="inspector-actions"><Button icon="trash" variant="danger" onClick={deleteSelection}>Elimina</Button></div>
     </>
   );
 }
@@ -207,7 +185,7 @@ export function Inspector() {
   // Placement tools that work on a picked junction keep their own panel while active.
   if (!sel || tool === 'roundabout') return <ToolSettings />;
   const id = sel.ids[0]!;
-  if (sel.kind === 'road' && net.roads[id]) return sel.ids.length > 1 ? <Section title={`${sel.ids.length} strade selezionate`}><Button icon="trash" variant="danger" onClick={deleteSelection}>Elimina</Button></Section> : <RoadInspector road={net.roads[id]!} />;
+  if (sel.kind === 'road' && net.roads[id]) return sel.ids.length > 1 ? <MultiRoadInspector ids={sel.ids} /> : <RoadInspector road={net.roads[id]!} />;
   if (sel.kind === 'asset') return <AssetInspector ids={sel.ids} />;
   if (sel.kind === 'area' && net.areas[id]) return <AreaInspector area={net.areas[id]!} />;
   if (sel.kind === 'zone' && net.zones[id]) return <ZoneInspector zone={net.zones[id]!} />;

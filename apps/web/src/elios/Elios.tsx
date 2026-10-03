@@ -5,6 +5,7 @@ import { setDock, useApp } from '../state/store';
 import { Icon } from '../ui/Icon';
 import { declarations, toolByName } from './tools';
 import './signalTools';
+import './rulesTools';
 
 type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown }; thoughtSignature?: string };
 interface Content { role: 'user' | 'model'; parts: Part[] }

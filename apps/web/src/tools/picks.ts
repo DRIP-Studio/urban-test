@@ -20,6 +20,12 @@ interface PicksState {
   departure: { day: number; minutes: number };
   from: LngLat | null;
   to: LngLat | null;
+  /** Intermediate stops, in order. */
+  via: LngLat[];
+  /** Next click adds a stop instead of restarting. */
+  addingVia: boolean;
+  /** Truck profile used when mode = truck (or any vehicle limits). */
+  vehicle: { weightT: number; heightM: number; widthM: number; lengthM: number; axleLoadT: number; hazmat: boolean };
   result: { today: Route; project: Route } | null;
   routing: boolean;
   isoAt: LngLat | null;
@@ -40,21 +46,24 @@ interface PicksState {
 const scenarioId = () => useApp.getState().scenario?.id ?? 'baseline';
 
 export const usePicks = create<PicksState>((set, get) => ({
-  mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, result: null, routing: false,
+  mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, via: [], addingVia: false, result: null, routing: false,
+  vehicle: { weightT: 18, heightM: 3.8, widthM: 2.55, lengthM: 10, axleLoadT: 8, hazmat: false },
   isoAt: null, isoMode: 'walk', isoMinutes: null, transit: {}, selectedRouteId: null,
 
   pickRoutePoint(ll) {
-    const { from, to } = get();
-    if (!from || (from && to)) set({ from: ll, to: null, result: null });
+    const { from, to, addingVia, via } = get();
+    if (addingVia && from && to) { set({ via: [...via, ll], addingVia: false }); void get().runRoute(); }
+    else if (!from || (from && to)) set({ from: ll, to: null, via: [], result: null });
     else { set({ to: ll }); void get().runRoute(); }
     drawRoutePins();
   },
   async runRoute() {
-    const { from, to, mode, departure } = get();
+    const { from, to, via, mode, departure, vehicle } = get();
     if (!from || !to) return;
     set({ routing: true });
     try {
-      const r = await engine.job<{ today: Route; project: Route }>('compareRoute', { from, to, ctx: { mode, day: departure.day, minutes: departure.minutes } });
+      const veh = mode === 'truck' ? vehicle : undefined;
+      const r = await engine.job<{ today: Route; project: Route }>('compareRoute', { from, to, via, ctx: { mode, day: departure.day, minutes: departure.minutes, ...(veh ? { vehicle: veh } : {}) } });
       set({ result: r });
       setSource('route', r.project.found ? fc([{ type: 'Feature', geometry: { type: 'LineString', coordinates: r.project.line.map((p) => [...p]) }, properties: {} }]) : null);
       setSource('compare', r.today.found ? fc([{ type: 'Feature', geometry: { type: 'LineString', coordinates: r.today.line.map((p) => [...p]) }, properties: {} }]) : null);
@@ -121,9 +130,9 @@ export const usePicks = create<PicksState>((set, get) => ({
   },
 }));
 
-function drawRoutePins(): void {
-  const { from, to } = usePicks.getState();
-  const pts = [from && { at: from, label: 'A' }, to && { at: to, label: 'B' }].filter(Boolean) as { at: LngLat; label: string }[];
+export function drawRoutePins(): void {
+  const { from, to, via } = usePicks.getState();
+  const pts = [from && { at: from, label: 'A' }, ...via.map((v, i) => ({ at: v, label: String(i + 1) })), to && { at: to, label: 'B' }].filter(Boolean) as { at: LngLat; label: string }[];
   setSource('draft', fc(pts.map((p) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [...p.at] }, properties: { snap: true, label: p.label } }))));
 }
 

@@ -162,3 +162,84 @@ export function project(pts: readonly V[], p: V): { d: number; along: number; at
   }
   return best;
 }
+
+/**
+ * Outline of the area within `radius` of a set of polylines (metric), as one simple ring: the cells of
+ * a grid (step ≈ radius / 3) covered by the buffer are traced along their outer boundary and simplified.
+ * Unlike a convex hull it follows the streets (a ZTL "around Via Roma" stays a corridor).
+ */
+export function bufferOutline(lines: readonly (readonly V[])[], radius: number): V[] {
+  const step = Math.max(1, radius / 3);
+  const pts = lines.flat();
+  if (!pts.length) return [];
+  const minX = Math.min(...pts.map((p) => p[0])) - radius - step, minY = Math.min(...pts.map((p) => p[1])) - radius - step;
+  const maxX = Math.max(...pts.map((p) => p[0])) + radius + step, maxY = Math.max(...pts.map((p) => p[1])) + radius + step;
+  const W = Math.ceil((maxX - minX) / step), H = Math.ceil((maxY - minY) / step);
+  if (W * H > 4_000_000) return [];
+  const grid = new Uint8Array(W * H);
+  const r2 = radius * radius;
+  for (const line of lines) for (let i = 0; i < line.length; i++) {
+    const a = line[i]!, b = line[Math.min(i + 1, line.length - 1)]!;
+    const x0 = Math.floor((Math.min(a[0], b[0]) - radius - minX) / step), x1 = Math.ceil((Math.max(a[0], b[0]) + radius - minX) / step);
+    const y0 = Math.floor((Math.min(a[1], b[1]) - radius - minY) / step), y1 = Math.ceil((Math.max(a[1], b[1]) + radius - minY) / step);
+    const d = sub(b, a), L2 = d[0] * d[0] + d[1] * d[1];
+    for (let y = Math.max(0, y0); y <= Math.min(H - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(W - 1, x1); x++) {
+      const c: V = [minX + (x + 0.5) * step, minY + (y + 0.5) * step];
+      const t = L2 > 0 ? Math.max(0, Math.min(1, ((c[0] - a[0]) * d[0] + (c[1] - a[1]) * d[1]) / L2)) : 0;
+      const q: V = [a[0] + d[0] * t - c[0], a[1] + d[1] * t - c[1]];
+      if (q[0] * q[0] + q[1] * q[1] <= r2) grid[y * W + x] = 1;
+    }
+  }
+  const at = (x: number, y: number) => (x >= 0 && y >= 0 && x < W && y < H ? grid[y * W + x]! : 0);
+  // Directed boundary edges (filled cell on the left), keyed by start corner.
+  const next = new Map<number, number[]>();
+  const key = (x: number, y: number) => y * (W + 1) + x;
+  const addEdge = (x0: number, y0: number, x1: number, y1: number) => { const k = key(x0, y0); (next.get(k) ?? next.set(k, []).get(k)!).push(key(x1, y1)); };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!at(x, y)) continue;
+    if (!at(x, y - 1)) addEdge(x, y, x + 1, y);
+    if (!at(x + 1, y)) addEdge(x + 1, y, x + 1, y + 1);
+    if (!at(x, y + 1)) addEdge(x + 1, y + 1, x, y + 1);
+    if (!at(x - 1, y)) addEdge(x, y + 1, x, y);
+  }
+  // Trace every loop, keep the longest (outer boundary of the largest component).
+  let best: number[] = [];
+  const used = new Set<string>();
+  for (const [start, outs] of next) for (const first of outs) {
+    if (used.has(`${start}>${first}`)) continue;
+    const loop = [start];
+    let prev = start, cur = first;
+    used.add(`${start}>${first}`);
+    while (cur !== start && loop.length < 1e6) {
+      loop.push(cur);
+      const cands = (next.get(cur) ?? []).filter((n) => !used.has(`${cur}>${n}`));
+      if (!cands.length) break;
+      const nx = cands[0]!;
+      used.add(`${cur}>${nx}`);
+      prev = cur; cur = nx;
+    }
+    void prev;
+    if (loop.length > best.length) best = loop;
+  }
+  const ring = best.map((k): V => [minX + (k % (W + 1)) * step, minY + Math.floor(k / (W + 1)) * step]);
+  return simplifyRing(ring, step * 0.8);
+}
+
+/** Douglas–Peucker on a closed ring. */
+export function simplifyRing(ring: readonly V[], tol: number): V[] {
+  if (ring.length < 5) return [...ring];
+  const dp = (pts: readonly V[]): V[] => {
+    if (pts.length < 3) return [...pts];
+    const a = pts[0]!, b = pts[pts.length - 1]!;
+    let idx = 0, dmax = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d = project([a, b], pts[i]!).d;
+      if (d > dmax) { dmax = d; idx = i; }
+    }
+    if (dmax <= tol) return [a, b];
+    return [...dp(pts.slice(0, idx + 1)).slice(0, -1), ...dp(pts.slice(idx))];
+  };
+  const half = Math.floor(ring.length / 2);
+  const out = [...dp(ring.slice(0, half + 1)).slice(0, -1), ...dp([...ring.slice(half), ring[0]!]).slice(0, -1)];
+  return out.length >= 3 ? out : [...ring];
+}

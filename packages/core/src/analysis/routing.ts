@@ -141,3 +141,31 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
   return { found: true, distanceM, durationS: best, line, roadIds: [...new Set(pieces.map((p) => p.roadId))], steps, warnings, mode: ctx.mode };
 }
 
+
+/**
+ * Route through several points in order (origin, stops…, destination): one graph, one leg per pair.
+ * Steps of intermediate arrivals become "Tappa" steps; the route is found only if every leg is.
+ */
+export function routeVia(net: Network, frameOrigin: LngLat, points: readonly LngLat[], ctx: RoutingContext): Route & { legs: readonly { distanceM: number; durationS: number; found: boolean }[] } {
+  const frame = new LocalFrame(frameOrigin);
+  const g = buildGraph(net, frame, ctx);
+  const legs = points.slice(1).map((to, i) => route(net, frameOrigin, points[i]!, to, ctx, g));
+  const found = legs.every((l) => l.found);
+  const line: LngLat[] = [];
+  const steps: RouteStep[] = [];
+  legs.forEach((l, i) => {
+    for (const q of l.line) if (!line.length || line[line.length - 1]![0] !== q[0] || line[line.length - 1]![1] !== q[1]) line.push(q);
+    for (const s of l.steps) {
+      if (s.maneuver === 'arrive' && i < legs.length - 1) steps.push({ ...s, instruction: `Tappa ${i + 1} raggiunta` });
+      else if (s.maneuver === 'depart' && i > 0) steps.push({ ...s, maneuver: 'straight', instruction: `Riparti su ${s.roadName}` });
+      else steps.push(s);
+    }
+  });
+  return {
+    found, mode: ctx.mode, line, steps,
+    distanceM: legs.reduce((t, l) => t + l.distanceM, 0), durationS: legs.reduce((t, l) => t + l.durationS, 0),
+    roadIds: [...new Set(legs.flatMap((l) => l.roadIds))],
+    warnings: [...new Set(legs.flatMap((l, i) => l.warnings.map((w) => (legs.length > 1 && !l.found ? `Tratto ${i + 1}: ${w}` : w))))],
+    legs: legs.map((l) => ({ distanceM: l.distanceM, durationS: l.durationS, found: l.found })),
+  };
+}

@@ -1,6 +1,7 @@
 import { LocalFrame } from '../geo/projection';
 import { lengthOf, project, type V } from '../geo/polyline';
-import type { LngLat, Network, Road, TravelMode, Zone } from '../model/types';
+import type { Lane, LngLat, Network, Road, TravelMode, Zone } from '../model/types';
+import { checkRestrictions, windowActive, type VehicleSpec } from './restrictions';
 import { isPedestrianRoad } from '../physical/section';
 
 export interface RoutingContext {
@@ -8,7 +9,7 @@ export interface RoutingContext {
   /** Local time used for zone schedules (ZTL) — day 0 = Monday. */
   readonly day: number;
   readonly minutes: number;
-  readonly vehicle?: { readonly weightT?: number; readonly heightM?: number; readonly lengthM?: number };
+  readonly vehicle?: VehicleSpec;
 }
 
 export interface GraphEdge {
@@ -97,15 +98,15 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
     let closedReason: string | null = null;
     for (const z of activeZones) {
       if (!pointInPolygon(mid, z.polygon)) continue;
-      if ((z.kind === 'ztl' || z.kind === 'pedestrian' || z.kind === 'school') && vehicle && !z.allowedModes.includes(ctx.mode)) closedReason = `${z.name} (${z.kind.toUpperCase()}) attiva`;
+      const delivering = ctx.mode === 'truck' && windowActive(z.deliveryWindows ?? [], ctx.day, ctx.minutes) && !!z.deliveryWindows?.length;
+      if ((z.kind === 'ztl' || z.kind === 'pedestrian' || z.kind === 'school') && vehicle && !z.allowedModes.includes(ctx.mode) && !delivering) closedReason = `${z.name} (${z.kind.toUpperCase()}) attiva`;
       if (z.kind === 'work' && ctx.mode !== 'walk' && !z.allowedModes.includes(ctx.mode)) closedReason = `Cantiere ${z.name}`;
       if (z.speedKmh && vehicle) speed = Math.min(speed, z.speedKmh);
       if (z.kind === 'zone30' && vehicle) speed = Math.min(speed, 30);
     }
-    const t = road.tags ?? {};
-    const mw = parseFloat(t.maxweight ?? ''), mh = parseFloat(t.maxheight ?? '');
-    if (ctx.vehicle?.weightT && mw > 0 && ctx.vehicle.weightT > mw) closedReason = `Limite di massa ${mw} t`;
-    if (ctx.vehicle?.heightM && mh > 0 && ctx.vehicle.heightM > mh) closedReason = `Limite di altezza ${mh} m`;
+    // Road restrictions (authored or OSM): HGV bans, mass/size limits, closures, with time windows.
+    const rc = vehicle ? checkRestrictions(road, ctx.mode, ctx.vehicle, ctx.day, ctx.minutes) : { blocked: null, penalty: 1 };
+    if (rc.blocked) closedReason = rc.blocked;
     if (closedReason) { blocked.set(road.id, closedReason); continue; }
 
     const length = roadLength(road, frame);
@@ -116,7 +117,17 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
         if (road.oneway === 'forward' && !fwd) continue;
         if (road.oneway === 'backward' && fwd) continue;
         const lanes = lanesFor(fwd);
-        const usable = lanes.filter((l) => l.restriction !== 'closed' && (l.modes.includes(ctx.mode) || (ctx.mode === 'emergency')) && !(l.restriction === 'bus_only' && ctx.mode !== 'bus' && ctx.mode !== 'emergency'));
+        // Trucks use general traffic lanes (lane modes list 'car'); road-level bans are checked above.
+        const allows = (l: Lane) => l.modes.includes(ctx.mode) || ctx.mode === 'emergency' || (ctx.mode === 'truck' && l.modes.includes('car'));
+        // A preferential lane outside its time window is a general traffic lane.
+        const restricted = (l: Lane) => l.restriction && l.restriction !== 'none' && windowActive(l.restrictionSchedule, ctx.day, ctx.minutes);
+        const usable = lanes.filter((l) => {
+          if (!restricted(l)) return l.restriction === 'closed' ? false : allows(l) || (l.restriction === 'bus_only' && ctx.mode !== 'walk' && ctx.mode !== 'bike');
+          if (l.restriction === 'closed') return false;
+          if (l.restriction === 'bus_only') return ctx.mode === 'bus' || ctx.mode === 'emergency';
+          if (l.restriction === 'bike_only') return ctx.mode === 'bike';
+          return allows(l);
+        });
         if (!usable.length && !(pedestrianRoad && ctx.mode === 'bike')) continue;
       }
       dirs.push(fwd);
@@ -127,7 +138,7 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
       const lanes = Math.max(1, road.lanes.filter((l) => (fwd ? l.direction !== 'backward' : l.direction !== 'forward')).length);
       const e: GraphEdge = {
         id: edges.length, roadId: road.id, forward: fwd, from, to, lengthM: length, speedKmh: speed,
-        costS: length / (speed / 3.6), capacityVph: laneCapacity(road) * lanes,
+        costS: (length / (speed / 3.6)) * rc.penalty, capacityVph: laneCapacity(road) * lanes,
       };
       edges.push(e);
       out[from]!.push(e.id);

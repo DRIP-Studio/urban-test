@@ -1,4 +1,4 @@
-import { LocalFrame, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
+import { LocalFrame, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
 import { fc, type Feature, type LineString, type Point, type Polygon } from '../engine/geojson';
 
@@ -88,6 +88,14 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
       continue;
     }
     const item = furniture.get(a.type);
+    if (item?.led) {
+      // Variable-message panel of a ZTL gate: shows the zone state now (art. 7 CdS, varchi elettronici).
+      const zone = net.zones[String(a.properties.zoneId ?? '')];
+      const now = localDayMinutes(new Date());
+      const on = zone ? zoneActiveAt(zone, now.day, now.minutes) : false;
+      sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `led:${on ? 'on' : 'off'}` } });
+      if (a.type === 'ztl.led_panel') continue;
+    }
     if (a.type.startsWith('signal.')) {
       const heads = item?.signal?.heads ?? 'vehicle';
       const state = signalStates?.get(a.id) ?? 'off';
@@ -115,6 +123,38 @@ export function vehiclesFC(frame: SimFrame, origin: LngLat) {
     const cls = CLS[d[i + 3]!] ?? 'car';
     const spec = VEHICLE_SPECS[cls];
     out.push({ type: 'Feature', id: i / 5, geometry: { type: 'Polygon', coordinates: [rect(f, [d[i]!, d[i + 1]!], spec.width, spec.length, d[i + 2]!)] }, properties: { cls: d[i + 3]!, v: d[i + 4]! } });
+  }
+  return fc(out);
+}
+
+/** Roads with traffic restrictions (authored or from OSM tags), for the "Divieti e limiti" layer. */
+export function restrictionsFC(net: Network) {
+  const out: Feature<LineString>[] = [];
+  for (const r of Object.values(net.roads)) {
+    const eff = restrictionsOf(r);
+    if (!eff) continue;
+    const x = eff.restrictions;
+    const ban = x.hgv === 'no' || x.motorVehicle === 'no';
+    const partial = x.hgv === 'destination' || x.hgv === 'delivery' || x.motorVehicle === 'destination';
+    const parts = [x.motorVehicle === 'no' ? 'DIVIETO' : '', x.hgv === 'no' ? 'NO CAMION' : x.hgv ? `CAMION ${x.hgv === 'delivery' ? 'CARICO/SCARICO' : 'DESTINAZIONE'}` : '',
+      x.maxWeightT ? `${x.maxWeightT} t` : '', x.maxHeightM ? `h ${x.maxHeightM} m` : '', x.maxWidthM ? `l ${x.maxWidthM} m` : '', x.hazmat ? 'NO ADR' : '', x.schedule?.length ? '⏱' : ''].filter(Boolean);
+    out.push({ type: 'Feature', id: r.id, geometry: { type: 'LineString', coordinates: r.axis.map((p) => [p[0], p[1]]) }, properties: { id: r.id, level: ban ? 'ban' : partial ? 'partial' : 'limit', source: eff.source, label: parts.join(' · ') } });
+  }
+  return fc(out);
+}
+
+/** Reserved lanes drawn over the carriageway, offset to the lane centre (metres, scaled to pixels by zoom in the layer). */
+export function preferentialLanesFC(net: Network) {
+  const out: Feature<LineString>[] = [];
+  for (const r of Object.values(net.roads)) {
+    const lay = layoutSection(r);
+    for (const e of lay.elements) {
+      const lane = e.el.laneId ? r.lanes.find((l) => l.id === e.el.laneId) : undefined;
+      if (!lane || !lane.restriction || lane.restriction === 'none' || lane.restriction === 'closed') continue;
+      const centre = (e.left + e.right) / 2;
+      out.push({ type: 'Feature', id: lane.id, geometry: { type: 'LineString', coordinates: r.axis.map((p) => [p[0], p[1]]) },
+        properties: { id: lane.id, kind: lane.restriction === 'bike_only' ? 'bike' : 'bus', offM: -centre, widthM: Math.abs(e.left - e.right) * 0.8 } });
+    }
   }
   return fc(out);
 }

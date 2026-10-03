@@ -14,7 +14,7 @@ import { BASEMAPS } from './basemaps';
 import { installImageLoader } from './images';
 import { LAYERS, addProjectLayers, setLayerOpacity, setLayerVisible } from './layers';
 import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
-import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC } from './sources';
+import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
 import { renderSignalHeads } from './signalsLive';
 
 let index: NetworkIndex | null = null;
@@ -81,6 +81,8 @@ export function MapView() {
       if (!network) return;
       syncSource('labels', labelsFC(network));
       syncSource('zones', zonesFC(network));
+      syncSource('restrictions', restrictionsFC(network));
+      syncSource('lanes-pref', preferentialLanesFC(network));
       const a = assetsFC(network, baseline.origin, furnitureById);
       syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals);
       setSource('selection', selectionFC(selection, network));
@@ -100,6 +102,8 @@ export function MapView() {
       useMapUi.setState({ ready: true });
     };
     map.on('load', init);
+    // ZTL LED panels follow the clock: refresh their state every minute.
+    const ledTimer = window.setInterval(() => { if (map.loaded()) pushNetwork(); }, 60_000);
 
     // Only what changed goes to MapLibre: re-indexing the whole city on each edit cost ~350 ms.
     const offPhys = engine.onPhysical((m) => {
@@ -169,7 +173,7 @@ export function MapView() {
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(el.current);
     return () => {
-      offPhys(); offApp(); offUi(); ro.disconnect();
+      offPhys(); offApp(); offUi(); ro.disconnect(); window.clearInterval(ledTimer);
       canvas.removeEventListener('wheel', onWheel, { capture: true });
       useMapUi.setState({ ready: false });
       setMapInstance(null);

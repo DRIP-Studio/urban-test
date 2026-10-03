@@ -18,6 +18,8 @@ export * from './analysis/network';
 export * from './analysis/simulation';
 export * from './analysis/validation';
 export * from './analysis/sidewalks';
+export * from './analysis/restrictions';
+export * from './analysis/zones';
 export { buildJunction, armKey } from './physical/junction';
 export { MetricCache, vehicularArms, incidence } from './physical/topology';
 export { MARKING } from './physical/markings';

@@ -1,4 +1,4 @@
-import type { Asset, Network, Oneway, Road } from '../model/types';
+import type { Asset, Network, Oneway, Road, RoadRestrictions } from '../model/types';
 import { defineOperation, type Issue } from './registry';
 
 const err = (code: string, message: string, targetIds?: string[]): Issue => ({
@@ -80,6 +80,49 @@ export const roadSetOneway = defineOperation<RoadSetOnewayPayload>({
       lanes,
       provenance: { ...road.provenance, oneway: { kind: 'project', source: 'DRIP Urban scenario' } },
     });
+  },
+});
+
+export interface RoadSetRestrictionsPayload {
+  readonly roadIds: readonly string[];
+  /** null removes the authored restrictions (OSM tags apply again); {} = explicitly unrestricted. */
+  readonly restrictions: RoadRestrictions | null;
+}
+
+export const roadSetRestrictions = defineOperation<RoadSetRestrictionsPayload>({
+  type: 'road.setRestrictions',
+  label: (p) => (p.restrictions?.hgv === 'no' ? 'Divieto di transito mezzi pesanti' : p.restrictions?.motorVehicle === 'no' ? 'Divieto di transito' : p.restrictions ? 'Limitazioni di transito' : 'Rimuovi limitazioni'),
+  validate(net, p) {
+    const issues: Issue[] = [];
+    const missing = p.roadIds.filter((id) => !net.roads[id]);
+    if (!p.roadIds.length) issues.push(err('road.none', 'Nessuna strada'));
+    if (missing.length) issues.push(err('road.missing', `Strade inesistenti: ${missing.join(', ')}`, missing));
+    const r = p.restrictions;
+    if (r) {
+      const range = (v: number | undefined, lo: number, hi: number, what: string) => { if (v !== undefined && !(v >= lo && v <= hi)) issues.push(err('restriction.range', `${what} fuori intervallo ${lo}–${hi}`)); };
+      range(r.maxWeightT, 1, 100, 'Massa massima (t)');
+      range(r.maxAxleLoadT, 1, 20, 'Massa per asse (t)');
+      range(r.maxHeightM, 1.5, 6, 'Altezza massima (m)');
+      range(r.maxWidthM, 1, 5, 'Larghezza massima (m)');
+      range(r.maxLengthM, 3, 30, 'Lunghezza massima (m)');
+      for (const w of r.schedule ?? []) {
+        if (!w.days.length || w.days.some((d) => !(d >= 0 && d <= 6))) issues.push(err('restriction.days', 'Giorni non validi (0 = lunedì … 6 = domenica)'));
+        if (!/^\d{2}:\d{2}$/.test(w.from) || !/^\d{2}:\d{2}$/.test(w.to)) issues.push(err('restriction.time', 'Orari nel formato HH:MM'));
+      }
+    }
+    return issues;
+  },
+  apply(net, p) {
+    const roads = { ...net.roads };
+    for (const id of p.roadIds) {
+      const road = roads[id]!;
+      const { restrictions: _old, ...rest } = road;
+      roads[id] = {
+        ...(p.restrictions ? { ...rest, restrictions: p.restrictions } : rest),
+        provenance: { ...road.provenance, restrictions: { kind: 'project', source: 'DRIP Urban scenario' } },
+      };
+    }
+    return { ...net, roads };
   },
 });
 

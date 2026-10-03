@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import {
   FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
-  coordinateCorridor, groupDemand, isochrone, route, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
+  coordinateCorridor, groupDemand, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
 import type { Geometry, LineString, Polygon } from './geojson';
@@ -77,10 +77,10 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
     case 'route': return route(net, o, args.from as [number, number], args.to as [number, number], args.ctx as Parameters<typeof route>[4]);
     case 'compareRoute': {
       const base = new NetworkReplayer().derive(baseline, []).net;
-      return {
-        today: route(base, o, args.from as [number, number], args.to as [number, number], args.ctx as Parameters<typeof route>[4]),
-        project: route(net, o, args.from as [number, number], args.to as [number, number], args.ctx as Parameters<typeof route>[4]),
-      };
+      // Origin, optional stops (navigatore a tappe), destination.
+      const pts = [args.from, ...((args.via as [number, number][] | undefined) ?? []), args.to] as [number, number][];
+      const ctx = args.ctx as Parameters<typeof route>[4];
+      return { today: routeVia(base, o, pts, ctx), project: routeVia(net, o, pts, ctx) };
     }
     case 'junction': {
       const a = analyzeJunction(net, o, args.nodeId as string);

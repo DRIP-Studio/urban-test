@@ -59,7 +59,7 @@ export interface SignItem { readonly id: string; readonly file: string; readonly
 export interface SignCatalog { readonly source: string; readonly license: string; readonly licenseUrl: string; readonly families: Record<string, string>; readonly items: SignItem[] }
 
 export interface ModelPart { readonly shape: 'box' | 'cylinder' | 'sphere' | 'cone'; readonly size?: [number, number, number]; readonly r?: number; readonly h?: number; readonly at: [number, number, number]; readonly mat: string }
-export interface FurnitureItem { readonly id: string; readonly label: string; readonly category: string; readonly dims: { w: number; d: number; h: number }; readonly material: string; readonly model: ModelPart[]; readonly signal?: { heads: string } }
+export interface FurnitureItem { readonly id: string; readonly label: string; readonly category: string; readonly dims: { w: number; d: number; h: number }; readonly material: string; readonly model: ModelPart[]; readonly signal?: { heads: string }; readonly led?: { kind: string } }
 export interface FurnitureCatalog { readonly categories: Record<string, string>; readonly items: FurnitureItem[] }
 
 export interface MaterialItem { readonly id: string; readonly label: string; readonly category: string; readonly color: string; readonly pattern: string; readonly scaleM: number; readonly roughness: number; readonly permeable: boolean; readonly opacity?: number }

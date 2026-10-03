@@ -5,7 +5,7 @@
  * undoable, autosaved — exactly like a click in the interface. Tools are declared with the OpenAPI
  * subset Gemini understands (type names in upper case).
  */
-import { LocalFrame, type LngLat, type Road, type Zone } from '@drip-urban/core';
+import { LocalFrame, geom, type LngLat, type Road, type Zone } from '@drip-urban/core';
 import { api } from '../api/client';
 import { fitBounds, flyTo, getMap } from '../map/mapStore';
 import { plateOnPoleOps } from '../state/actions';
@@ -37,6 +37,22 @@ function state() {
 
 const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\b(via|viale|corso|piazza|vico|vicolo|largo|strada|traversa)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 
+/**
+ * Roads matching a name: exact match first (ignoring accents, case and the «via/corso/piazza» prefix),
+ * otherwise whole-word containment ("Durante" → "Corso Francesco Durante", not "Durantella").
+ */
+export function matchRoads(network: { roads: Readonly<Record<string, Road>> }, name: string): Road[] {
+  const q = norm(name);
+  if (!q) return [];
+  const all = Object.values(network.roads).filter((r) => r.name);
+  const exactFull = all.filter((r) => r.name.toLowerCase().trim() === name.toLowerCase().trim());
+  if (exactFull.length) return exactFull;
+  const exact = all.filter((r) => norm(r.name) === q);
+  if (exact.length) return exact;
+  const re = new RegExp(`(^| )${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( |$)`);
+  return all.filter((r) => re.test(norm(r.name)));
+}
+
 function roadLengthM(f: LocalFrame, r: Road): number {
   let L = 0;
   for (let i = 1; i < r.axis.length; i++) {
@@ -62,8 +78,7 @@ function resolveRoads(args: Record<string, unknown>): Road[] {
   if (ids?.length) return ids.map((id) => network.roads[id]!);
   const name = String(args.roadName ?? '').trim();
   if (name) {
-    const q = norm(name);
-    const hits = Object.values(network.roads).filter((r) => r.name && (norm(r.name) === q || norm(r.name).includes(q)));
+    const hits = matchRoads(network, name);
     if (hits.length) return hits;
     throw new Error(`Nessuna strada chiamata «${name}»`);
   }
@@ -88,13 +103,13 @@ function hull(points: [number, number][]): [number, number][] {
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
-/** Polygon around roads: convex hull of the axes buffered by `bufferM` (8 directions per vertex). */
+/** Polygon around roads: the corridor within `bufferM` of their axes (falls back to the convex hull). */
 export function polygonAroundRoads(f: LocalFrame, roads: Road[], bufferM: number): LngLat[] {
+  const lines = roads.map((r) => r.axis.map((q) => f.toMetric(q) as geom.V));
+  const ring = geom.bufferOutline(lines, bufferM);
+  if (ring.length >= 3) return ring.map((m) => f.toLngLat(m));
   const pts: [number, number][] = [];
-  for (const r of roads) for (const q of r.axis) {
-    const m = f.toMetric(q);
-    for (let k = 0; k < 8; k++) pts.push([m[0] + bufferM * Math.cos((k * Math.PI) / 4), m[1] + bufferM * Math.sin((k * Math.PI) / 4)]);
-  }
+  for (const line of lines) for (const m of line) for (let k = 0; k < 8; k++) pts.push([m[0] + bufferM * Math.cos((k * Math.PI) / 4), m[1] + bufferM * Math.sin((k * Math.PI) / 4)]);
   return hull(pts).map((m) => f.toLngLat(m));
 }
 
@@ -232,7 +247,7 @@ const REGISTRY: EliosTool[] = [
       name: S('Nome'), roadName: S('Strade da includere (nome)'), roadIds: ARR(S('id'), 'Id strade'), bufferM: N('Margine attorno alle strade in metri (predefinito 25)'),
       useViewport: { type: 'BOOLEAN', description: 'Usa l\'area visibile della mappa' },
       polygon: ARR(ARR(N('coord'), '[lon, lat]'), 'Vertici [lon, lat]'),
-      schedule: ARR(OBJ({ days: ARR(N('0=domenica … 6=sabato'), 'Giorni'), from: S('HH:MM'), to: S('HH:MM') }), 'Fasce orarie di attivazione'),
+      schedule: ARR(OBJ({ days: ARR(N('0=lunedì … 6=domenica'), 'Giorni'), from: S('HH:MM'), to: S('HH:MM') }), 'Fasce orarie di attivazione'),
       allowedModes: ARR(S('car|truck|bus|bike|walk|emergency|tram'), 'Mezzi ammessi'),
       speedKmh: N('Limite interno'),
     }, ['kind']),
@@ -253,7 +268,7 @@ const REGISTRY: EliosTool[] = [
       const zone: Zone = {
         id: newId('z'), kind, name: String(a.name || ZONE_NAMES[kind] || 'Zona'), polygon,
         allowedModes: (a.allowedModes as Zone['allowedModes']) ?? (defaults[kind] as Zone['allowedModes']) ?? ['car', 'bus', 'truck', 'bike', 'walk', 'emergency'],
-        ...(Array.isArray(a.schedule) && a.schedule.length ? { schedule: a.schedule as Zone['schedule'] } : kind === 'ztl' ? { schedule: [{ days: [1, 2, 3, 4, 5, 6], from: '08:00', to: '20:00' }] } : {}),
+        ...(Array.isArray(a.schedule) && a.schedule.length ? { schedule: a.schedule as Zone['schedule'] } : kind === 'ztl' ? { schedule: [{ days: [0, 1, 2, 3, 4, 5], from: '08:00', to: '20:00' }] } : {}),
         ...(a.speedKmh ? { speedKmh: Number(a.speedKmh) } : kind === 'zone30' || kind === 'school' ? { speedKmh: 30 } : {}),
       };
       must(commit('zone.set', { zone }));

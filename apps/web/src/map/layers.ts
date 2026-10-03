@@ -7,7 +7,7 @@ import { PATTERNS } from './patterns';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -37,6 +37,9 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'labels', label: 'Nomi delle strade', category: 'base', mapLayers: ['labels-text'], defaultVisible: true, source: 'OpenStreetMap' },
   { id: 'project', label: 'Evidenzia modifiche di progetto', category: 'design', mapLayers: ['project-outline', 'project-outline-rb'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#e8772e', label: 'Proposto' }] },
   { id: 'assets', label: 'Arredo, verde, segnali, semafori', category: 'design', mapLayers: ['asset-fp-fill', 'asset-fp-line', 'asset-pt-sign', 'asset-pt-dot', 'signals-icon'], defaultVisible: true, source: 'Esistente (OSM) + progetto' },
+  { id: 'restrictions', label: 'Divieti e limiti di transito', category: 'mobility', mapLayers: ['restrictions-line', 'restrictions-label'], defaultVisible: true, source: 'Progetto + OpenStreetMap (hgv, maxweight, maxheight…)',
+    legend: [{ color: '#b9312a', label: 'Divieto mezzi pesanti / transito' }, { color: '#d9a441', label: 'Solo destinazione o carico/scarico' }, { color: '#7e57c2', label: 'Limite di massa o dimensioni' }] },
+  { id: 'lanesPref', label: 'Corsie preferenziali', category: 'mobility', mapLayers: ['lanes-pref-line'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#c0392b', label: 'Bus / taxi' }, { color: '#2f7d5b', label: 'Ciclabile' }] },
   { id: 'zones', label: 'Zone (ZTL, 30, pedonali…)', category: 'mobility', mapLayers: ['zones-fill', 'zones-line'], defaultVisible: true, source: 'Scenario attivo' },
   { id: 'traffic', label: 'Traffico', category: 'traffic', mapLayers: ['traffic-line'], defaultVisible: true, source: 'Live (HERE) o stima DRIP — vedi Traffic Studio',
     legend: [{ color: '#3fae6b', label: 'Scorrevole' }, { color: '#e2b13c', label: 'Rallentato' }, { color: '#e1703a', label: 'Intenso' }, { color: '#b9312a', label: 'Congestionato' }] },
@@ -84,6 +87,15 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   // Proposed changes are outlined along their kerbs (and roundabout outer edge), not on every internal surface seam.
   L({ id: 'project-outline', type: 'line', source: 'lines', filter: ['all', ['==', ['get', 'state'], 'project'], ['==', ['get', 'kind'], 'kerb']], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2], 'line-opacity': 0.95 } });
   L({ id: 'project-outline-rb', type: 'line', source: 'surfaces', filter: ['==', ['get', 'kind'], 'roundabout_ring'], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2] } });
+  L({ id: 'restrictions-line', type: 'line', source: 'restrictions', layout: { 'line-cap': 'round' }, paint: {
+    'line-color': ['match', ['get', 'level'], 'ban', '#b9312a', 'partial', '#d9a441', '#7e57c2'],
+    'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 18, 5], 'line-dasharray': [1.2, 1], 'line-opacity': 0.9 } });
+  L({ id: 'restrictions-label', type: 'symbol', source: 'restrictions', minzoom: 16, layout: { 'symbol-placement': 'line', 'symbol-spacing': 220, 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'], 'text-size': 11 }, paint: { 'text-color': '#b9312a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 } });
+  L({ id: 'lanes-pref-line', type: 'line', source: 'lanes-pref', minzoom: 14, layout: { 'line-cap': 'butt' }, paint: {
+    'line-color': ['match', ['get', 'kind'], 'bike', '#2f7d5b', '#c0392b'], 'line-opacity': 0.5,
+    // Metres → pixels at ~41° N: 4.4 px/m at z19, doubling per zoom level.
+    'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, ['*', ['get', 'widthM'], 0.14], 19, ['*', ['get', 'widthM'], 4.4], 22, ['*', ['get', 'widthM'], 35]],
+    'line-offset': ['interpolate', ['exponential', 2], ['zoom'], 14, ['*', ['get', 'offM'], 0.14], 19, ['*', ['get', 'offM'], 4.4], 22, ['*', ['get', 'offM'], 35]] } });
   L({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 } });
   L({ id: 'zones-line', type: 'line', source: 'zones', paint: { 'line-color': ['get', 'color'], 'line-width': 2, 'line-dasharray': [3, 2] } });
   L({ id: 'iso-line', type: 'line', source: 'iso', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['step', ['get', 'minutes'], '#2f7d5b', 5, '#79a84d', 7, '#d6a63b', 10, '#c4643a'], 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2, 18, 7], 'line-opacity': 0.85 } });

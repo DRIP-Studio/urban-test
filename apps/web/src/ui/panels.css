@@ -371,3 +371,15 @@
 .cell.turn.is-on { color: #0d0d0d; }
 .ss-design { margin: 0 0 var(--s-2); font-size: var(--fs-12); color: var(--text-2); }
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s-3); }
+.schedule { display: flex; flex-direction: column; gap: var(--s-2); }
+.schedule-row { display: flex; flex-direction: column; gap: 6px; padding: var(--s-2); border-radius: var(--r-2); background: var(--ink-2); }
+.schedule-times { display: flex; align-items: center; gap: 6px; }
+.schedule-times input[type='time'] { width: 110px; color-scheme: inherit; }
+.plan-chip.is-hot { background: rgba(229, 72, 58, 0.18); color: var(--err); }
+.led-dot { width: 9px; height: 9px; border-radius: 50%; background: #3fdc6a; box-shadow: 0 0 6px #3fdc6a; flex: none; }
+.led-dot.is-on { background: #ff3b2f; box-shadow: 0 0 6px #ff3b2f; }
+.lane-row { flex-wrap: wrap; }
+.lane-row .select { min-width: 150px; }
+.lane-sch { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.pad { padding: 0 var(--s-4); }
+.pin.is-via { background: var(--drip-rose); color: #0d0d0d; }
