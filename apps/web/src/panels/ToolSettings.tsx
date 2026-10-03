@@ -1,10 +1,14 @@
+import { gltfDims } from '../models/gltf';
+import { loadModels, useModels } from '../models/models';
+import { api } from '../api/client';
+import { toast } from '../state/toasts';
 import { PavingLibrary } from './PavingLibrary';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ROAD_TEMPLATES, type AreaKind, type ZoneKind } from '@drip-urban/core';
 import { useApp } from '../state/store';
 import { useTool } from '../tools/toolState';
 import { toolById } from '../tools/registry';
-import { Empty, Field, NumberField, Section, Select, TextField, Toggle } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Select, TextField, Toggle } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { RoundaboutPlacePanel } from './RoundaboutPanel';
 import { ProjectSummary } from './ProjectSummary';
@@ -27,6 +31,50 @@ function RoadTemplates() {
         })}
       </div>
       <Field label="Nome della nuova strada"><TextField value={t.roadName} placeholder="es. Via di progetto" ariaLabel="Nome" onCommit={(v) => useTool.setState({ roadName: v })} /></Field>
+    </Section>
+  );
+}
+
+/** Project 3D models (glTF/GLB from SketchUp, Blender, Revit…): upload, place like furniture, shown in the Twin. */
+function ModelLibrary() {
+  const project = useApp((s) => s.project);
+  const list = useModels((s) => s.list);
+  const current = useTool((s) => s.furnitureId);
+  const file = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [scale, setScale] = useState(1);
+  if (!project) return null;
+  const upload = async (f: File) => {
+    setBusy(true);
+    try {
+      const buf = await f.arrayBuffer();
+      const dims = gltfDims(buf);
+      const fd = new FormData();
+      fd.append('file', f); fd.append('name', f.name.replace(/\.[^.]+$/, ''));
+      fd.append('w', String(Math.max(0.05, dims.w))); fd.append('d', String(Math.max(0.05, dims.d))); fd.append('h', String(Math.max(0.05, dims.h))); fd.append('scale', String(scale));
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/models`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? `Errore ${res.status}`);
+      const rec = await res.json() as { id: string; name: string };
+      await loadModels();
+      useTool.setState({ furnitureId: `model:${rec.id}` });
+      toast.success('Modello importato', `${rec.name}: ${(dims.w * scale).toFixed(1)} × ${(dims.d * scale).toFixed(1)} m, h ${(dims.h * scale).toFixed(1)} m · clic sulla mappa per posarlo`);
+    } catch (e) { toast.error('Modello 3D', e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Section title="Modelli 3D del progetto" count={list.length}>
+      <input ref={file} type="file" accept=".glb,.gltf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} />
+      <div className="provider-row">
+        <Button icon="model3d" busy={busy} onClick={() => file.current?.click()}>Importa modello (.glb, .gltf)</Button>
+        <Select value={String(scale)} ariaLabel="Unità del modello" onChange={(v) => setScale(Number(v))} options={[{ value: '1', label: 'metri' }, { value: '0.01', label: 'centimetri' }, { value: '0.001', label: 'millimetri' }, { value: '0.0254', label: 'pollici (SketchUp)' }]} />
+      </div>
+      {list.map((m) => (
+        <div key={m.id} className={`lib-row ${current === `model:${m.id}` ? 'is-on' : ''}`} role="button" tabIndex={0} onClick={() => useTool.setState({ furnitureId: `model:${m.id}` })}>
+          <Icon name="model3d" size={15} /><span>{m.name}</span><span className="hint">{(m.dims.w * m.scale).toFixed(1)}×{(m.dims.d * m.scale).toFixed(1)} m · {(m.sizeBytes / 1048576).toFixed(1)} MB</span>
+          <button type="button" className="link" onClick={(e) => { e.stopPropagation(); void api.del(`/api/projects/${encodeURIComponent(project.id)}/models/${m.id}`).then(loadModels); }}>elimina</button>
+        </div>
+      ))}
+      <p className="muted">Da SketchUp: esporta in glTF/GLB (estensione o SketchUp 2024+). I modelli si posano come l'arredo, compaiono in pianta con il loro ingombro e nel Twin 3D con la loro geometria.</p>
     </Section>
   );
 }
@@ -119,6 +167,7 @@ export function ToolSettings() {
     case 'furniture': return (
       <>
         <Section title="Posizionamento"><Field label="Rotazione aggiuntiva"><NumberField value={t.rotationDeg} unit="°" step={15} decimals={0} ariaLabel="Rotazione" onCommit={(v) => useTool.setState({ rotationDeg: v })} /></Field></Section>
+        <ModelLibrary />
         <FurnitureLibrary target="furnitureId" />
       </>
     );

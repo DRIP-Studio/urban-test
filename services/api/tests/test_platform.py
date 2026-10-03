@@ -146,3 +146,24 @@ def test_elios_forwards_tools_and_returns_function_calls(client, monkeypatch):
     decl = seen["body"]["tools"][0]["functionDeclarations"][0]
     assert "examples" not in decl["parameters"]["properties"]["speedKmh"]
     assert "Codice della Strada" in seen["body"]["systemInstruction"]["parts"][0]["text"]
+
+
+def test_3d_model_upload_validates_and_serves(client):
+    _admin(client)
+    import struct
+    pid = client.post("/api/projects", json={"template": "empty", "name": "Modelli", "bbox": [14.25, 40.93, 14.26, 40.94]}).json()["id"]
+    bad = client.post(f"/api/projects/{pid}/models", files={"file": ("x.obj", b"v 0 0 0", "text/plain")})
+    assert bad.status_code == 400
+    fake = client.post(f"/api/projects/{pid}/models", files={"file": ("x.glb", b"nope", "model/gltf-binary")})
+    assert fake.status_code == 400
+    js = b'{"asset":{"version":"2.0"}}  '
+    glb = b"glTF" + struct.pack("<II", 2, 12 + 8 + len(js)) + struct.pack("<I", len(js)) + b"JSON" + js
+    r = client.post(f"/api/projects/{pid}/models", files={"file": ("chiosco.glb", glb, "model/gltf-binary")}, data={"w": "3", "d": "2", "h": "3.2", "name": "Chiosco"})
+    assert r.status_code == 200, r.text
+    rec = r.json()
+    assert rec["dims"] == {"w": 3.0, "d": 2.0, "h": 3.2} and rec["name"] == "Chiosco"
+    assert client.get(f"/api/projects/{pid}/models").json()[0]["id"] == rec["id"]
+    got = client.get(f"/api/projects/{pid}/models/{rec['id']}")
+    assert got.status_code == 200 and got.content == glb
+    assert client.delete(f"/api/projects/{pid}/models/{rec['id']}").json()["ok"]
+    assert client.get(f"/api/projects/{pid}/models").json() == []

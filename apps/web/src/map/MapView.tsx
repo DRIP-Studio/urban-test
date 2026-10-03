@@ -99,11 +99,13 @@ export function MapView() {
       boxZoom: false, doubleClickZoom: false, dragRotate: true, pitchWithRotate: true, canvasContextAttributes: { antialias: true },
     });
     setMapInstance(map);
-    installImageLoader(map, catalogs.materials.items, catalogs.furniture.items);
+    installImageLoader(map, catalogs.materials.items, () => useApp.getState().catalogs?.furniture.items ?? []);
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
 
-    const furnitureById = new Map(catalogs.furniture.items.map((i) => [i.id, i]));
+    // Rebuilt when the catalogue changes (project 3D models are added after the map opens).
+    let furnCat = catalogs.furniture;
+    let furnitureById = new Map(furnCat.items.map((i) => [i.id, i]));
     let theme = themeOf(basemap);
     const pushNetwork = () => {
       const { network, selection } = useApp.getState();
@@ -112,6 +114,8 @@ export function MapView() {
       syncSource('zones', zonesFC(network));
       syncSource('restrictions', restrictionsFC(network));
       syncSource('lanes-pref', preferentialLanesFC(network));
+      const cat = useApp.getState().catalogs?.furniture;
+      if (cat && cat !== furnCat) { furnCat = cat; furnitureById = new Map(cat.items.map((i) => [i.id, i])); }
       const a = assetsFC(network, baseline.origin, furnitureById);
       syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals);
       setSource('selection', selectionFC(selection, network));
@@ -156,7 +160,7 @@ export function MapView() {
       }
     });
     const offApp = useApp.subscribe((st, prev) => {
-      if (st.netVersion !== prev.netVersion) pushNetwork();
+      if (st.netVersion !== prev.netVersion || st.catalogs !== prev.catalogs) pushNetwork();
       else if (st.selection !== prev.selection) setSource('selection', selectionFC(st.selection, st.network));
       if (st.tool !== prev.tool) {
         toolById(prev.tool).handler.deactivate?.(ctx);

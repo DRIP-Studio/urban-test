@@ -127,6 +127,7 @@ export async function openProject(pid: string): Promise<void> {
     set({ project, baseline, loading: null, mode: 'design', tool: 'select', selection: null, dock: null });
     await selectScenario(project.activeScenarioId || project.scenarios.find((s) => !s.isBaseline)?.id || 'baseline');
     void import('./sidewalks').then((m) => m.initSidewalks());
+    void import('../models/models').then((m) => m.loadModels());
   } catch (e) {
     set({ loading: null, loadError: e instanceof Error ? e.message : String(e) });
   } finally {

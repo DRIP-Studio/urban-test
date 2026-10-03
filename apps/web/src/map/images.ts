@@ -89,9 +89,8 @@ function ledImage(state: string): ImageData {
  */
 const signCache = new Map<string, Promise<ImageData>>();
 
-export function installImageLoader(map: MLMap, materials: readonly MaterialItem[], furniture: readonly FurnitureItem[] = []): void {
+export function installImageLoader(map: MLMap, materials: readonly MaterialItem[], furniture: () => readonly FurnitureItem[] = () => []): void {
   const byId = new Map(materials.map((m) => [m.id, m]));
-  const furn = new Map(furniture.map((f) => [f.id, f]));
   map.setMissingStyleImageResolver(async (id) => {
     if (map.hasImage(id)) return;
     if (id.startsWith('mat:')) {
@@ -114,7 +113,7 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
     if (id.startsWith('furn:')) {
       // furn:<itemId>[:<material>] — plan symbol with volume, at real scale.
       const [, itemId = '', mat] = id.split(':');
-      const item = furn.get(itemId);
+      const item = furniture().find((f) => f.id === itemId);
       const img = item ? furnitureSprite(item, byId, mat || undefined) : null;
       if (img) map.addImage(id, img, { pixelRatio: 2 });
       return;

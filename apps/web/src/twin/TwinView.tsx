@@ -69,7 +69,7 @@ function furniturePrimitive(assets: Asset[], items: Map<string, FurnitureItem>, 
   const ids = new Set<string>();
   for (const a of assets) {
     const item = items.get(a.type);
-    if (!item || a.type.startsWith('signal.') || a.state === 'removed') continue;
+    if (!item || a.type.startsWith('signal.') || a.state === 'removed' || item.gltf) continue;
     ids.add(a.id);
     const base = enuMatrix(a.at[0], a.at[1], a.elevationM ?? 0, a.rotationDeg);
     for (const part of item.model) {
@@ -97,7 +97,7 @@ export function TwinView() {
   const [buildingsTranslucent, setBT] = useState(false);
   const [parity, setParity] = useState<{ twin: number; map: number } | null>(null);
   const [status, setStatus] = useState('Avvio del Twin');
-  const layers = useRef<{ phys: Cesium.Primitive[]; bld: Cesium.Primitive | null; furn: Cesium.Primitive | null; ents: Cesium.Entity[] }>({ phys: [], bld: null, furn: null, ents: [] });
+  const layers = useRef<{ phys: Cesium.Primitive[]; bld: Cesium.Primitive | null; furn: Cesium.Primitive | null; ents: Cesium.Entity[]; models: Cesium.Model[] }>({ phys: [], bld: null, furn: null, ents: [], models: [] });
   const sim = useRef<SimFrame | null>(null);
   const heads = useRef<readonly SignalHead[]>(engine.lastPhysical?.heads ?? []);
 
@@ -165,6 +165,20 @@ export function TwinView() {
     const furn = furniturePrimitive(assets, items, materials);
     layers.current.furn = furn.prim ? viewer.scene.primitives.add(furn.prim) as Cesium.Primitive : null;
     const rendered = new Set(furn.ids);
+    // Imported glTF models (SketchUp, Blender, Revit…): real geometry, Y-up glTF on the ENU frame of the anchor.
+    for (const m of layers.current.models) viewer.scene.primitives.remove(m);
+    layers.current.models = [];
+    let alive = true;
+    for (const a of assets) {
+      const item = items.get(a.type);
+      if (!item?.gltf || a.state === 'removed') continue;
+      rendered.add(a.id);
+      const matrix = enuMatrix(a.at[0], a.at[1], a.elevationM ?? 0, a.rotationDeg);
+      Cesium.Matrix4.multiplyByUniformScale(matrix, item.scale ?? 1, matrix);
+      void Cesium.Model.fromGltfAsync({ url: item.gltf, modelMatrix: matrix, id: a.id, upAxis: Cesium.Axis.Y, forwardAxis: Cesium.Axis.Z } as never)
+        .then((model) => { if (alive && !viewer.isDestroyed()) layers.current.models.push(viewer.scene.primitives.add(model) as Cesium.Model); else model.destroy(); })
+        .catch((e: unknown) => toast.error('Modello 3D non caricato', e instanceof Error ? e.message : String(e)));
+    }
     // Signs: one pole per poleId, plates stacked from the top.
     const poles = new Map<string, Asset[]>();
     for (const a of assets) if (a.type.startsWith('it.sign.') && a.state !== 'removed') { const k = (a.properties.poleId as string) ?? a.id; (poles.get(k) ?? poles.set(k, []).get(k)!).push(a); }
@@ -215,6 +229,7 @@ export function TwinView() {
     }
     const expected = assets.filter((a) => a.state !== 'removed' && (items.has(a.type) || signs.has(a.type))).length;
     setParity({ twin: rendered.size, map: expected });
+    return () => { alive = false; };
   }, [ready, network, catalogs]);
 
   // Simulated vehicles: pooled entities updated from the simulation frames.

@@ -420,6 +420,96 @@ def gtfs_rt() -> dict:
         return {"status": "error", "message": str(exc)[:300], "vehicles": []}
 
 
+# ------------------------------------------------------------------ 3D models (glTF / GLB)
+
+_MODEL_EXT = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json"}
+
+
+@app.get("/api/projects/{pid}/models")
+def list_models(pid: str) -> list[dict]:
+    try:
+        return ps.get_doc(pid, "models") or []
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
+@app.post("/api/projects/{pid}/models")
+async def upload_model(pid: str, request: Request, file: UploadFile = File(...)) -> dict:
+    """Stores a glTF 2.0 model (GLB, or .gltf with embedded buffers) in the project; dims come from the client parser."""
+    import json as _json
+    import uuid as _uuid
+    from app.platform import license as lic
+    if not lic.allows("models3d"):
+        raise HTTPException(402, "L'import di modelli 3D non è incluso nel tuo abbonamento DRIP")
+    name = file.filename or "modello.glb"
+    ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext not in _MODEL_EXT:
+        raise HTTPException(400, "Formato non supportato: carica un file .glb o .gltf (da SketchUp, Blender, Revit, 3ds Max esporta in glTF)")
+    data = await file.read(SETTINGS.max_upload_bytes + 1)
+    if len(data) > SETTINGS.max_upload_bytes:
+        raise HTTPException(400, "Modello troppo grande (massimo 60 MB)")
+    if ext == ".glb" and data[:4] != b"glTF":
+        raise HTTPException(400, "Il file non è un GLB valido")
+    if ext == ".gltf":
+        try:
+            doc = _json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise HTTPException(400, "Il file .gltf non è JSON valido") from exc
+        if any(not str(b.get("uri", "")).startswith("data:") for b in doc.get("buffers", [])):
+            raise HTTPException(400, "Il .gltf usa file esterni: esportalo come .glb (binario unico)")
+    form = await request.form()
+    try:
+        dims = {k: max(0.05, min(500.0, float(form.get(k) or 1))) for k in ("w", "d", "h")}
+        scale = max(0.001, min(1000.0, float(form.get("scale") or 1)))
+    except ValueError as exc:
+        raise HTTPException(400, "Dimensioni non valide") from exc
+    try:
+        ps.get_meta(pid)
+        mid = "m" + _uuid.uuid4().hex[:10]
+        target = ps.project_dir(pid) / "models" / f"{mid}{ext}"
+        from app.storage import atomic_write_bytes
+        atomic_write_bytes(target, data)
+        models = ps.get_doc(pid, "models") or []
+        rec = {"id": mid, "name": str(form.get("name") or name.rsplit(".", 1)[0])[:80], "file": target.name, "format": ext[1:], "sizeBytes": len(data),
+               "dims": dims, "scale": scale, "uploadedBy": _author()}
+        models.append(rec)
+        ps.put_doc(pid, "models", models, _author())
+        return rec
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
+@app.get("/api/projects/{pid}/models/{mid}")
+def get_model(pid: str, mid: str) -> FileResponse:
+    try:
+        models = ps.get_doc(pid, "models") or []
+        rec = next((m for m in models if m["id"] == mid), None)
+        if not rec:
+            raise HTTPException(404, "Modello inesistente")
+        path = ps.project_dir(pid) / "models" / rec["file"]
+        return FileResponse(path, media_type=_MODEL_EXT["." + rec["format"]], headers={"Cache-Control": "private, max-age=86400"})
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
+@app.delete("/api/projects/{pid}/models/{mid}")
+def delete_model(pid: str, mid: str) -> dict:
+    try:
+        models = ps.get_doc(pid, "models") or []
+        rec = next((m for m in models if m["id"] == mid), None)
+        if not rec:
+            raise HTTPException(404, "Modello inesistente")
+        (ps.project_dir(pid) / "models" / rec["file"]).unlink(missing_ok=True)
+        ps.put_doc(pid, "models", [m for m in models if m["id"] != mid], _author())
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
 # ------------------------------------------------------------------ Elios (AI assistant)
 
 @app.get("/api/elios/status")
