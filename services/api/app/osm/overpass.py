@@ -1,8 +1,6 @@
 """OSM importer carried over unchanged from DRIP Urban 53.x (legacy adapter, see MIGRATION.md).
 
 It returns 53.x-shaped pydantic objects; app.city.legacy_city converts them to the 1.0 baseline.
-"""
-"""DRIP Urban OSM importer.
 
 Imports real street morphology, lane-aware attributes, buildings and urban context.
 Never fabricates a synthetic grid. Missing values are estimated explicitly and keep
