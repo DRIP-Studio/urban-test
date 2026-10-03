@@ -100,3 +100,41 @@ def test_platform_config_never_returns_secrets(client):
     assert client.put("/api/platform/config", json={"platformUrl": "http://evil.example"}).status_code == 400
     s = client.get("/api/auth/session").json()
     assert {"drip", "org"} <= {p["id"] for p in s["providers"]}
+
+
+def test_elios_without_key_explains_setup(client):
+    _login(client, "admin", "Frattamaggiore2026")
+    assert client.get("/api/elios/status").json()["configured"] is False
+    r = client.post("/api/elios/chat", json={"contents": [{"role": "user", "parts": [{"text": "ciao"}]}]})
+    assert r.status_code == 200 and r.json()["status"] == "not_configured"
+
+
+def test_elios_forwards_tools_and_returns_function_calls(client, monkeypatch):
+    _login(client, "admin", "Frattamaggiore2026")
+    import app.elios as elios
+    import app.providers as providers
+    monkeypatch.setattr(providers, "provider_secret", lambda name: "test-key" if name == "gemini" else None)
+    seen = {}
+
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "Fatto."}, {"functionCall": {"name": "set_speed_limit", "args": {"roadName": "Via Roma", "speedKmh": 30}}}]}}]}
+
+    def fake_post(url, json=None, timeout=None, headers=None):  # noqa: A002
+        seen.update(url=url, body=json, headers=headers)
+        return Resp()
+
+    monkeypatch.setattr(elios.httpx, "post", fake_post)
+    r = client.post("/api/elios/chat", json={
+        "contents": [{"role": "model", "parts": [{"text": "orphan"}]}, {"role": "user", "parts": [{"text": "Via Roma a 30"}]}],
+        "tools": [{"name": "set_speed_limit", "description": "x", "parameters": {"type": "OBJECT", "properties": {"speedKmh": {"type": "NUMBER", "examples": [30]}}}}],
+        "context": {"project": "Test"},
+    }).json()
+    assert r["status"] == "ok" and r["parts"][1]["functionCall"]["name"] == "set_speed_limit"
+    assert seen["headers"]["x-goog-api-key"] == "test-key" and "key=" not in seen["url"]
+    assert seen["body"]["contents"][0]["role"] == "user"  # leading model turn dropped
+    decl = seen["body"]["tools"][0]["functionDeclarations"][0]
+    assert "examples" not in decl["parameters"]["properties"]["speedKmh"]
+    assert "Codice della Strada" in seen["body"]["systemInstruction"]["parts"][0]["text"]

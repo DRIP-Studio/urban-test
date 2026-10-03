@@ -20,6 +20,7 @@ PROVIDERS = {
     "here": {"label": "HERE Traffic API v7", "kind": "key", "use": "Traffico in tempo reale (flow + incidenti)"},
     "google": {"label": "Google Maps Platform", "kind": "key", "use": "Map Tiles API: basemap Google Satellite nella mappa 2D"},
     "gtfs_rt": {"label": "GTFS-Realtime", "kind": "url", "use": "Posizioni veicoli TPL in tempo reale"},
+    "gemini": {"label": "Google Gemini", "kind": "key", "use": "Elios, l'assistente AI: capisce le richieste e modifica il progetto"},
 }
 _cache: dict[str, tuple[float, Any]] = {}
 
@@ -95,6 +96,8 @@ def test(name: str) -> dict:
                            json={"mapType": "satellite", "language": "it-IT", "region": "IT"})
         elif name == "gtfs_rt":
             r = httpx.get(key, timeout=12)
+        elif name == "gemini":
+            r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models", headers={"x-goog-api-key": key}, timeout=12)
         else:
             return {"ok": False, "message": "Provider sconosciuto"}
         ok = r.status_code < 400

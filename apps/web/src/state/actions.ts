@@ -84,3 +84,45 @@ export function rotateAssets(ids: readonly string[], deg: number): void {
   const ops = ids.filter((id) => network.assets[id]).map((id) => ({ type: 'asset.update', payload: { assetId: id, changes: { rotationDeg: network.assets[id]!.rotationDeg + deg } } }));
   if (ops.length) commit('batch', { label: 'Ruota', ops });
 }
+
+/**
+ * Operations that add a sign plate under the existing plates of a pole (CdS: max 3 signals per pole,
+ * the most important on top). `baseId` is any sign already on the pole.
+ */
+export function plateOnPoleOps(baseId: string, type: string): { ops: { type: string; payload: unknown }[]; asset: Asset } | null {
+  const { network } = useApp.getState();
+  const base = network?.assets[baseId];
+  if (!network || !base) return null;
+  const pole = (base.properties.poleId as string | undefined) ?? `pole-${base.id}`;
+  const plates = Object.values(network.assets).filter((a) => a.state !== 'removed' && (a.properties.poleId === pole || a.id === base.id));
+  const ops: { type: string; payload: unknown }[] = [];
+  if (!base.properties.poleId) ops.push({ type: 'asset.update', payload: { assetId: base.id, changes: { properties: { ...base.properties, poleId: pole, stackOrder: 0 } } } });
+  const asset: Asset = {
+    id: newId('a'), type, at: base.at, rotationDeg: base.rotationDeg, state: 'project',
+    properties: { poleId: pole, stackOrder: plates.length }, provenance: PROJECT,
+  };
+  ops.push({ type: 'asset.add', payload: { assets: [asset] } });
+  return { ops, asset };
+}
+
+/** Plates on the same pole, top first. */
+export function polePlates(assetId: string): Asset[] {
+  const { network } = useApp.getState();
+  const a = network?.assets[assetId];
+  if (!network || !a) return [];
+  const pole = a.properties.poleId as string | undefined;
+  if (!pole) return [a];
+  return Object.values(network.assets).filter((x) => x.properties.poleId === pole && x.state !== 'removed')
+    .sort((x, y) => ((x.properties.stackOrder as number) ?? 0) - ((y.properties.stackOrder as number) ?? 0));
+}
+
+/** Moves a plate up (-1) or down (+1) on its pole by swapping stack order with the neighbour. */
+export function movePlate(assetId: string, dir: -1 | 1): void {
+  const plates = polePlates(assetId);
+  const i = plates.findIndex((p) => p.id === assetId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= plates.length) return;
+  const reorder = [...plates];
+  [reorder[i], reorder[j]] = [reorder[j]!, reorder[i]!];
+  commit('batch', { label: 'Ordine dei pannelli sul palo', ops: reorder.map((p, k) => ({ type: 'asset.update', payload: { assetId: p.id, changes: { properties: { ...p.properties, stackOrder: k } } } })) });
+}

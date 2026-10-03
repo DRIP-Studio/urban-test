@@ -195,3 +195,4 @@ h1, h2, h3 { text-wrap: balance; }
 /* DRIP signature hairline under the top bar and the hub header. */
 .topbar, .hub-head { position: relative; }
 .topbar::after, .hub-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--drip-gradient); opacity: 0.55; pointer-events: none; }
+[data-tip-side='left']:hover::after, [data-tip-side='left']:focus-visible::after { top: 50%; left: auto; right: calc(100% + 13px); transform: translateY(-50%); }

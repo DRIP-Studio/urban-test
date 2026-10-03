@@ -6,7 +6,7 @@ from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app import civic, jobs, providers, transit
+from app import civic, elios, jobs, providers, transit
 from app.city.legacy_city import convert_city
 from app.projects import service as ps
 from app.projects.migrate53 import legacy_summary, load_seed, migrate
@@ -418,6 +418,24 @@ def gtfs_rt() -> dict:
         return transit.realtime_vehicles(url)
     except Exception as exc:  # noqa: BLE001
         return {"status": "error", "message": str(exc)[:300], "vehicles": []}
+
+
+# ------------------------------------------------------------------ Elios (AI assistant)
+
+@app.get("/api/elios/status")
+def elios_status() -> dict:
+    return elios.status()
+
+
+@app.post("/api/elios/chat")
+def elios_chat(body: dict = Body(...)) -> dict:
+    from app.platform import license as lic
+    if not lic.allows("elios"):
+        raise HTTPException(402, "Elios non è incluso nel tuo abbonamento DRIP")
+    try:
+        return elios.chat(body)
+    except ValueError as exc:
+        raise _err(exc) from exc
 
 
 # ------------------------------------------------------------------ civic
