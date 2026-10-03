@@ -94,7 +94,8 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'measure', label: 'Misura', icon: 'measure', shortcut: 'U', group: 'analysis', modes: ['design', 'analyze', 'traffic', 'transit'], hint: 'Clic per misurare distanze; con 3+ punti anche l\'area · Esc per azzerare', cursor: 'crosshair', handler: measureDraw },
   { id: 'route', label: 'Navigatore', icon: 'route', shortcut: 'P', group: 'traffic', modes: ['traffic', 'analyze'], hint: 'Clic per origine, poi destinazione · «Aggiungi tappa» nel pannello per passare da punti intermedi', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().pickRoutePoint(e.lngLat) } },
   { id: 'isochrone', label: 'Isocrona', icon: 'walk', shortcut: 'I', group: 'analysis', modes: ['analyze'], hint: 'Clic su un punto: area raggiungibile in 5/7/10/15 minuti', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().pickIsochrone(e.lngLat) } },
-  { id: 'transitRoute', label: 'Linea TPL', icon: 'transit', shortcut: 'L', group: 'transit', modes: ['transit'], hint: 'Disegna il percorso della linea, Invio per finire', cursor: 'crosshair', handler: transitDraw },
+  { id: 'transitRoute', label: 'Linea TPL', icon: 'transit', shortcut: 'L', group: 'transit', modes: ['transit'], hint: 'Clic sui punti di passaggio, Invio per finire: bus, BRT, tram e filobus seguono le strade; metro e treno restano come disegnati', cursor: 'crosshair', handler: transitDraw },
+  { id: 'bikeStation', label: 'Stazione bike sharing', icon: 'bike', shortcut: 'H', group: 'transit', modes: ['transit'], hint: 'Clic per aggiungere una stazione di bike sharing', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().addBikeStation(e.lngLat) } },
   { id: 'transitStop', label: 'Fermata', icon: 'bus', shortcut: 'B', group: 'transit', modes: ['transit'], hint: 'Clic per aggiungere una fermata alla linea selezionata', cursor: 'crosshair', handler: { click: (e) => usePicks.getState().addTransitStop(e.lngLat) } },
 ];
 

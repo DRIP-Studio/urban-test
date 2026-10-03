@@ -6,14 +6,12 @@ import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import { newId, useApp } from '../state/store';
 import { toast } from '../state/toasts';
+import { MODES, defaultLine, upgradeLine, type BikeShare, type LineStop, type TransitLine, type TransitMode } from '../transit/model';
 
-export interface TransitStop { readonly id: string; readonly name: string; readonly at: LngLat }
-export interface TransitRouteDesign {
-  readonly id: string; name: string; mode: 'bus' | 'brt' | 'tram'; color: string; line: LngLat[]; stops: TransitStop[];
-  headwayMin: number; firstDeparture: string; lastDeparture: string; vehicle: string; capacity: number; speedKmh: number;
-}
+export type TransitStop = LineStop;
+export type TransitRouteDesign = TransitLine;
 export interface GtfsFeed { source: string; importedAt: string; agencies: { name: string }[]; routes: { id: string; shortName: string; longName: string; mode: string; color: string; line: LngLat[]; stopIds: string[]; tripsPerDay: number; amPeakHeadwayMin: number | null }[]; stops: { id: string; name: string; at: LngLat }[] }
-interface TransitDoc { gtfs?: GtfsFeed; design?: Record<string, TransitRouteDesign[]> }
+interface TransitDoc { gtfs?: GtfsFeed; design?: Record<string, TransitRouteDesign[]>; bikeshare?: Record<string, BikeShare> }
 
 interface PicksState {
   mode: TravelMode;
@@ -33,22 +31,27 @@ interface PicksState {
   isoMinutes: Record<string, number> | null;
   transit: TransitDoc;
   selectedRouteId: string | null;
+  /** Mode of the next line drawn with the Linea TPL tool. */
+  newLineMode: TransitMode;
   pickRoutePoint(ll: LngLat): void;
   runRoute(): Promise<void>;
   pickIsochrone(ll: LngLat): void;
   runIsochrone(): Promise<void>;
   loadTransit(): Promise<void>;
   saveTransit(doc: TransitDoc): Promise<void>;
-  addTransitRoute(line: LngLat[]): void;
+  addTransitRoute(points: LngLat[]): void;
   addTransitStop(ll: LngLat): void;
+  addBikeStation(ll: LngLat): void;
 }
 
 const scenarioId = () => useApp.getState().scenario?.id ?? 'baseline';
+/** Bumped on every local save: a slower load must not overwrite newer local data. */
+let transitVersion = 0;
 
 export const usePicks = create<PicksState>((set, get) => ({
   mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, via: [], addingVia: false, result: null, routing: false,
   vehicle: { weightT: 18, heightM: 3.8, widthM: 2.55, lengthM: 10, axleLoadT: 8, hazmat: false },
-  isoAt: null, isoMode: 'walk', isoMinutes: null, transit: {}, selectedRouteId: null,
+  isoAt: null, isoMode: 'walk', isoMinutes: null, transit: {}, selectedRouteId: null, newLineMode: 'bus',
 
   pickRoutePoint(ll) {
     const { from, to, addingVia, via } = get();
@@ -85,33 +88,53 @@ export const usePicks = create<PicksState>((set, get) => ({
   async loadTransit() {
     const p = useApp.getState().project;
     if (!p) return;
+    const started = transitVersion;
     const doc = (await api.get<TransitDoc | null>(`/api/projects/${encodeURIComponent(p.id)}/docs/transit`)) ?? {};
-    set({ transit: doc });
+    // A local change saved while the request was in flight is newer than what the server sent back.
+    if (started !== transitVersion) return;
+    // 1.0 lines (single headway, bus/brt/tram) become multimodal lines with service bands.
+    const design = Object.fromEntries(Object.entries(doc.design ?? {}).map(([sid, list]) => [sid, list.map((r) => upgradeLine(r))]));
+    set({ transit: { ...doc, design } });
     drawTransit();
   },
   async saveTransit(doc) {
     const p = useApp.getState().project;
     if (!p) return;
+    transitVersion++;
     set({ transit: doc });
     drawTransit();
     try { await api.put(`/api/projects/${encodeURIComponent(p.id)}/docs/transit`, doc); }
     catch (e) { toast.error('Linee TPL non salvate', e instanceof Error ? e.message : String(e)); }
   },
-  addTransitRoute(line) {
+  addTransitRoute(points) {
     const b = useApp.getState().baseline;
     if (!b) return;
-    const f = new LocalFrame(b.origin);
-    const len = geom.lengthOf(line.map((p) => f.toMetric(p) as geom.V));
-    const doc = get().transit;
-    const list = [...(doc.design?.[scenarioId()] ?? [])];
-    const r: TransitRouteDesign = {
-      id: newId('tl'), name: `Linea ${list.length + 1}`, mode: 'bus', color: ['#8b0209', '#5587a2', '#e8772e', '#2f7d5b'][list.length % 4]!, line, stops: [],
-      headwayMin: 15, firstDeparture: '06:00', lastDeparture: '21:00', vehicle: 'Autobus 12 m', capacity: 85, speedKmh: 18,
+    const mode = get().newLineMode;
+    const finish = (line: LngLat[], followed: boolean) => {
+      const f = new LocalFrame(b.origin);
+      const len = geom.lengthOf(line.map((p) => f.toMetric(p) as geom.V));
+      const doc = get().transit;
+      const list = [...(doc.design?.[scenarioId()] ?? [])];
+      const r = defaultLine(newId('tl'), mode, line, list.filter((x) => x.mode === mode).length);
+      list.push(r);
+      void get().saveTransit({ ...doc, design: { ...(doc.design ?? {}), [scenarioId()]: list } });
+      set({ selectedRouteId: r.id });
+      toast.success(`${MODES[mode].label}: linea creata`, `${(len / 1000).toFixed(2).replace('.', ',')} km${followed ? ' lungo le strade' : ''} · aggiungi le fermate con lo strumento Fermata (B) o «Fermate automatiche»`);
     };
-    list.push(r);
-    void get().saveTransit({ ...doc, design: { ...(doc.design ?? {}), [scenarioId()]: list } });
-    set({ selectedRouteId: r.id });
-    toast.success('Linea creata', `${(len / 1000).toFixed(2).replace('.', ',')} km · aggiungi le fermate con lo strumento Fermata`);
+    // Road modes follow the street network between the clicked points (as a bus would drive).
+    if (MODES[mode].onRoad && points.length >= 2) {
+      const { departure } = get();
+      void engine.job<{ project: Route }>('compareRoute', { from: points[0], to: points[points.length - 1], via: points.slice(1, -1), ctx: { mode: 'bus', day: departure.day, minutes: departure.minutes } })
+        .then((r) => finish(r.project.found && r.project.line.length >= 2 ? [...r.project.line] : [...points], r.project.found))
+        .catch(() => finish([...points], false));
+    } else finish([...points], false);
+  },
+  addBikeStation(ll) {
+    const { transit } = get();
+    const sid = scenarioId();
+    const bs: BikeShare = transit.bikeshare?.[sid] ?? { system: 'Bike sharing', stations: [], dockless: false };
+    const st = { id: newId('bs'), name: `Stazione ${bs.stations.length + 1}`, at: ll, docks: 15, ebikeShare: 0.4 };
+    void get().saveTransit({ ...transit, bikeshare: { ...(transit.bikeshare ?? {}), [sid]: { ...bs, stations: [...bs.stations, st] } } });
   },
   addTransitStop(ll) {
     const { selectedRouteId, transit } = get();
@@ -140,12 +163,15 @@ export function drawTransit(): void {
   const { transit } = usePicks.getState();
   const lines: Feature[] = [];
   const stops: Feature[] = [];
-  for (const r of transit.gtfs?.routes ?? []) if (r.line.length >= 2) lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.line.map((p) => [...p]) }, properties: { color: r.color, name: r.shortName } });
-  for (const s of transit.gtfs?.stops ?? []) stops.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [...s.at] }, properties: { name: s.name, color: '#5587a2' } });
+  const gtfsMode = (m: string) => (['tram', 'metro', 'train', 'ferry', 'funicular'].includes(m) ? m : m === 'trolleybus' ? 'trolleybus' : 'bus');
+  for (const r of transit.gtfs?.routes ?? []) if (r.line.length >= 2) lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.line.map((p) => [...p]) }, properties: { color: r.color, name: r.shortName, mode: gtfsMode(r.mode), source: 'gtfs' } });
+  for (const s of transit.gtfs?.stops ?? []) stops.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [...s.at] }, properties: { name: s.name, color: '#5587a2', mode: 'bus' } });
   for (const r of transit.design?.[scenarioId()] ?? []) {
-    lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.line.map((p) => [...p]) }, properties: { color: r.color, name: r.name } });
-    for (const s of r.stops) stops.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [...s.at] }, properties: { name: s.name, color: r.color } });
+    lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.line.map((p) => [...p]) }, properties: { color: r.color, name: r.name, mode: r.mode, source: 'project' } });
+    for (const s of r.stops) stops.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [...s.at] }, properties: { name: s.name, color: r.color, mode: r.mode } });
   }
   setSource('transit-lines', fc(lines));
   setSource('transit-stops', fc(stops));
+  const bs = transit.bikeshare?.[scenarioId()];
+  setSource('bike-stations', fc((bs?.stations ?? []).map((st): Feature => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [...st.at] }, properties: { id: st.id, name: st.name, docks: st.docks } }))));
 }

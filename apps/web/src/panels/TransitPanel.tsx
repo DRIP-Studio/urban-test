@@ -1,25 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LocalFrame, geom } from '@drip-urban/core';
 import { api } from '../api/client';
 import { fc, type Feature } from '../engine/geojson';
-import { fitBounds, setSource, toggleLayer } from '../map/mapStore';
-import { setTool, useApp } from '../state/store';
+import { fitBounds, flyTo, setSource, toggleLayer } from '../map/mapStore';
+import { newId, setTool, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { drawTransit, usePicks, type TransitRouteDesign } from '../tools/picks';
-import { Button, Empty, Field, NumberField, ProvBadge, Section, Select, Stat, TextField } from '../ui/controls';
+import { BANDS, MODES, bikeCoverage, catchment, lineMetrics, proposeBikeStations, type BikeShare, type TransitMode } from '../transit/model';
+import { Button, Empty, Field, NumberField, ProvBadge, Section, Select, Stat, TextField, Toggle } from '../ui/controls';
 import { confirmAction } from '../ui/confirm';
+import { Icon } from '../ui/Icon';
 
-function routeMetrics(r: TransitRouteDesign, origin: [number, number]) {
-  const f = new LocalFrame(origin);
-  const L = geom.lengthOf(r.line.map((p) => f.toMetric(p) as geom.V));
-  const dwell = r.stops.length * 25;
-  const oneWayS = L / (r.speedKmh / 3.6) + dwell;
-  const cycleMin = (2 * oneWayS) / 60 + 6; // two directions + terminal layover
-  const vehicles = Math.ceil(cycleMin / Math.max(1, r.headwayMin));
-  const capacity = Math.round((60 / Math.max(1, r.headwayMin)) * r.capacity);
-  const spacing = r.stops.length > 1 ? L / (r.stops.length - 1) : null;
-  return { L, oneWayMin: oneWayS / 60, cycleMin, vehicles, capacity, spacing };
-}
+const fmtEur = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(2).replace('.', ',')} M€` : `${Math.round(v / 1000).toLocaleString('it-IT')} k€`);
+const n0 = (v: number) => Math.round(v).toLocaleString('it-IT');
+const MODE_ORDER: TransitMode[] = ['bus', 'brt', 'trolleybus', 'tram', 'metro', 'train', 'funicular', 'ferry', 'on_demand'];
 
 function Gtfs() {
   const project = useApp((s) => s.project);
@@ -41,17 +35,23 @@ function Gtfs() {
     finally { setBusy(false); }
   };
   const g = transit.gtfs;
+  const byMode = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of g?.routes ?? []) m.set(r.mode, (m.get(r.mode) ?? 0) + 1);
+    return [...m.entries()];
+  }, [g]);
   return (
-    <Section title="Rete esistente (GTFS)">
+    <Section title="Rete esistente (GTFS)" defaultOpen={!g}>
       {g ? (
         <>
           <div className="stats-row"><Stat label="Linee" value={g.routes.length} prov="existing" /><Stat label="Fermate" value={g.stops.length} /><Stat label="Operatori" value={g.agencies.length} /></div>
+          <div className="feature-list">{byMode.map(([m, c]) => <span key={m} className="is-on">{MODES[m as TransitMode]?.label ?? m}: {c}</span>)}</div>
           <p className="muted">Fonte: {g.source} · importato {new Date(g.importedAt).toLocaleString('it-IT')}</p>
           <ul className="route-list">{g.routes.slice(0, 40).map((r) => (
             <li key={r.id}><span className="swatch" style={{ background: r.color }} /><strong>{r.shortName}</strong><span>{r.longName}</span><span className="hint">{r.amPeakHeadwayMin ? `ogni ${r.amPeakHeadwayMin}′ (7-9)` : `${r.tripsPerDay} corse`}</span></li>
           ))}</ul>
         </>
-      ) : <Empty icon="transit" title="Nessun GTFS importato">Carica il feed GTFS dell'operatore (ZIP) per vedere linee, fermate e frequenze reali.</Empty>}
+      ) : <Empty icon="transit" title="Nessun GTFS importato">Carica il feed GTFS dell'operatore (ZIP): metro, treni, tram, bus e traghetti con linee, fermate e frequenze reali.</Empty>}
       <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) { const fd = new FormData(); fd.append('file', f); void upload(fd); } e.target.value = ''; }} />
       <div className="inspector-actions"><Button icon="import" busy={busy} onClick={() => file.current?.click()}>Carica GTFS (.zip)</Button></div>
       <Field label="oppure URL del feed"><TextField value={url} placeholder="https://…/gtfs.zip" ariaLabel="URL GTFS" onCommit={setUrl} /></Field>
@@ -76,52 +76,150 @@ function Realtime() {
   );
 }
 
-export function TransitPanel() {
-  const baseline = useApp((s) => s.baseline);
+/** Places stops along the line at the mode's typical spacing (terminals included). */
+function autoStops(r: TransitRouteDesign, origin: [number, number]) {
+  const f = new LocalFrame(origin);
+  const axis = r.line.map((p) => f.toMetric(p) as geom.V);
+  const L = geom.lengthOf(axis);
+  const step = MODES[r.mode].stopSpacingM;
+  const n = Math.max(1, Math.round(L / step));
+  return Array.from({ length: n + 1 }, (_, i) => ({ id: newId('st'), name: i === 0 ? 'Capolinea A' : i === n ? 'Capolinea B' : `Fermata ${i + 1}`, at: f.toLngLat(geom.sampleAt(axis, (L * i) / n).p) }));
+}
+
+function LineEditor({ sel, upd, onDelete }: { sel: TransitRouteDesign; upd: (p: Partial<TransitRouteDesign>) => void; onDelete: () => void }) {
+  const baseline = useApp((s) => s.baseline)!;
+  const m = useMemo(() => lineMetrics(sel, baseline), [sel, baseline]);
+  const spec = MODES[sel.mode];
+  return (
+    <Section title={sel.name}>
+      <div className="grid-2">
+        <Field label="Nome"><TextField value={sel.name} ariaLabel="Nome linea" onCommit={(v) => upd({ name: v })} /></Field>
+        <Field label="Modo"><Select value={sel.mode} ariaLabel="Modo" options={MODE_ORDER.map((k) => ({ value: k, label: MODES[k].label }))} onChange={(v) => { const ms = MODES[v]; upd({ mode: v, speedKmh: ms.speedKmh, vehicle: ms.vehicles[0]!.label, capacity: ms.vehicles[0]!.capacity, color: ms.color }); }} /></Field>
+        <Field label="Veicolo"><Select value={sel.vehicle} ariaLabel="Veicolo" options={spec.vehicles.map((v) => ({ value: v.label, label: v.label, hint: `${v.capacity} pax` }))} onChange={(v) => upd({ vehicle: v, capacity: spec.vehicles.find((x) => x.label === v)?.capacity ?? sel.capacity })} /></Field>
+        <Field label="Capacità per veicolo"><NumberField value={sel.capacity} unit="pax" min={5} max={2000} decimals={0} ariaLabel="Capacità" onCommit={(v) => upd({ capacity: v })} /></Field>
+        <Field label="Velocità commerciale"><NumberField value={sel.speedKmh} unit="km/h" min={5} max={120} decimals={0} ariaLabel="Velocità" onCommit={(v) => upd({ speedKmh: v })} /></Field>
+        <Field label="Colore"><input type="color" className="color-field" value={sel.color} onChange={(e) => upd({ color: e.target.value })} aria-label="Colore linea" /></Field>
+        <Field label="Prima corsa"><input type="time" className="text-field" value={sel.firstDeparture} onChange={(e) => e.target.value && upd({ firstDeparture: e.target.value })} aria-label="Prima corsa" /></Field>
+        <Field label="Ultima corsa"><input type="time" className="text-field" value={sel.lastDeparture} onChange={(e) => e.target.value && upd({ lastDeparture: e.target.value })} aria-label="Ultima corsa" /></Field>
+      </div>
+      <Field label="Frequenza per fascia (minuti tra le corse, 0 = nessun servizio)">
+        <div className="grid-2">{BANDS.map((b) => (
+          <label key={b.id} className="band"><span className="muted">{b.label}</span>
+            <NumberField value={sel.headways[b.id]} unit="min" min={0} max={240} decimals={0} ariaLabel={`Frequenza ${b.label}`} onCommit={(v) => upd({ headways: { ...sel.headways, [b.id]: v }, ...(b.id === 'peak' ? { headwayMin: v } : {}) })} />
+          </label>
+        ))}</div>
+      </Field>
+      <p className="muted"><ProvBadge kind="estimated" /> Stime DRIP: esercizio da lunghezza, velocità e frequenze; domanda dai residenti stimati negli edifici entro {spec.catchmentM} m dalle fermate. Non sono conteggi.</p>
+      <div className="stats-row"><Stat label="Lunghezza" value={m.lengthKm.toFixed(2).replace('.', ',')} unit="km" prov="project" /><Stat label="Percorrenza" value={Math.round(m.oneWayMin)} unit="min" /><Stat label="Flotta" value={m.fleet} unit="veicoli" /></div>
+      <div className="stats-row"><Stat label="Capacità in punta" value={n0(m.capacityPeak)} unit="pax/h" /><Stat label="Attesa media" value={m.waitPeakMin.toFixed(1).replace('.', ',')} unit="min" /><Stat label="Interdistanza" value={m.spacingM ? Math.round(m.spacingM) : '—'} unit="m" /></div>
+      <div className="stats-row"><Stat label="Bacino" value={n0(m.catchmentPop)} unit="abitanti" prov="estimated" /><Stat label="Saliti/giorno" value={n0(m.boardingsDay)} prov="estimated" /><Stat label="Riempimento punta" value={Math.round(m.loadFactorPeak * 100)} unit="%" /></div>
+      <div className="stats-row"><Stat label="Vett·km/giorno" value={n0(m.vehKmDay)} /><Stat label="Costo esercizio" value={fmtEur(m.costYear)} unit="/anno" prov="estimated" /><Stat label="CO₂ evitata" value={n0(m.co2SavedTYear)} unit="t/anno" prov="estimated" /></div>
+      {m.loadFactorPeak > 1 ? <p className="warn-line"><Icon name="warning" size={14} />Domanda stimata oltre la capacità in punta: aumenta la frequenza o la capacità dei veicoli.</p> : null}
+      <ol className="steps">{sel.stops.map((s, i) => (
+        <li key={s.id}><span className="pin">{i + 1}</span>
+          <input className="text-field inline" defaultValue={s.name} aria-label={`Nome fermata ${i + 1}`} onBlur={(e) => e.target.value !== s.name && upd({ stops: sel.stops.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)) })} />
+          <button type="button" className="link" onClick={() => flyTo([s.at[0], s.at[1]], 18.5)}>vedi</button>
+          <button type="button" className="link" onClick={() => upd({ stops: sel.stops.filter((x) => x.id !== s.id) })}>rimuovi</button></li>
+      ))}</ol>
+      <div className="inspector-actions">
+        <Button icon="bus" onClick={() => setTool('transitStop')}>Aggiungi fermate</Button>
+        <Button icon="sparkle" onClick={() => upd({ stops: autoStops(sel, baseline.origin as [number, number]) })}>Fermate automatiche ({spec.stopSpacingM} m)</Button>
+        <Button icon="trash" variant="danger" onClick={onDelete}>Elimina linea</Button>
+      </div>
+    </Section>
+  );
+}
+
+function BikeSharing() {
+  const baseline = useApp((s) => s.baseline)!;
   const scenario = useApp((s) => s.scenario);
-  const { transit, selectedRouteId } = usePicks();
-  useEffect(() => { void usePicks.getState().loadTransit(); toggleLayer('transit', true); }, []);
+  const transit = usePicks((s) => s.transit);
+  const sid = scenario?.id ?? 'baseline';
+  const bs: BikeShare = transit.bikeshare?.[sid] ?? { system: 'Bike sharing', stations: [], dockless: false };
+  const save = (next: BikeShare) => void usePicks.getState().saveTransit({ ...transit, bikeshare: { ...(transit.bikeshare ?? {}), [sid]: next } });
+  const cov = useMemo(() => bikeCoverage(baseline, bs.stations), [baseline, bs.stations]);
+  const propose = () => {
+    const found = proposeBikeStations(baseline, baseline.bbox);
+    if (!found.length) { toast.info('Bike sharing', 'Nessuna area abbastanza densa trovata.'); return; }
+    save({ ...bs, stations: [...bs.stations, ...found.map((x, i) => ({ id: newId('bs'), name: `Stazione ${bs.stations.length + i + 1}`, at: x.at, docks: x.docks, ebikeShare: 0.4 }))] });
+    toast.success('Stazioni proposte', `${found.length} stazioni dove i residenti stimati sono più densi`);
+  };
+  return (
+    <Section title="Bike sharing" count={bs.stations.length} defaultOpen={false}>
+      <div className="grid-2">
+        <Field label="Nome del servizio"><TextField value={bs.system} ariaLabel="Nome servizio" onCommit={(v) => save({ ...bs, system: v })} /></Field>
+        <Field label="Free floating"><Toggle checked={bs.dockless} label="Anche senza stazione" onChange={(v) => save({ ...bs, dockless: v })} /></Field>
+      </div>
+      <div className="stats-row"><Stat label="Stazioni" value={bs.stations.length} prov="project" /><Stat label="Stalli" value={cov.docks} /><Stat label="Copertura 300 m" value={cov.total ? Math.round((cov.covered / cov.total) * 100) : 0} unit="% abitanti" prov="estimated" /></div>
+      <ul className="row-list">{bs.stations.slice(0, 60).map((st) => (
+        <li key={st.id}>
+          <input className="text-field inline grow" defaultValue={st.name} aria-label="Nome stazione" onBlur={(e) => e.target.value !== st.name && save({ ...bs, stations: bs.stations.map((x) => (x.id === st.id ? { ...x, name: e.target.value } : x)) })} />
+          <NumberField value={st.docks} unit="stalli" min={4} max={60} decimals={0} ariaLabel="Stalli" onCommit={(v) => save({ ...bs, stations: bs.stations.map((x) => (x.id === st.id ? { ...x, docks: v } : x)) })} />
+          <button type="button" className="link" onClick={() => flyTo([st.at[0], st.at[1]], 18)}>vedi</button>
+          <button type="button" className="link" onClick={() => save({ ...bs, stations: bs.stations.filter((x) => x.id !== st.id) })}>rimuovi</button>
+        </li>
+      ))}</ul>
+      <div className="inspector-actions">
+        <Button icon="bike" onClick={() => setTool('bikeStation')}>Aggiungi stazioni</Button>
+        <Button icon="sparkle" onClick={propose}>Proponi stazioni</Button>
+        {bs.stations.length ? <Button variant="ghost" onClick={() => save({ ...bs, stations: [] })}>Svuota</Button> : null}
+      </div>
+    </Section>
+  );
+}
+
+function NetworkSummary({ routes }: { routes: TransitRouteDesign[] }) {
+  const baseline = useApp((s) => s.baseline)!;
+  const s = useMemo(() => {
+    const ms = routes.map((r) => lineMetrics(r, baseline));
+    const stops = routes.flatMap((r) => r.stops.map((x) => x.at));
+    return {
+      fleet: ms.reduce((t, m) => t + m.fleet, 0), cost: ms.reduce((t, m) => t + m.costYear, 0), vkm: ms.reduce((t, m) => t + m.vehKmDay, 0),
+      boardings: ms.reduce((t, m) => t + m.boardingsDay, 0), covered: stops.length ? catchment(baseline, stops, 500) : 0,
+    };
+  }, [routes, baseline]);
+  if (!routes.length) return null;
+  return (
+    <Section title="Rete di progetto">
+      <div className="stats-row"><Stat label="Flotta" value={s.fleet} unit="veicoli" /><Stat label="Costo esercizio" value={fmtEur(s.cost)} unit="/anno" prov="estimated" /><Stat label="Saliti/giorno" value={n0(s.boardings)} prov="estimated" /></div>
+      <div className="stats-row"><Stat label="Vett·km/giorno" value={n0(s.vkm)} /><Stat label="Abitanti a 500 m" value={n0(s.covered)} prov="estimated" /><Stat label="Linee" value={routes.length} /></div>
+    </Section>
+  );
+}
+
+export function TransitPanel() {
+  const scenario = useApp((s) => s.scenario);
+  const { transit, selectedRouteId, newLineMode } = usePicks();
+  useEffect(() => { void usePicks.getState().loadTransit(); toggleLayer('transit', true); toggleLayer('bikeshare', true); }, []);
   useEffect(() => { drawTransit(); }, [scenario?.id]);
   const routes = transit.design?.[scenario?.id ?? 'baseline'] ?? [];
   const sel = routes.find((r) => r.id === selectedRouteId);
   const save = (next: TransitRouteDesign[]) => void usePicks.getState().saveTransit({ ...transit, design: { ...(transit.design ?? {}), [scenario?.id ?? 'baseline']: next } });
   const upd = (p: Partial<TransitRouteDesign>) => sel && save(routes.map((r) => (r.id === sel.id ? { ...r, ...p } : r)));
-  const m = sel && baseline ? routeMetrics(sel, baseline.origin as [number, number]) : null;
   return (
     <div className="panel-stack">
-      <Section title="Linee di progetto" count={routes.length} actions={<Button size="sm" icon="plus" onClick={() => setTool('transitRoute')}>Nuova</Button>}>
+      <Section title="Nuova linea">
+        <div className="mode-grid">{MODE_ORDER.map((k) => (
+          <button key={k} type="button" className={`mode-chip ${newLineMode === k ? 'is-on' : ''}`} onClick={() => { usePicks.setState({ newLineMode: k }); setTool('transitRoute'); }} style={{ ['--mode' as string]: MODES[k].color }}>
+            <Icon name={MODES[k].icon} size={16} /><span>{MODES[k].label}</span>
+          </button>
+        ))}</div>
+        <p className="muted">{MODES[newLineMode].label}: {MODES[newLineMode].rightOfWay.toLowerCase()} · {MODES[newLineMode].speedKmh} km/h · fermate ogni ~{MODES[newLineMode].stopSpacingM} m. {MODES[newLineMode].onRoad ? 'Il tracciato segue le strade tra i punti cliccati.' : 'Il tracciato resta come disegnato (sede propria).'}</p>
+      </Section>
+      <Section title="Linee di progetto" count={routes.length}>
         {routes.length ? (
           <ul className="route-list">{routes.map((r) => (
             <li key={r.id}><button type="button" className={`route-pick ${r.id === selectedRouteId ? 'is-on' : ''}`} onClick={() => {
               usePicks.setState({ selectedRouteId: r.id });
               const xs = r.line.map((p) => p[0]), ys = r.line.map((p) => p[1]);
               fitBounds([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], 80);
-            }}><span className="swatch" style={{ background: r.color }} /><strong>{r.name}</strong><span className="hint">{r.stops.length} fermate · ogni {r.headwayMin}′</span></button></li>
+            }}><span className="swatch" style={{ background: r.color }} /><strong>{r.name}</strong><span className="hint">{MODES[r.mode]?.label} · {r.stops.length} fermate · ogni {r.headways.peak}′</span></button></li>
           ))}</ul>
-        ) : <Empty icon="transit" title="Nessuna linea di progetto">Disegna un percorso con lo strumento Linea TPL (L), poi aggiungi le fermate (B).</Empty>}
+        ) : <Empty icon="transit" title="Nessuna linea di progetto">Scegli il modo qui sopra e clicca il percorso sulla mappa (Invio per finire).</Empty>}
       </Section>
-      {sel && m ? (
-        <Section title={sel.name}>
-          <div className="grid-2">
-            <Field label="Nome"><TextField value={sel.name} ariaLabel="Nome linea" onCommit={(v) => upd({ name: v })} /></Field>
-            <Field label="Modo"><Select value={sel.mode} ariaLabel="Modo" options={[{ value: 'bus', label: 'Bus' }, { value: 'brt', label: 'BRT' }, { value: 'tram', label: 'Tram' }]} onChange={(v) => upd({ mode: v })} /></Field>
-            <Field label="Frequenza"><NumberField value={sel.headwayMin} unit="min" min={2} max={120} decimals={0} ariaLabel="Frequenza" onCommit={(v) => upd({ headwayMin: v })} /></Field>
-            <Field label="Velocità commerciale"><NumberField value={sel.speedKmh} unit="km/h" min={8} max={45} decimals={0} ariaLabel="Velocità" onCommit={(v) => upd({ speedKmh: v })} /></Field>
-            <Field label="Prima corsa"><TextField value={sel.firstDeparture} ariaLabel="Prima corsa" onCommit={(v) => /^\d{2}:\d{2}$/.test(v) && upd({ firstDeparture: v })} /></Field>
-            <Field label="Ultima corsa"><TextField value={sel.lastDeparture} ariaLabel="Ultima corsa" onCommit={(v) => /^\d{2}:\d{2}$/.test(v) && upd({ lastDeparture: v })} /></Field>
-            <Field label="Veicolo"><Select value={sel.vehicle} ariaLabel="Veicolo" options={['Minibus 8 m', 'Autobus 10 m', 'Autobus 12 m', 'Autobus snodato 18 m', 'Tram 32 m'].map((v) => ({ value: v, label: v }))} onChange={(v) => upd({ vehicle: v, capacity: { 'Minibus 8 m': 45, 'Autobus 10 m': 70, 'Autobus 12 m': 85, 'Autobus snodato 18 m': 140, 'Tram 32 m': 220 }[v] ?? sel.capacity })} /></Field>
-            <Field label="Capacità per veicolo"><NumberField value={sel.capacity} unit="pax" min={10} max={400} decimals={0} ariaLabel="Capacità" onCommit={(v) => upd({ capacity: v })} /></Field>
-          </div>
-          <div className="stats-row"><Stat label="Lunghezza" value={(m.L / 1000).toFixed(2).replace('.', ',')} unit="km" prov="project" /><Stat label="Percorrenza" value={Math.round(m.oneWayMin)} unit="min" /><Stat label="Veicoli necessari" value={m.vehicles} /></div>
-          <div className="stats-row"><Stat label="Capacità" value={m.capacity.toLocaleString('it-IT')} unit="pax/h" /><Stat label="Interdistanza fermate" value={m.spacing ? Math.round(m.spacing) : '—'} unit="m" /><Stat label="Ciclo" value={Math.round(m.cycleMin)} unit="min" /></div>
-          <p className="muted">Percorrenza = lunghezza / velocità commerciale + 25 s per fermata; ciclo con 6 min di sosta ai capolinea.</p>
-          <ol className="steps">{sel.stops.map((s, i) => <li key={s.id}><span className="pin">{i + 1}</span><span>{s.name}</span><button type="button" className="link" onClick={() => upd({ stops: sel.stops.filter((x) => x.id !== s.id) })}>rimuovi</button></li>)}</ol>
-          <div className="inspector-actions">
-            <Button icon="bus" onClick={() => setTool('transitStop')}>Aggiungi fermate</Button>
-            <Button icon="trash" variant="danger" onClick={() => void confirmAction('Eliminare la linea?', `${sel.name} e le sue fermate verranno rimosse dallo scenario.`, { danger: true, confirmLabel: 'Elimina' }).then((y) => { if (y) { save(routes.filter((r) => r.id !== sel.id)); usePicks.setState({ selectedRouteId: null }); } })}>Elimina linea</Button>
-          </div>
-        </Section>
-      ) : null}
+      {sel ? <LineEditor sel={sel} upd={upd} onDelete={() => void confirmAction('Eliminare la linea?', `${sel.name} e le sue fermate verranno rimosse dallo scenario.`, { danger: true, confirmLabel: 'Elimina' }).then((y) => { if (y) { save(routes.filter((r) => r.id !== sel.id)); usePicks.setState({ selectedRouteId: null }); } })} /> : null}
+      <NetworkSummary routes={routes} />
+      <BikeSharing />
       <Gtfs />
       <Realtime />
     </div>

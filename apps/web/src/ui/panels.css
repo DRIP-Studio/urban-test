@@ -383,3 +383,11 @@
 .lane-sch { width: 100%; display: flex; flex-direction: column; gap: 6px; }
 .pad { padding: 0 var(--s-4); }
 .pin.is-via { background: var(--drip-rose); color: #0d0d0d; }
+.mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.mode-chip { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: var(--r-2); border: 1px solid var(--line-1); background: var(--ink-2); font-size: var(--fs-12); color: var(--text-2); text-align: left; }
+.mode-chip .icon { color: var(--mode); }
+.mode-chip:hover { background: var(--ink-3); color: var(--text-1); }
+.mode-chip.is-on { border-color: var(--mode); color: var(--text-1); box-shadow: inset 3px 0 0 var(--mode); }
+.band { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-11); }
+.color-field { width: 100%; height: 32px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: none; padding: 2px; }
+.text-field.inline { padding: 3px 6px; font-size: var(--fs-12); min-width: 0; }
