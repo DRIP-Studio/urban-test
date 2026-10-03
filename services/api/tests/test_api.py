@@ -139,7 +139,7 @@ def test_provider_keys_are_masked_and_redacted(client):
     msg = providers.redact(f"Client error for url https://tile.googleapis.com/v1/createSession?key={secret}")
     assert secret not in msg and "[chiave]" in msg
     # Only providers the product actually uses are offered.
-    assert {p["id"] for p in listed} == {"here", "google", "gtfs_rt"}
+    assert {p["id"] for p in listed} == {"here", "google", "gtfs_rt", "gemini"}
 
 
 def test_baseline_existing_state_patch_is_validated_versioned_and_restorable(client):

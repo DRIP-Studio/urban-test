@@ -9,6 +9,14 @@ def client(tmp_path_factory):
     return fresh_app(tmp_path_factory.mktemp("platform"), "protected")
 
 
+def _admin(client):
+    """Signs in as the administrator, completing the first-login password change if a test runs alone."""
+    r = client.post("/api/auth/login", json={"username": "admin", "password": "Frattamaggiore2026"})
+    if r.status_code != 200:
+        _login(client)
+        client.post("/api/auth/password", json={"old": "admin", "new": "Frattamaggiore2026"})
+
+
 def _login(client, user="admin", pw="admin"):
     r = client.post("/api/auth/login", json={"username": user, "password": pw})
     assert r.status_code == 200, r.text
@@ -42,7 +50,7 @@ def test_provisional_admin_must_change_password(client):
 
 
 def test_viewer_is_read_only_and_cannot_self_promote(client):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     r = client.put("/api/auth/users", json={"username": "lettore", "name": "Lettore", "role": "viewer", "password": "Lettore12345"})
     assert r.status_code == 200, r.text
     client.post("/api/auth/logout")
@@ -57,7 +65,7 @@ def test_viewer_is_read_only_and_cannot_self_promote(client):
 
 
 def test_api_key_and_v1(client):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     k = client.post("/api/platform/keys", json={"name": "Piattaforma DRIP", "role": "editor"}).json()
     assert k["key"].startswith("drip_") and "hash" not in k
     assert all("hash" not in x for x in client.get("/api/platform/keys").json())
@@ -78,7 +86,7 @@ def test_api_key_and_v1(client):
 
 
 def test_license_trial_without_platform(client):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     st = client.get("/api/license").json()
     assert st["status"] == "trialing" and st["plan"] == "trial" and "elios" in st["features"] and st["daysLeft"] >= 29
     r = client.post("/api/license/activate", json={"key": "ABCD-EFGH-IJKL"})
@@ -86,14 +94,14 @@ def test_license_trial_without_platform(client):
 
 
 def test_update_check_reports_unreachable_platform(client):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     st = client.post("/api/update/check").json()
     assert st["current"] == "1.0.0" and st["available"] is False and st["error"]
     assert client.post("/api/update/apply").status_code == 400
 
 
 def test_platform_config_never_returns_secrets(client):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     cfg = client.put("/api/platform/config", json={"identityProviders": [{"id": "org", "label": "Comune", "issuer": "https://sso.comune.example/realms/ente", "clientId": "urban", "clientSecret": "s3cr3t", "enabled": True}]}).json()
     org = next(p for p in cfg["identityProviders"] if p["id"] == "org")
     assert org["hasClientSecret"] and "clientSecret" not in org
@@ -103,14 +111,14 @@ def test_platform_config_never_returns_secrets(client):
 
 
 def test_elios_without_key_explains_setup(client):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     assert client.get("/api/elios/status").json()["configured"] is False
     r = client.post("/api/elios/chat", json={"contents": [{"role": "user", "parts": [{"text": "ciao"}]}]})
     assert r.status_code == 200 and r.json()["status"] == "not_configured"
 
 
 def test_elios_forwards_tools_and_returns_function_calls(client, monkeypatch):
-    _login(client, "admin", "Frattamaggiore2026")
+    _admin(client)
     import app.elios as elios
     import app.providers as providers
     monkeypatch.setattr(providers, "provider_secret", lambda name: "test-key" if name == "gemini" else None)
