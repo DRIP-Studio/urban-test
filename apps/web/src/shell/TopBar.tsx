@@ -12,6 +12,7 @@ import { MODES } from './commands';
 import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
 import { toggleTheme, useTheme } from '../ui/theme';
+import { UserMenu } from './UserMenu';
 
 const SAVE_LABEL: Record<string, string> = { saved: 'Salvato', dirty: 'Modifiche in corso', saving: 'Salvataggio…', offline: 'Offline · in coda', error: 'Errore di salvataggio', conflict: 'Conflitto' };
 
@@ -137,6 +138,7 @@ export function TopBar() {
         <IconButton icon="keyboard" label="Scorciatoie" shortcut="?" onClick={() => useShortcuts.getState().toggle()} />
         <IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} />
         <IconButton icon="settings" label="Impostazioni" onClick={() => setDock('settings')} />
+        <UserMenu />
       </div>
     </header>
   );

@@ -7,19 +7,22 @@ from pathlib import Path
 import pytest
 
 
-@pytest.fixture(scope="module")
-def client(tmp_path_factory):
-    data = tmp_path_factory.mktemp("data")
+def fresh_app(data: Path, auth_mode: str):
+    """Imports the API from scratch against an isolated data folder (every module reads SETTINGS at import)."""
+    import sys
     os.environ["DRIP_URBAN_DATA"] = str(data)
-    import importlib
-
-    import app.settings
-    importlib.reload(app.settings)
-    import app.projects.service, app.civic, app.providers, app.projects.migrate53, app.main  # noqa: E401
-    for m in (app.projects.service, app.civic, app.providers, app.projects.migrate53, app.main):
-        importlib.reload(m)
+    os.environ["DRIP_URBAN_AUTH"] = auth_mode
+    os.environ["DRIP_PLATFORM_URL"] = "http://127.0.0.1:9"  # unreachable: no network in tests
+    for name in [m for m in sys.modules if m == "app" or m.startswith("app.")]:
+        del sys.modules[name]
+    import app.main
     from fastapi.testclient import TestClient
     return TestClient(app.main.app)
+
+
+@pytest.fixture(scope="module")
+def client(tmp_path_factory):
+    return fresh_app(tmp_path_factory.mktemp("data"), "open")
 
 
 def test_health(client):

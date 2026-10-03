@@ -6,6 +6,7 @@ import { navigate } from '../state/store';
 import { toast } from '../state/toasts';
 import { Button, Empty, Field, IconButton, Segmented, Skeleton, TextField } from '../ui/controls';
 import { toggleTheme, useTheme } from '../ui/theme';
+import { PlatformBanner, UserMenu } from '../shell/UserMenu';
 import { confirmAction } from '../ui/confirm';
 import { Icon } from '../ui/Icon';
 
@@ -134,9 +135,11 @@ export function Hub() {
           <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPkg(f); e.target.value = ''; }} />
           <Button icon="import" onClick={() => file.current?.click()}>Importa progetto</Button>
           <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>Nuovo progetto</Button>
+          <UserMenu />
         </div>
       </header>
       <main className="hub-main">
+        <PlatformBanner />
         <div className="hub-title">
           <h1>Progetti</h1>
           <Segmented<'active' | 'archived'> label="Filtro" size="sm" value={filter} onChange={setFilter} options={[{ value: 'active', label: 'Attivi' }, { value: 'archived', label: 'Archivio' }]} />

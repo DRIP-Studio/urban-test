@@ -10,9 +10,19 @@ from app import civic, jobs, providers, transit
 from app.city.legacy_city import convert_city
 from app.projects import service as ps
 from app.projects.migrate53 import legacy_summary, load_seed, migrate
+from app.platform import integrations, updates
+from app.platform.middleware import AuthMiddleware
+from app.platform.routes import router as platform_router
 from app.settings import SETTINGS, VERSION
 
-app = FastAPI(title="DRIP Urban", version=VERSION)
+app = FastAPI(title="DRIP Urban", version=VERSION, description="API di DRIP Urban. Autenticazione: sessione DRIP ID / locale, oppure `Authorization: Bearer drip_…` (chiave API) o token DRIP ID.")
+app.add_middleware(AuthMiddleware)
+app.include_router(platform_router)
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    updates.auto_check_in_background()
 
 TEMPLATES = [
     {"id": "frattamaggiore", "label": "Frattamaggiore", "kind": "municipality", "description": "Città intera da OpenStreetMap (acquisizione 17/09/2026): 2.922 strade, 4.053 edifici.", "baseline": "seed"},
@@ -450,6 +460,7 @@ def publication(pub: str) -> dict:
 def withdraw(pub: str) -> dict:
     try:
         civic.withdraw(pub)
+        integrations.emit("publication.withdrawn", {"publication": pub})
         return {"ok": True}
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc

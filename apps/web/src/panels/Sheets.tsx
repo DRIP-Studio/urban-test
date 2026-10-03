@@ -1,3 +1,5 @@
+import { PlatformSettings } from './PlatformSettings';
+import { useSession } from '../state/session';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { AuditEntry, ProviderStatus, Snapshot } from '../api/types';
@@ -149,9 +151,11 @@ export function SettingsSheet() {
     (r.ok ? toast.success : toast.error)(r.ok ? 'Connessione riuscita' : 'Test non riuscito', r.message);
     setProv(await api.get<ProviderStatus[]>('/api/providers'));
   };
+  const mode = useSession((s) => s.session?.mode);
   return (
     <>
-      <Section title="Utente">
+      <PlatformSettings />
+      {mode === 'open' ? <Section title="Utente">
         {user ? (
           <div className="grid-2">
             <Field label="Nome"><TextField value={user.name} ariaLabel="Nome utente" onCommit={(v) => void api.put('/api/user', { name: v, role: user.role }).then(refreshUser)} /></Field>
@@ -159,7 +163,7 @@ export function SettingsSheet() {
           </div>
         ) : null}
         <p className="muted">Il nome firma modifiche, versioni e pubblicazioni. Solo «Pubblicazione civica» e «Amministratore» possono pubblicare sul portale FST.</p>
-      </Section>
+      </Section> : null}
       <Section title="Fonti dati e chiavi">
         {!prov ? <Skeleton /> : prov.map((p) => (
           <div key={p.id} className="provider">

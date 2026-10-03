@@ -38,7 +38,7 @@ export default async function globalSetup(): Promise<() => void> {
   const log = process.env.DRIP_E2E_VERBOSE ? 'inherit' : 'ignore';
   const api = spawn(py, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(API_PORT)], {
     cwd: join(root, 'services', 'api'), stdio: log,
-    env: { ...process.env, DRIP_URBAN_DATA: data, DRIP_URBAN_LEGACY_DATA: join(__dirname, '.no-legacy') },
+    env: { ...process.env, DRIP_URBAN_AUTH: 'open', DRIP_URBAN_DATA: data, DRIP_URBAN_LEGACY_DATA: join(__dirname, '.no-legacy') },
   });
   const web = spawn(process.execPath, [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--port', String(WEB_PORT), '--strictPort'], {
     cwd: join(root, 'apps', 'web'), stdio: log,

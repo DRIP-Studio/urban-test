@@ -258,6 +258,18 @@ def audit(pid: str, author: str, action: str, details: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as fh:
         fh.write(line + "\n")
+    event = _WEBHOOK_EVENTS.get(action)
+    if event:
+        from app.platform import integrations
+        integrations.emit(event, {"projectId": pid, "author": author, **details})
+
+
+_WEBHOOK_EVENTS = {
+    "project.create": "project.created", "project.duplicate": "project.created", "project.import": "project.created",
+    "project.archive": "project.archived", "baseline.patch": "project.updated", "doc.save": "project.updated",
+    "scenario.save": "scenario.saved", "scenario.create": "scenario.created", "scenario.update": "scenario.saved",
+    "scenario.delete": "scenario.deleted", "snapshot.create": "snapshot.created", "civic.publish": "publication.created",
+}
 
 
 def read_audit(pid: str, limit: int = 200) -> list[dict]:

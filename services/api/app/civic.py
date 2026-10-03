@@ -20,8 +20,18 @@ from app.storage import atomic_write_json, read_json, safe_id
 STATUSES = {"proposta", "in_valutazione", "approvato", "finanziato", "in_corso", "completato", "sospeso"}
 
 
-def _user() -> dict:
+def stored_user() -> dict:
+    """Single-user desktop identity (open mode), from settings/user.json."""
     return read_json(SETTINGS.settings_dir / "user.json", None) or {"name": "Utente locale", "role": "admin"}
+
+
+def _user() -> dict:
+    from app.platform.auth import current_user
+    ident = current_user.get()
+    if ident and ident.get("provider") != "open":
+        return {"name": ident.get("name") or "Utente", "role": ident.get("role", "viewer"), "provider": ident.get("provider"),
+                "username": ident.get("username"), "provisional": ident.get("provisional", False), "mustChangePassword": ident.get("mustChangePassword", False)}
+    return stored_user()
 
 
 def user() -> dict:
@@ -29,6 +39,10 @@ def user() -> dict:
 
 
 def set_user(name: str, role: str) -> dict:
+    from app.platform.auth import current_user
+    ident = current_user.get()
+    if ident and ident.get("provider") != "open":
+        raise ValueError("Nome e ruolo vengono da DRIP ID o dall'amministratore: modificali da Impostazioni → Accesso")
     if role not in {"viewer", "editor", "publisher", "admin"}:
         raise ValueError("Ruolo non valido")
     if not (2 <= len(name.strip()) <= 80):

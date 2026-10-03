@@ -27,6 +27,9 @@ async function request<T>(method: string, url: string, body?: unknown, init: Req
       const d = j?.detail;
       message = typeof d === 'string' ? d : d?.message ?? j?.error ?? message;
     } catch { /* non-JSON error body */ }
+    const code = (detail as { code?: string } | null)?.code;
+    if (res.status === 401 && code === 'auth_required') window.dispatchEvent(new CustomEvent('drip:auth', { detail: 'required' }));
+    if (res.status === 403 && code === 'must_change_password') window.dispatchEvent(new CustomEvent('drip:auth', { detail: 'password' }));
     throw new ApiError(res.status, message, detail);
   }
   if (res.status === 204) return undefined as T;
