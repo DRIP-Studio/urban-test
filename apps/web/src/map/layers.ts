@@ -76,6 +76,7 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
 
   L({ id: 'context-fill', type: 'fill', source: 'context', paint: { 'fill-color': ['match', ['get', 'kind'], 'water', dark ? '#24394a' : '#b9cfd9', 'green', dark ? '#22301f' : '#cdd8bf', 'leisure', dark ? '#22301f' : '#d3dcc4', 'parking', dark ? '#25272a' : '#dcd9d2', 'square', dark ? '#2a2b2d' : '#e2ddd3', dark ? '#202225' : '#dfdbd2'], 'fill-opacity': 0.9 } });
   L({ id: 'buildings-fill', type: 'fill', source: 'buildings', paint: { 'fill-color': dark ? '#2b2e33' : '#d6d1c7', 'fill-opacity': 0.95 } });
+  L({ id: 'buildings-hatch', type: 'fill', source: 'buildings', layout: { visibility: 'none' }, paint: { 'fill-pattern': 'ctr-hatch' } });
   L({ id: 'buildings-line', type: 'line', source: 'buildings', minzoom: 15, paint: { 'line-color': dark ? '#3a3e44' : '#b9b3a7', 'line-width': 0.6 } });
   L({ id: 'surfaces-fill', type: 'fill', source: 'surfaces', layout: { 'fill-sort-key': ['get', 'z'] }, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1], 'fill-antialias': false } });
   // Real-scale paving textures over the flat colour (one image per zoom step; see patterns.ts).

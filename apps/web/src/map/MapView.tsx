@@ -51,6 +51,34 @@ function applyBasemap(map: maplibregl.Map, id: string): void {
   const visibleOpacity: Record<string, [string, number]> = { 'context-fill': ['fill-opacity', 0.9], 'buildings-fill': ['fill-opacity', 0.95], 'buildings-line': ['line-opacity', 1] };
   for (const [l, [prop, v]] of Object.entries(visibleOpacity)) if (map.getLayer(l)) map.setPaintProperty(l, prop as never, (imagery ? 0 : v) as never);
   if (map.getLayer('surfaces-fill')) map.setPaintProperty('surfaces-fill', 'fill-opacity', imagery ? ['case', ['in', ['get', 'kind'], ['literal', ['sidewalk', 'corner', 'footpath']]], 0.55, 0.92] : ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1]);
+  applyCtr(map, b.id === 'ctr');
+}
+
+/**
+ * Carta tecnica (CTR / carta tecnica comunale): black linework on white, buildings with a diagonal hatch,
+ * no carriageway colours or horizontal markings, labels in black. Paint values are restored when leaving.
+ */
+const CTR_PAINT: [string, string, unknown][] = [
+  ['buildings-fill', 'fill-color', '#ffffff'], ['buildings-line', 'line-color', '#111111'], ['buildings-line', 'line-width', 0.9],
+  ['context-fill', 'fill-color', ['match', ['get', 'kind'], 'water', '#e4eef5', 'green', '#f3f7ef', 'leisure', '#f3f7ef', '#ffffff']],
+  ['surfaces-fill', 'fill-color', ['match', ['get', 'kind'], 'sidewalk', '#fafafa', 'corner', '#fafafa', 'green', '#f3f7ef', 'roundabout_island', '#f3f7ef', '#ffffff']],
+  ['surfaces-outline', 'line-color', '#111111'], ['kerbs-line', 'line-color', '#111111'], ['kerbs-line', 'line-width', ['interpolate', ['linear'], ['zoom'], 15, 0.5, 20, 1.2]],
+  ['markings-fill', 'fill-opacity', 0], ['labels-text', 'text-color', '#111111'],
+];
+const saved = new Map<string, unknown>();
+function applyCtr(map: maplibregl.Map, on: boolean): void {
+  for (const [layer, prop, value] of CTR_PAINT) {
+    if (!map.getLayer(layer)) continue;
+    const key = `${layer}|${prop}`;
+    if (on) {
+      if (!saved.has(key)) saved.set(key, map.getPaintProperty(layer, prop as never));
+      map.setPaintProperty(layer, prop as never, value as never);
+    } else if (saved.has(key)) {
+      map.setPaintProperty(layer, prop as never, saved.get(key) as never);
+      saved.delete(key);
+    }
+  }
+  if (map.getLayer('buildings-hatch')) map.setLayoutProperty('buildings-hatch', 'visibility', on ? 'visible' : 'none');
 }
 
 function themeOf(id: string): 'light' | 'dark' { return (BASEMAPS.find((b) => b.id === id) ?? BASEMAPS[0]!).theme; }

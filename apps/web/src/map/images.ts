@@ -101,6 +101,16 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
       if (img) map.addImage(id, img, { pixelRatio: 2 });
       return;
     }
+    if (id === 'ctr-hatch') {
+      // 45° hatch used for buildings on the technical map (CTR convention).
+      const c = document.createElement('canvas');
+      c.width = c.height = 16;
+      const g = c.getContext('2d')!;
+      g.strokeStyle = 'rgba(17, 17, 17, 0.55)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(0, 16); g.lineTo(16, 0); g.moveTo(-8, 8); g.lineTo(8, -8); g.moveTo(8, 24); g.lineTo(24, 8); g.stroke();
+      map.addImage(id, g.getImageData(0, 0, 16, 16), { pixelRatio: 2 });
+      return;
+    }
     if (id.startsWith('furn:')) {
       // furn:<itemId>[:<material>] — plan symbol with volume, at real scale.
       const [, itemId = '', mat] = id.split(':');
