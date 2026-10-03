@@ -59,7 +59,17 @@ def _clean_schema(s: Any) -> Any:
     """Keeps only the OpenAPI subset Gemini accepts in function declarations."""
     if isinstance(s, dict):
         allowed = {"type", "description", "properties", "required", "items", "enum", "format", "nullable", "minimum", "maximum"}
-        return {k: _clean_schema(v) if k in {"properties", "items"} else v for k, v in s.items() if k in allowed}
+        out = {}
+        for k, v in s.items():
+            if k not in allowed:
+                continue
+            if k == "properties" and isinstance(v, dict):
+                out[k] = {name: _clean_schema(sub) for name, sub in v.items()}
+            elif k == "items":
+                out[k] = _clean_schema(v)
+            else:
+                out[k] = v
+        return out
     if isinstance(s, list):
         return [_clean_schema(x) for x in s]
     return s
