@@ -121,7 +121,7 @@ function VmsSection({ asset }: { asset: Asset }) {
       </Field>
       <pre className="vms-text">{vmsMessage(asset, live)}</pre>
       {mode === 'live' && live.status !== 'ok' ? <p className="muted">Avvia il traffico live (Traffico → Live, anche in automatico) per aggiornare il messaggio.</p> : null}
-      <p className="muted">Art. 78 Reg. CdS e DM 9/6/1995: messaggi brevi, solo informazioni sulla circolazione.</p>
+      <p className="muted">Art. 78 Reg. CdS: messaggi brevi, solo informazioni sulla circolazione.</p>
     </Section>
   );
 }

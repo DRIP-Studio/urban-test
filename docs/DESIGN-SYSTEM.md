@@ -1,4 +1,4 @@
-# Design system — DRIP Urban 1.0
+# Design system — DRIP Urban 2.0
 
 Autorità di progetto: `DRIP-FST-DESIGN.md` nella cartella di lavoro. Questo documento descrive come quelle regole sono applicate nel codice.
 
@@ -31,14 +31,34 @@ I colori di marca sono misurati sui file ufficiali (`packages/assets/brand/sourc
 
 | Gruppo | Token |
 |---|---|
-| Tipografia | `--font-ui` Manrope; `--font-editorial` Playfair Display; `--font-mono` per coordinate e numeri tecnici; scala `--fs-10` … `--fs-40` |
+| Tipografia | `--font-ui` Ginto (Manrope come riserva); `--font-display` Ginto Nord; `--font-editorial` Playfair Display; `--font-mono` per coordinate e numeri tecnici; scala `--fs-10` … `--fs-40` |
 | Spaziatura | `--s-1` … `--s-12`, base 4 px |
 | Raggi | `--r-1` … `--r-4` (6–12 px) |
 | Movimento | `--t-fast` 100 ms, `--t-std` 160 ms, `--t-panel` 220 ms; azzerati con `prefers-reduced-motion` |
 | Layout | top bar 52, status bar 26, rail 72, inspector 368, dock 300 px |
 | Livelli | `--z-map-ui` < `--z-panel` < `--z-menu` < `--z-modal` < `--z-toast` |
 
-Ginto (font di marca DRIP) è in licenza di prova e quindi non è incluso; al suo posto c'è Manrope (OFL). Vedi CURRENT-ISSUES P1-02.
+Dalla 2.0 l'interfaccia usa **Ginto** e **Ginto Nord**, i font di marca DRIP richiesti dal committente (`apps/web/public/fonts`). La licenza deve coprire la distribuzione insieme all'app: vedi CURRENT-ISSUES P1-02. Manrope resta come riserva.
+
+## Temi
+
+- **Scuro** (predefinito) e **chiaro**:
+  - si alternano dal pulsante sole/luna nella top bar o dal menu utente;
+  - la scelta è salvata per utente;
+  - la preferenza "sistema" segue `prefers-color-scheme`.
+- Il tema chiaro ridefinisce solo i token (`:root[data-theme='light']` in `tokens.css`). I componenti non conoscono il tema.
+- I loghi passano alla variante `-reverse` sul tema scuro, sia `TechnicalLockup` sia `CivicLockup` nel pannello Civico.
+- Il gradiente DRIP (`--drip-gradient`: blu, azzurro, rosa, arancio) è riservato a Elios e agli accenti di marca.
+
+## Lockup
+
+Simbolo DRIP, wordmark e "URBAN" condividono la stessa altezza delle maiuscole (`--lk-h`). Sono disponibili due taglie:
+- `md`: 17 px, nella top bar;
+- `lg`: 26 px, nella home.
+
+## Design system del sito
+
+studiodrip.it non era raggiungibile dall'ambiente di sviluppo: i token derivano dai file ufficiali dei loghi. Con i token del sito (colori, raggi, spaziature, ombre) basta aggiornare `tokens.css`.
 
 ## Componenti (`ui/controls.tsx`)
 
@@ -75,4 +95,4 @@ Gli SVG in `packages/assets/brand` sono vettorializzati dai PNG ufficiali, in va
 - Mappa:
   - oggetti statici e cartelli sono layer GPU, non marker DOM (RB-01, RB-02);
   - le icone si generano tramite `setMissingStyleImageResolver`, così sono presenti dal primo fotogramma.
-- Larghezza minima supportata della postazione: 1024 px, verificata in e2e senza scorrimento orizzontale.
+- Larghezza minima supportata della postazione: 1024 px, verificata in e2e senza scorrimento orizzontale. Sotto i 1280 px le azioni secondarie della top bar (scorciatoie, tema) passano nel menu utente.

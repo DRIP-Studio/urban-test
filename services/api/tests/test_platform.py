@@ -96,7 +96,7 @@ def test_license_trial_without_platform(client):
 def test_update_check_reports_unreachable_platform(client):
     _admin(client)
     st = client.post("/api/update/check").json()
-    assert st["current"] == "1.0.0" and st["available"] is False and st["error"]
+    assert st["current"] == "2.0.0" and st["available"] is False and st["error"]
     assert client.post("/api/update/apply").status_code == 400
 
 

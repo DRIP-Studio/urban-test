@@ -108,7 +108,7 @@ function nearestM(at: LngLat, f: Feature): number {
 const round100 = (m: number) => `${Math.max(100, Math.round(m / 100) * 100)} m`;
 
 /**
- * Message of a PMV (art. 78 Reg. CdS, DM 9/6/1995): manual text, or — in live mode — the most relevant
+ * Message of a PMV (art. 78 Reg. CdS): manual text, or — in live mode — the most relevant
  * event within 2 km (closures and accidents first, then queues within 1 km). Max 3 lines × 16 characters.
  */
 export function vmsMessage(asset: Asset, live: LiveState = useLive.getState()): string {

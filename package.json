@@ -1,6 +1,6 @@
 {
   "name": "drip-urban",
-  "version": "1.0.0-alpha.0",
+  "version": "2.0.0",
   "private": true,
   "description": "DRIP Urban — municipal planning, civil design, traffic and digital twin workstation",
   "workspaces": [

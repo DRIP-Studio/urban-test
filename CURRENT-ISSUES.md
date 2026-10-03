@@ -1,6 +1,6 @@
-# CURRENT-ISSUES — DRIP Urban 1.0
+# CURRENT-ISSUES — DRIP Urban 2.0
 
-Formato: id · descrizione · causa radice · stato · fix · test. Aggiornato il 2026-10-02.
+Formato: id · descrizione · causa radice · stato · fix · test. Aggiornato il 2026-10-03.
 
 ## P0 — blocker
 
@@ -12,12 +12,23 @@ Formato: id · descrizione · causa radice · stato · fix · test. Aggiornato i
 
 Nessun P0 aperto.
 
+## 2.0 — aperti (dipendono da DRIP o da terzi)
+
+| ID | Descrizione | Causa | Stato | Prossimo passo | Test |
+|---|---|---|---|---|---|
+| V2-01 | Token del design system del sito | studiodrip.it non raggiungibile dall'ambiente di sviluppo | aperto | fornire i token (colori, raggi, spaziature, ombre) e aggiornare `tokens.css` | baseline visive |
+| V2-02 | Endpoint della piattaforma DRIP | da implementare lato piattaforma | aperto | `/v1/licenses/activate`, `/v1/licenses/validate`, `/v1/releases/drip-urban/latest` (docs/PLATFORM.md) | `test_license_trial_without_platform`, `test_update_check_reports_unreachable_platform` |
+| V2-03 | Client DRIP ID | da registrare | aperto | client `drip-urban`, redirect `/api/auth/oidc/callback`, ruoli `drip-urban-*`, claim `drip_*` | — |
+| V2-04 | Carte tecniche ufficiali (WMS CTR/DBT regionali, catasto) | indirizzi dei servizi non forniti | aperto | aggiungere basemap WMS quando disponibili; oggi stile CTR su dati OSM | — |
+| V2-05 | Ritorno verso FST | il plugin FST espone solo API di lettura | aperto | ricevitore del webhook `publication.created` (con `reportIds`) sul portale | `test_fst_reports_filtered_to_project_area_and_configurable_portal` |
+| V2-06 | Altimetria, computi, IFC/LandXML | fuori perimetro 2.0 | aperto | vedi docs/ANALISI-2.0.md §13 | — |
+
 ## P1 — major
 
 | ID | Descrizione | Causa radice | Stato | Fix / prossimo passo | Test |
 |---|---|---|---|---|---|
 | P1-01 | Loghi solo da PNG | Vettoriali originali non disponibili | aperto | SVG ricavati per tracciatura (potrace) dai PNG forniti; sostituire con gli SVG ufficiali quando disponibili, stessi nomi file | visual `hub-head.png` |
-| P1-02 | Font Ginto in licenza di prova | Licenza | aperto — decisione utente | Manrope (OFL) al suo posto | — |
+| P1-02 | Font Ginto in licenza di prova | Licenza | **2.0: in uso su richiesta del committente**; verificare che la licenza copra la distribuzione con l'app | Manrope (OFL) come riserva | — |
 | P1-03 | Catalogo segnali | Libreria mai costruita | **chiuso** | 243 segnali CdS SVG (CC BY-SA 3.0) | e2e posa cartello |
 | P1-04 | Test 53.0 sul testo del sorgente | Strategia di test | **chiuso** | Vitest core (23) + web (8), pytest (9), Playwright (9) | — |
 | P1-05 | Semafori attorno a rotatoria a precedenza | Generati automaticamente dal 53.0 | **chiuso** | Non migrati, elencati nel report come `info` | report migrazione |

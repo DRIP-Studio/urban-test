@@ -1,5 +1,65 @@
 # Changelog
 
+## 2.0.0 — 2026-10-03
+
+Analisi completa delle richieste in [docs/ANALISI-2.0.md](docs/ANALISI-2.0.md).
+
+### Marchio e interfaccia
+- Tema chiaro accanto a quello scuro, preferenza salvata e allineata al sistema.
+- Colori DRIP, Ginto e Ginto Nord per l'interfaccia, Playfair per gli accenti FST.
+- Lockup con altezze uniformi di simbolo, logo e "Urban", anche nella home.
+- Barra superiore adattiva sotto i 1280 px.
+
+### Piattaforma DRIP ([PLATFORM](docs/PLATFORM.md))
+- Accesso con DRIP ID e Keycloak (OpenID Connect + PKCE), ruoli mappati, accesso locale provvisorio admin/admin con cambio password obbligatorio.
+- Abbonamenti e licenze dalla piattaforma centrale (trial/base/pro/enterprise), 14 giorni offline, claim `drip_*`.
+- Aggiornamenti automatici verificati SHA-256, installati al riavvio dal launcher con backup.
+- API v1 con chiavi `drip_…`, webhook firmati HMAC (11 eventi).
+
+### Elios, l'assistente AI
+- Chat Gemini con sfumature DRIP e dettatura vocale.
+- 30 strumenti per agire sul progetto (strade, ZTL, segnali, arredo, semafori, restrizioni, navigatore, TPL, marciapiedi, traffico live, FST), tutti annullabili.
+
+### Progettazione
+- Pali con più pannelli, arredo con volume anche in 2D, import di modelli glTF/GLB (anche da SketchUp).
+- PMV, pannelli a messaggio variabile, con testo manuale o automatico dal traffico live.
+- Aggancio delle strade non collegate senza deformarle; snap a 6 m sui nodi; correzione della strada che si contorceva all'incrocio.
+- Marciapiedi importati in automatico e stimati dove mancano (attivabili e disattivabili, senza modificare la strada).
+
+### Semafori
+- Webster con conflitti a livello di movimento, svolte permesse, lanterne a frecce.
+- Lanterne rimovibili una per una; corridoi coordinati (onda verde) con diagramma tempo-spazio.
+- Ottimizzazione di tutta la rete in un passo.
+
+### Regole e mobilità
+- ZTL con fasce per giorno, permessi, carico/scarico, varchi e pannelli LED.
+- Divieti e limiti per mezzi pesanti impostabili e importati da OSM (anche `:conditional`); corsie preferenziali con orari.
+- Navigatore a tappe con profili auto, camion, bus, bici, a piedi, emergenza.
+- TPL multimodale (metro, treno, tram, BRT, bus, filobus, traghetto, a chiamata) con frequenze per fascia, flotta, costi, bacino, passeggeri e CO₂; bike sharing.
+- Traffico live con aggiornamento automatico, incidenti e chiusure HERE.
+
+### Scala, export, civico
+- Città grandi: import OSM a tasselli fino a 2.000 km².
+- Basemap Carta tecnica (stile CTR); DXF in UTM con layer in italiano; tavola PDF A3 con cartiglio.
+- Frattamaggiore Si Trasforma:
+  - segnalazioni nell'area del progetto;
+  - attività con stato e note;
+  - pubblicazioni collegate alle segnalazioni;
+  - portale configurabile.
+
+### Correzioni
+- `from __future__` in `overpass.py`.
+- Pulsanti coperti o che chiudevano i pannelli.
+- Layout della modalità Civico.
+- Ciclo infinito React #185.
+- ZTL sovradimensionate.
+- Parcheggi marcati "divieto".
+- Camion senza percorso.
+- Linee TPL perse.
+
+### Test
+Core 41, web 14, API 23, end-to-end 9.
+
 ## 1.0.0 — 2026-10-02
 
 Ricostruzione da zero di DRIP Urban Planning Studio 53.0. Numerazione nuova; la serie 28–53 resta storia e si migra in sola lettura.

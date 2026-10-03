@@ -27,7 +27,7 @@ def client(tmp_path_factory):
 
 def test_health(client):
     r = client.get("/api/health")
-    assert r.status_code == 200 and r.json()["version"] == "1.0.0"
+    assert r.status_code == 200 and r.json()["version"] == "2.0.0"
 
 
 def test_create_project_from_frattamaggiore_and_save_scenario(client):
