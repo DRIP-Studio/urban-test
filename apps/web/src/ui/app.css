@@ -31,7 +31,7 @@ h1, h2, h3 { text-wrap: balance; }
 [data-tip] { position: relative; }
 [data-tip]:hover::after, [data-tip]:focus-visible::after {
   content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  background: rgba(20, 20, 20, 0.96); color: var(--text-1); box-shadow: var(--shadow-float); border-radius: var(--r-2);
+  background: var(--glass-tip); color: var(--text-1); box-shadow: var(--shadow-float); border-radius: var(--r-2);
   padding: 6px 10px; font-size: var(--fs-12); font-weight: 500; white-space: nowrap; z-index: var(--z-menu); pointer-events: none;
   animation: tip-in var(--t-std) var(--ease-out) 350ms both;
 }
@@ -87,13 +87,13 @@ h1, h2, h3 { text-wrap: balance; }
 .scn-label { display: none; }
 .scn-name { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .scenario-trigger.is-base { background: var(--ink-2); color: var(--text-2); }
-.scenario-trigger:hover, .scenario-trigger.is-open { background: rgba(232, 119, 46, 0.22); }
+.scenario-trigger:hover, .scenario-trigger.is-open { background: var(--drip-orange-soft-2); }
 
 /* Segmented control with a sliding thumb (position set from the active button). */
 .modes { grid-column: 4; position: relative; display: flex; background: var(--ink-2); padding: 3px; border-radius: var(--r-2); }
 .modes-thumb {
   position: absolute; top: 3px; bottom: 3px; left: 0; width: var(--thumb-w, 0); translate: var(--thumb-x, 0) 0;
-  background: var(--ink-4); border-radius: 6px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--ink-4); border-radius: 6px; box-shadow: var(--shadow-thumb), inset 0 1px 0 var(--hi-line);
   transition: translate var(--t-spring) var(--spring), width var(--t-spring) var(--spring);
 }
 .mode { position: relative; z-index: 1; background: none; border: 0; padding: 6px 13px; border-radius: 6px; color: var(--text-3); font-weight: 500; font-size: var(--fs-13); white-space: nowrap; }
@@ -127,7 +127,7 @@ h1, h2, h3 { text-wrap: balance; }
 .tool-hint {
   position: absolute; left: 50%; top: var(--s-3); translate: -50% 0; z-index: var(--z-map-ui);
   display: flex; align-items: center; gap: var(--s-2); max-width: min(760px, 90%);
-  background: rgba(13, 13, 13, 0.86); backdrop-filter: blur(13px) saturate(140%); box-shadow: var(--shadow-float); border-radius: var(--r-3); padding: 8px 13px 8px 11px; font-size: var(--fs-12);
+  background: var(--glass-strong); backdrop-filter: blur(13px) saturate(140%); box-shadow: var(--shadow-float); border-radius: var(--r-3); padding: 8px 13px 8px 11px; font-size: var(--fs-12);
   animation: hint-in var(--t-spring) var(--spring) both;
 }
 .tool-hint span { color: var(--text-2); }
@@ -144,7 +144,7 @@ h1, h2, h3 { text-wrap: balance; }
 .dock-body { overflow: auto; padding: var(--s-4); }
 .sheet {
   position: absolute; right: 0; top: 0; bottom: 0; width: 420px; z-index: var(--z-panel); background: var(--ink-1); border-left: 1px solid var(--line-2);
-  display: grid; grid-template-rows: auto minmax(0, 1fr); box-shadow: -21px 0 55px rgba(0, 0, 0, 0.4); animation: sheet-in var(--t-spring) var(--spring) both;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); box-shadow: var(--shadow-sheet); animation: sheet-in var(--t-spring) var(--spring) both;
 }
 .sheet-head { justify-content: space-between; }
 .sheet-body { overflow-y: auto; padding-bottom: var(--s-8); }
@@ -171,8 +171,8 @@ h1, h2, h3 { text-wrap: balance; }
 /* MapLibre controls in the DRIP shell */
 .maplibregl-ctrl-group { background: var(--ink-1); border: 1px solid var(--line-2); box-shadow: none; border-radius: var(--r-2); }
 .maplibregl-ctrl-group button + button { border-top: 1px solid var(--line-1); }
-.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(0.9); }
-.maplibregl-ctrl-scale { background: rgba(13, 13, 13, 0.75); color: var(--text-1); border-color: var(--text-2); font-size: 10px; }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: var(--map-ctrl-invert); }
+.maplibregl-ctrl-scale { background: var(--glass-strong); color: var(--text-1); border-color: var(--text-2); font-size: 10px; }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
 
@@ -191,3 +191,7 @@ h1, h2, h3 { text-wrap: balance; }
 .sc-grid ul { list-style: none; margin: 0; padding: 0; }
 .sc-grid li { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); padding: 5px 0; border-bottom: 1px solid var(--line-1); font-size: var(--fs-12); }
 .sc-keys { display: inline-flex; gap: 3px; flex: none; }
+
+/* DRIP signature hairline under the top bar and the hub header. */
+.topbar, .hub-head { position: relative; }
+.topbar::after, .hub-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--drip-gradient); opacity: 0.55; pointer-events: none; }

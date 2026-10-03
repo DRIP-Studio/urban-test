@@ -1,13 +1,16 @@
+import { useTheme } from '../ui/theme';
+
 /**
  * Brand lockups from the official vector files (packages/assets/brand, served at /brand).
  * Workstation: DRIP only — mark, wordmark and product name share one cap height.
  * Frattamaggiore Si Trasforma appears only in the civic section and on public pages (CivicLockup).
  */
-export function TechnicalLockup() {
+export function TechnicalLockup({ size = 'md' }: { size?: 'md' | 'lg' }) {
+  const suffix = useTheme((s) => s.theme) === 'dark' ? '-reverse' : '';
   return (
-    <div className="lockup lockup-tech" aria-label="DRIP Urban">
-      <img className="lk-drip-mark" src="/brand/drip-mark-reverse.svg" alt="" />
-      <img className="lk-drip-word" src="/brand/drip-wordmark-reverse.svg" alt="DRIP" />
+    <div className={`lockup lockup-tech lockup-${size}`} aria-label="DRIP Urban">
+      <img className="lk-drip-mark" src={`/brand/drip-mark${suffix}.svg`} alt="" />
+      <img className="lk-drip-word" src={`/brand/drip-wordmark${suffix}.svg`} alt="DRIP" />
       <span className="lk-product">Urban</span>
     </div>
   );

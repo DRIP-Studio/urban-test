@@ -11,6 +11,7 @@ import { TechnicalLockup } from './Brand';
 import { MODES } from './commands';
 import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
+import { toggleTheme, useTheme } from '../ui/theme';
 
 const SAVE_LABEL: Record<string, string> = { saved: 'Salvato', dirty: 'Modifiche in corso', saving: 'Salvataggio…', offline: 'Offline · in coda', error: 'Errore di salvataggio', conflict: 'Conflitto' };
 
@@ -110,6 +111,7 @@ export function TopBar() {
   const canUndo = useApp((s) => s.canUndo), canRedo = useApp((s) => s.canRedo);
   const undoLabel = useApp((s) => s.undoLabel), redoLabel = useApp((s) => s.redoLabel);
   const lastSaved = useApp((s) => s.lastSavedAt);
+  const theme = useTheme((s) => s.theme);
   return (
     <header className="topbar">
       <button type="button" className="brand-btn" onClick={() => navigate({ view: 'hub' })} aria-label="Project Hub">
@@ -133,6 +135,7 @@ export function TopBar() {
         <IconButton icon="clock" label="Cronologia e versioni" onClick={() => setDock('history')} />
         <IconButton icon="export" label="Esporta" shortcut="Ctrl+E" onClick={() => setDock('export')} />
         <IconButton icon="keyboard" label="Scorciatoie" shortcut="?" onClick={() => useShortcuts.getState().toggle()} />
+        <IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} />
         <IconButton icon="settings" label="Impostazioni" onClick={() => setDock('settings')} />
       </div>
     </header>

@@ -4,7 +4,8 @@ import type { Job, ProjectSummary, Template } from '../api/types';
 import { TechnicalLockup } from '../shell/Brand';
 import { navigate } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, Segmented, Skeleton, TextField } from '../ui/controls';
+import { Button, Empty, Field, IconButton, Segmented, Skeleton, TextField } from '../ui/controls';
+import { toggleTheme, useTheme } from '../ui/theme';
 import { confirmAction } from '../ui/confirm';
 import { Icon } from '../ui/Icon';
 
@@ -102,6 +103,7 @@ export function Hub() {
   const [creating, setCreating] = useState(false);
   const [legacy, setLegacy] = useState<{ available: boolean; migratedProjects: string[] } | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  const theme = useTheme((s) => s.theme);
   const load = () => {
     setError(null);
     api.get<ProjectSummary[]>('/api/projects').then(setProjects).catch((e) => setError(e instanceof Error ? e.message : String(e)));
@@ -126,8 +128,9 @@ export function Hub() {
   return (
     <div className="hub">
       <header className="hub-head">
-        <TechnicalLockup />
+        <TechnicalLockup size="lg" />
         <div className="hub-actions">
+          <IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} />
           <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPkg(f); e.target.value = ''; }} />
           <Button icon="import" onClick={() => file.current?.click()}>Importa progetto</Button>
           <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>Nuovo progetto</Button>

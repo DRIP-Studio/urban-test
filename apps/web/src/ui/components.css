@@ -59,7 +59,7 @@ textarea.text-field { height: auto; padding: 8px 10px; resize: vertical; line-he
 .segmented button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--text-3); border-radius: 6px; padding: 6px 11px; font-weight: 500; font-size: var(--fs-12); transition: background var(--t-std), color var(--t-fast), box-shadow var(--t-std); }
 .seg-sm button { padding: 4px 8px; font-size: var(--fs-11); }
 .segmented button:hover { color: var(--text-1); }
-.segmented button.is-on { background: var(--ink-4); color: var(--text-1); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.segmented button.is-on { background: var(--ink-4); color: var(--text-1); box-shadow: var(--shadow-thumb), inset 0 1px 0 var(--hi-line); }
 .toggle { display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; padding: 4px 0; color: var(--text-2); font-size: var(--fs-12); }
 .toggle-track { width: 34px; height: 21px; border-radius: 11px; background: var(--ink-4); position: relative; transition: background var(--t-std); flex: none; }
 .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: var(--text-1); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); transition: transform var(--t-spring) var(--spring-bounce); }
@@ -115,7 +115,7 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: 14px; height: 
 
 /* ------------------------------------------------------------------ overlays */
 .popover-root { position: relative; }
-.popover { position: absolute; top: calc(100% + 8px); z-index: var(--z-menu); background: rgba(27, 27, 28, 0.94); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); box-shadow: var(--shadow-pop); padding: 5px; animation: pop var(--t-spring) var(--spring) both; transform-origin: top left; }
+.popover { position: absolute; top: calc(100% + 8px); z-index: var(--z-menu); background: var(--glass); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); box-shadow: var(--shadow-pop); padding: 5px; animation: pop var(--t-spring) var(--spring) both; transform-origin: top left; }
 .popover-start { left: 0; }
 .popover-end { right: 0; transform-origin: top right; }
 .menu-title { font-size: var(--fs-12); color: var(--text-3); padding: 8px 10px 5px; font-weight: 400; }
@@ -131,8 +131,8 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: 14px; height: 
 .scn-pick .hint { color: var(--text-3); font-size: var(--fs-11); }
 .scn-actions { display: flex; }
 .scn-actions .icon-btn { width: 26px; height: 26px; }
-.context-menu { position: fixed; z-index: var(--z-menu); width: 244px; background: rgba(27, 27, 28, 0.94); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); box-shadow: var(--shadow-pop); padding: 5px; animation: pop var(--t-spring) var(--spring) both; transform-origin: top left; }
-.modal-backdrop { position: fixed; inset: 0; z-index: var(--z-modal); background: rgba(5, 5, 6, 0.55); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: var(--s-6); animation: fade var(--t-panel) both; }
+.context-menu { position: fixed; z-index: var(--z-menu); width: 244px; background: var(--glass); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); box-shadow: var(--shadow-pop); padding: 5px; animation: pop var(--t-spring) var(--spring) both; transform-origin: top left; }
+.modal-backdrop { position: fixed; inset: 0; z-index: var(--z-modal); background: var(--backdrop); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: var(--s-6); animation: fade var(--t-panel) both; }
 @keyframes fade { from { opacity: 0; } }
 .modal { width: min(440px, 100%); background: var(--ink-1); box-shadow: var(--shadow-pop); border-radius: var(--r-4); padding: var(--s-6); display: flex; flex-direction: column; gap: var(--s-4); animation: modal-in var(--t-spring) var(--spring) both; max-height: 90vh; overflow-y: auto; }
 @keyframes modal-in { from { opacity: 0; scale: 0.94; } to { opacity: 1; scale: 1; } }
@@ -141,7 +141,7 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: 14px; height: 
 .modal p { margin: 0; color: var(--text-2); line-height: var(--lh-text); }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .toasts { position: fixed; right: var(--s-4); bottom: calc(var(--statusbar-h) + var(--s-4)); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--s-2); width: 360px; }
-.toast { display: flex; gap: 11px; align-items: flex-start; background: rgba(27, 27, 28, 0.95); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); padding: 13px 13px 13px 15px; box-shadow: var(--shadow-pop); animation: toast-in var(--t-spring) var(--spring-bounce) both; }
+.toast { display: flex; gap: 11px; align-items: flex-start; background: var(--glass); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); padding: 13px 13px 13px 15px; box-shadow: var(--shadow-pop); animation: toast-in var(--t-spring) var(--spring-bounce) both; }
 .toast > .icon { color: var(--drip-accent); margin-top: 1px; }
 .toast-success > .icon { color: var(--ok); } .toast-warn > .icon { color: var(--warn); } .toast-error > .icon { color: var(--err); }
 .toast-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -149,7 +149,7 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: 14px; height: 
 .toast-close { background: none; border: 0; color: var(--text-3); padding: 2px; }
 @keyframes toast-in { from { opacity: 0; translate: 0 21px; scale: 0.96; } to { opacity: 1; translate: 0 0; scale: 1; } }
 .palette-backdrop { align-items: flex-start; padding-top: 12vh; }
-.palette { width: min(620px, 100%); background: rgba(27, 27, 28, 0.95); backdrop-filter: blur(34px) saturate(160%); border-radius: var(--r-4); box-shadow: var(--shadow-pop); overflow: hidden; animation: modal-in var(--t-spring) var(--spring) both; }
+.palette { width: min(620px, 100%); background: var(--glass); backdrop-filter: blur(34px) saturate(160%); border-radius: var(--r-4); box-shadow: var(--shadow-pop); overflow: hidden; animation: modal-in var(--t-spring) var(--spring) both; }
 .palette-input { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line-1); color: var(--text-3); }
 .palette-input input { flex: 1; background: none; border: 0; outline: none; font-size: var(--fs-16); color: var(--text-1); }
 .palette-list { max-height: 50vh; overflow-y: auto; padding: 6px; }
