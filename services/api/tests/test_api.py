@@ -164,3 +164,15 @@ def test_baseline_existing_state_patch_is_validated_versioned_and_restorable(cli
     client.post(f"/api/projects/{pid}/snapshots/{snap['id']}/restore")
     restored = client.get(f"/api/projects/{pid}/baseline").json()
     assert restored["roads"][rid]["section"] == road["section"]
+
+
+def test_large_city_tiling_covers_the_box():
+    import app.main as m
+    w, s, e, n = 12.35, 41.80, 12.62, 41.99  # Roma, ~ 480 km²
+    km2 = m.area_km2(w, s, e, n)
+    assert 450 < km2 < 510
+    tiles = m.split_bbox(w, s, e, n, m.TILE_KM2)
+    assert len(tiles) >= km2 / m.TILE_KM2
+    assert all(m.area_km2(*t) <= m.TILE_KM2 * 1.05 for t in tiles)
+    assert abs(sum(m.area_km2(*t) for t in tiles) - km2) < 1
+    assert min(t[0] for t in tiles) == w and max(t[2] for t in tiles) == e

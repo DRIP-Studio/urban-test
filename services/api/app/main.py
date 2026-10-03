@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
@@ -33,6 +34,27 @@ TEMPLATES = [
     {"id": "osm_area", "label": "Importa area da OSM", "kind": "district", "description": "Qualsiasi area: scarica strade, edifici e contesto da OpenStreetMap.", "baseline": "osm"},
     {"id": "empty", "label": "Area vuota", "kind": "neighbourhood", "description": "Nessuna rete esistente: progetto da zero su una porzione di territorio.", "baseline": "empty"},
 ]
+
+
+SINGLE_IMPORT_KM2 = 20.0
+TILE_KM2 = 16.0
+MAX_IMPORT_KM2 = 2000.0
+
+
+def area_km2(w: float, s: float, e: float, n: float) -> float:
+    import math
+    return abs(e - w) * 111.32 * math.cos(math.radians((s + n) / 2)) * abs(n - s) * 110.57
+
+
+def split_bbox(w: float, s: float, e: float, n: float, tile_km2: float) -> list[tuple[float, float, float, float]]:
+    """Regular grid of tiles of about `tile_km2`, covering the box exactly."""
+    import math
+    km_x = abs(e - w) * 111.32 * math.cos(math.radians((s + n) / 2))
+    km_y = abs(n - s) * 110.57
+    side = math.sqrt(tile_km2)
+    nx, ny = max(1, math.ceil(km_x / side)), max(1, math.ceil(km_y / side))
+    dx, dy = (e - w) / nx, (n - s) / ny
+    return [(w + i * dx, s + j * dy, w + (i + 1) * dx, s + (j + 1) * dy) for j in range(ny) for i in range(nx)]
 
 
 def _author() -> str:
@@ -103,33 +125,65 @@ def create_project(body: dict = Body(...)) -> dict:
             return ps.create_project(name=name, kind=tpl["kind"], author=_author(), baseline=baseline, description=body.get("description"), source_label="Area vuota")
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
-    # OSM import runs as a job.
+    # OSM import runs as a job. Large areas (cities like Rome, London, New York) are imported in tiles.
     bbox = body.get("bbox")
     if not (isinstance(bbox, list) and len(bbox) == 4):
         raise HTTPException(400, "Indica l'area da importare")
     w, s, e, n = (float(x) for x in bbox)
-    if (e - w) * (n - s) > 0.02:
-        raise HTTPException(400, "Area troppo grande (massimo circa 4 × 5 km)")
+    km2 = area_km2(w, s, e, n)
+    from app.platform import license as lic
+    st = lic.status()
+    limit = (st.get("limits") or {}).get("areaKm2")
+    if km2 > MAX_IMPORT_KM2:
+        raise HTTPException(400, f"Area di {km2:.0f} km²: oltre {MAX_IMPORT_KM2} km² importa per municipi o quartieri e unisci i progetti")
+    if km2 > SINGLE_IMPORT_KM2 and not lic.allows("largeCity"):
+        raise HTTPException(402, f"Area di {km2:.0f} km²: l'import di città grandi richiede il piano DRIP con «Città grandi»")
+    if limit and km2 > limit and st.get("enforcement") == "strict":
+        raise HTTPException(402, f"Area di {km2:.0f} km² oltre il limite del tuo abbonamento ({limit} km²)")
+    tiles = split_bbox(w, s, e, n, TILE_KM2) if km2 > SINGLE_IMPORT_KM2 else [(w, s, e, n)]
     author = _author()
 
     def run(report):
         from app.osm.overpass import import_bbox
-        report(0.05, "Download dati OpenStreetMap")
-        nodes, edges, buildings, features, source, meta = import_bbox(s, w, n, e, True, include_context=True, return_meta=True,
-                                                                     progress=lambda p, *a: report(0.05 + 0.75 * float(p), str(a[0]) if a else "Import"))
-        report(0.85, "Conversione nel modello DRIP Urban")
+        nodes: dict = {}
+        edges: dict = {}
+        buildings: dict = {}
+        features: dict = {}
+        warnings: list = []
+        sources: list = []
+        for i, (tw, ts, te, tn) in enumerate(tiles):
+            base = 0.02 + 0.8 * i / len(tiles)
+            span = 0.8 / len(tiles)
+            label = f"Tassello {i + 1}/{len(tiles)} · " if len(tiles) > 1 else ""
+            report(base, f"{label}download dati OpenStreetMap")
+            last_err = None
+            for attempt in range(3):
+                try:
+                    tn_, te_, tb_, tf_, source, meta = import_bbox(ts, tw, tn, te, True, include_context=True, return_meta=True,
+                                                                 progress=lambda p, *a: report(base + span * float(p), label + (str(a[0]) if a else "Import")))
+                    break
+                except Exception as exc:  # noqa: BLE001 — Overpass busy: wait and retry the tile
+                    last_err = exc
+                    time.sleep(5 * (attempt + 1))
+            else:
+                raise RuntimeError(f"Tassello {i + 1}/{len(tiles)} non scaricato: {last_err}")
+            # Ways crossing tile borders come back whole from every tile (identical ids): a dict merge is exact.
+            nodes.update(tn_); edges.update(te_); buildings.update(tb_); features.update(tf_)
+            warnings.extend(meta.get("warnings") or [])
+            sources.append(source)
+        report(0.85, f"Conversione nel modello DRIP Urban ({len(edges):,} tratti, {len(buildings):,} edifici)".replace(",", "."))
         city = {"nodes": [x.model_dump(mode="json") for x in nodes.values()], "edges": [x.model_dump(mode="json") for x in edges.values()],
                 "buildings": [x.model_dump(mode="json") for x in buildings.values()], "features": [x.model_dump(mode="json") for x in features.values()]}
         baseline, _ = convert_city(city, "osm-" + str(abs(hash((w, s, e, n))))[:10], str(body.get("city") or name), [w, s, e, n])
         if not baseline["roads"]:
             raise RuntimeError("Nessuna strada trovata nell'area scelta")
         meta_p = ps.create_project(name=name, kind=tpl["kind"], author=author, baseline=baseline, description=body.get("description"),
-                                   source_label=f"OpenStreetMap contributors (ODbL), {source}")
-        if meta.get("warnings"):
-            ps.put_doc(meta_p["id"], "notes", {"importWarnings": meta["warnings"]}, author)
+                                   source_label=f"OpenStreetMap contributors (ODbL), {sources[0] if sources else ''}" + (f" · {len(tiles)} tasselli" if len(tiles) > 1 else ""))
+        if warnings:
+            ps.put_doc(meta_p["id"], "notes", {"importWarnings": warnings[:200]}, author)
         return meta_p
 
-    return {"job": jobs.start("osm_import", f"Import OSM · {name}", run)}
+    return {"job": jobs.start("osm_import", f"Import OSM · {name} · {km2:.0f} km²", run)}
 
 
 @app.get("/api/jobs/{jid}")

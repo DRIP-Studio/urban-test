@@ -27,6 +27,15 @@ function pendingRecoveries(): { pid: string; sid: string; at: string }[] {
   return out;
 }
 
+/** Import size: single download up to 20 km², tiles of ~16 km² above (big cities), refused above 2 000 km². */
+function areaHint(km2: number, osm: boolean): string {
+  const a = `${km2 < 10 ? km2.toFixed(2).replace('.', ',') : Math.round(km2).toLocaleString('it-IT')} km²`;
+  if (!osm || km2 <= 20) return a;
+  if (km2 > 2000) return `${a} · oltre 2.000 km²: scegli un municipio o un quartiere`;
+  const tiles = Math.ceil(km2 / 16);
+  return `${a} · città grande: import a ${tiles} tasselli, circa ${Math.max(2, Math.round(tiles * 0.6))}–${Math.round(tiles * 1.5)} min (download OpenStreetMap)`;
+}
+
 function NewProject({ templates, onClose }: { templates: Template[]; onClose: () => void }) {
   const [tpl, setTpl] = useState(templates[0]?.id ?? 'frattamaggiore');
   const [name, setName] = useState('');
@@ -75,7 +84,7 @@ function NewProject({ templates, onClose }: { templates: Template[]; onClose: ()
         </div>
         <Field label="Nome del progetto"><TextField value={name} placeholder={t.label} ariaLabel="Nome progetto" onCommit={setName} /></Field>
         {t.baseline !== 'seed' ? (
-          <Field label="Area" hint={bbox ? `${area.toFixed(2).replace('.', ',')} km²${t.baseline === 'osm' && area > 20 ? ' · troppo grande per l\'import: scegli un\'area più piccola' : ''}` : 'Cerca un comune, un quartiere o una via'}>
+          <Field label="Area" hint={bbox ? areaHint(area, t.baseline === 'osm') : 'Cerca un comune, un quartiere o una via (anche città grandi: Roma, Milano, Londra, New York)'}>
             <div className="provider-row"><input className="text-field" value={place} onChange={(e) => setPlace(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search(); }} placeholder="es. Grumo Nevano" aria-label="Luogo" /><Button size="sm" icon="search" onClick={() => void search()}>Cerca</Button></div>
             {found.length ? <ul className="found">{found.map((f) => <li key={f.name}><button type="button" className={bbox === f.bbox ? 'is-on' : ''} onClick={() => setBbox(f.bbox)}>{f.name}</button></li>)}</ul> : null}
           </Field>
