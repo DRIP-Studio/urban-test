@@ -4,7 +4,7 @@ import { ROAD_TEMPLATES, type AreaKind, type ZoneKind } from '@drip-urban/core';
 import { useApp } from '../state/store';
 import { useTool } from '../tools/toolState';
 import { toolById } from '../tools/registry';
-import { Empty, Field, NumberField, Section, Select, TextField } from '../ui/controls';
+import { Empty, Field, NumberField, Section, Select, TextField, Toggle } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { RoundaboutPlacePanel } from './RoundaboutPanel';
 import { ProjectSummary } from './ProjectSummary';
@@ -62,7 +62,7 @@ function FurnitureLibrary({ target }: { target: 'furnitureId' | 'arrayItem' }) {
 
 function SignLibrary() {
   const catalogs = useApp((s) => s.catalogs);
-  const { signId, recentSigns, favoriteSigns } = useTool();
+  const { signId, recentSigns, favoriteSigns, signStack } = useTool();
   const [q, setQ] = useState('');
   const [family, setFamily] = useState<string>('priority');
   const list = useMemo(() => {
@@ -97,6 +97,8 @@ function SignLibrary() {
         </div>
       ) : <Empty icon="sign" title={family === 'fav' ? 'Nessun preferito' : family === 'recent' ? 'Nessun segnale recente' : 'Nessun risultato'}>{family === 'fav' ? 'Clic destro su un segnale per aggiungerlo ai preferiti.' : null}</Empty>}
       <p className="muted">{catalogs.signs.items.find((s) => s.id === signId)?.label} · fonte: Wikimedia Commons, {catalogs.signs.license}</p>
+      <Toggle checked={signStack} label="Clic su un cartello: aggiungi sotto, sullo stesso palo" onChange={(v) => useTool.setState({ signStack: v })} />
+      <p className="muted">Con Alt il comportamento si inverte. L'ordine dei pannelli si cambia dall'Inspector del cartello.</p>
     </Section>
   );
 }

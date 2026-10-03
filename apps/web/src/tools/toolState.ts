@@ -16,6 +16,8 @@ export interface ToolState {
   rotationDeg: number;
   /** Place on the same pole as this sign (pole composer). */
   poleId: string | null;
+  /** Sign tool: a click on an existing sign adds the new plate under it on the same pole (Alt inverts). */
+  signStack: boolean;
   recentSigns: string[];
   favoriteSigns: string[];
   arraySpacingM: number;
@@ -33,7 +35,7 @@ const saved = (() => { try { return JSON.parse(localStorage.getItem('drip-urban:
 export const useTool = create<ToolState>(() => ({
   draft: [], cursor: null,
   roadTemplate: 'local', roadName: '', areaKind: 'plaza', areaMaterial: 'stone', zoneKind: 'ztl',
-  furnitureId: 'vegetation.tree', signId: 'it.sign.dare_precedenza', rotationDeg: 0, poleId: null,
+  furnitureId: 'vegetation.tree', signId: 'it.sign.dare_precedenza', rotationDeg: 0, poleId: null, signStack: true,
   recentSigns: saved.recentSigns ?? [], favoriteSigns: saved.favoriteSigns ?? [],
   arraySpacingM: 8, pavingMaterial: saved.pavingMaterial ?? 'porphyry', arrayItem: 'vegetation.tree', rb: null, measure: null,
   routePick: { from: null, to: null, target: 'from' },

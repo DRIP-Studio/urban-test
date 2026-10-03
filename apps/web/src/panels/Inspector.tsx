@@ -1,8 +1,9 @@
 import { LocalFrame, geom, layoutSection, type Area, type Oneway, type Road } from '@drip-urban/core';
-import { commit, setDock, setTool, useApp } from '../state/store';
-import { deleteSelection, duplicateSelection } from '../state/actions';
+import { commit, select, setDock, setTool, useApp } from '../state/store';
+import { deleteSelection, duplicateSelection, movePlate, plateOnPoleOps, polePlates } from '../state/actions';
+import { useMemo, useState } from 'react';
 import { flyTo } from '../map/mapStore';
-import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Select, Stat, TextField, Toggle } from '../ui/controls';
+import { Button, Empty, Field, IconButton, NumberField, ProvBadge, Section, Segmented, Select, Stat, TextField, Toggle } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { ToolSettings } from './ToolSettings';
 import { RoundaboutInspector } from './RoundaboutPanel';
@@ -62,6 +63,50 @@ function RoadInspector({ road }: { road: Road }) {
   );
 }
 
+/** Plates on the pole of a sign, top to bottom: reorder, remove, add a plate below (art. 81 Reg. CdS). */
+function PoleSection({ assetId }: { assetId: string }) {
+  const catalogs = useApp((s) => s.catalogs);
+  useApp((s) => s.netVersion);
+  const [q, setQ] = useState('');
+  const plates = polePlates(assetId);
+  const results = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    return ql.length < 2 || !catalogs ? [] : catalogs.signs.items.filter((x) => x.label.toLowerCase().includes(ql)).slice(0, 12);
+  }, [q, catalogs]);
+  const add = (type: string) => {
+    const last = plates[plates.length - 1]!;
+    const r = plateOnPoleOps(last.id, type);
+    if (r && commit('batch', { label: 'Aggiungi pannello al palo', ops: r.ops }).ok) setQ('');
+  };
+  const signs = plates.filter((p) => !String(p.type).includes('pannello') && !String(p.type).includes('distanza') && !String(p.type).includes('estesa'));
+  return (
+    <Section title="Palo e pannelli" count={plates.length}>
+      <ol className="pole-list">
+        {plates.map((p, i) => {
+          const it = catalogs?.signs.items.find((x) => x.id === p.type);
+          return (
+            <li key={p.id} className={p.id === assetId ? 'is-sel' : ''}>
+              {it ? <img src={`/signs/${encodeURIComponent(it.file)}`} alt="" /> : null}
+              <button type="button" className="grow link" onClick={() => select({ kind: 'asset', ids: [p.id] })}>{i + 1}. {it?.label ?? p.type}</button>
+              <IconButton icon="chevronDown" size={14} label="Sposta giù" disabled={i === plates.length - 1} onClick={() => movePlate(p.id, 1)} />
+              <span style={{ transform: 'rotate(180deg)', display: 'inline-flex' }}><IconButton icon="chevronDown" size={14} label="Sposta su" disabled={i === 0} onClick={() => movePlate(p.id, -1)} /></span>
+              <IconButton icon="trash" size={14} tone="danger" label="Togli dal palo" onClick={() => commit('asset.remove', { assetIds: [p.id] })} />
+            </li>
+          );
+        })}
+      </ol>
+      {signs.length > 2 ? <p className="warn-line"><Icon name="warning" size={14} />Art. 81 Reg. CdS: di norma non più di due segnali per sostegno (più i pannelli integrativi).</p> : null}
+      <input className="text-field search" placeholder="Aggiungi un pannello sotto: cerca (es. «rimozione forzata», «eccetto»)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca pannello da aggiungere" />
+      {results.length ? (
+        <div className="sign-grid">{results.map((x) => (
+          <button key={x.id} type="button" className="sign-cell" title={x.label} onClick={() => add(x.id)}><img src={`/signs/${encodeURIComponent(x.file)}`} alt="" loading="lazy" /></button>
+        ))}</div>
+      ) : null}
+      <p className="muted">Il primo pannello è in alto. Anche con lo strumento Cartelli: un clic su un cartello aggiunge il nuovo pannello sotto.</p>
+    </Section>
+  );
+}
+
 function AssetInspector({ ids }: { ids: readonly string[] }) {
   const net = useApp((s) => s.network)!;
   const catalogs = useApp((s) => s.catalogs);
@@ -99,9 +144,9 @@ function AssetInspector({ ids }: { ids: readonly string[] }) {
               options={catalogs.materials.items.map((m) => ({ value: m.id, label: m.label }))} />
           </Field>
         ) : null}
-        {a.properties.poleId ? <p className="muted">Pannello {(a.properties.stackOrder as number ?? 0) + 1} sul palo {String(a.properties.poleId).slice(-6)}</p> : null}
         <p className="mono muted">{a.at[1].toFixed(6)}, {a.at[0].toFixed(6)}</p>
       </Section>
+      {sign ? <PoleSection assetId={a.id} /> : null}
       <div className="inspector-actions">
         <Button icon="crosshair" onClick={() => flyTo([a.at[0], a.at[1]], 19.5)}>Centra</Button>
         <Button icon="duplicate" onClick={() => duplicateSelection()}>Duplica</Button>

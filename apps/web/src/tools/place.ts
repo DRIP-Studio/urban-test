@@ -1,6 +1,7 @@
 import { geom, type Asset, type LngLat } from '@drip-urban/core';
 import { fc } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
+import { plateOnPoleOps } from '../state/actions';
 import { commit, newId, select, useApp } from '../state/store';
 import type { NetworkIndex } from './snap';
 import { useTool } from './toolState';
@@ -55,19 +56,16 @@ function makePlaceTool(kind: 'furniture' | 'sign'): ToolHandler {
       const type = kind === 'sign' ? t.signId : t.furnitureId;
       const props: Record<string, unknown> = {};
       const extraOps: { type: string; payload: unknown }[] = [];
-      let at = e.lngLat;
+      const at = e.lngLat;
       if (kind === 'sign') {
-        // Alt-click on an existing sign: add a plate to the same pole (pole composer).
-        const hit = ctx.map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], { layers: ['asset-pt-sign'].filter((l) => ctx.map.getLayer(l)) })[0];
-        if (e.alt && hit) {
-          const base = network.assets[String(hit.properties.id)];
-          if (base) {
-            const pole = (base.properties.poleId as string | undefined) ?? `pole-${base.id}`;
-            const stack = Object.values(network.assets).filter((a) => a.properties.poleId === pole || a.id === base.id).length;
-            at = base.at;
-            props.poleId = pole;
-            props.stackOrder = stack;
-            if (!base.properties.poleId) extraOps.push({ type: 'asset.update', payload: { assetId: base.id, changes: { properties: { ...base.properties, poleId: pole, stackOrder: 0 } } } });
+        // Click on an existing sign (Alt inverts the setting): the new plate goes under it, on the same pole.
+        const hit = ctx.map.queryRenderedFeatures([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]], { layers: ['asset-pt-sign'].filter((l) => ctx.map.getLayer(l)) })[0];
+        if (hit && (t.signStack !== e.alt)) {
+          const r = plateOnPoleOps(String(hit.properties.id), type);
+          if (r) {
+            useTool.setState((s) => ({ recentSigns: [type, ...s.recentSigns.filter((x) => x !== type)].slice(0, 12) }));
+            if (commit('batch', { label: 'Aggiungi pannello al palo', ops: r.ops }).ok) select({ kind: 'asset', ids: [r.asset.id] });
+            return;
           }
         }
         useTool.setState((s) => ({ recentSigns: [type, ...s.recentSigns.filter((x) => x !== type)].slice(0, 12) }));

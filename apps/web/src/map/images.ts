@@ -1,4 +1,5 @@
-import type { MaterialItem } from '../api/types';
+import type { FurnitureItem, MaterialItem } from '../api/types';
+import { furnitureSprite } from './furnitureSprite';
 import { patternImage } from './patterns';
 import type { Map as MLMap } from 'maplibre-gl';
 
@@ -88,14 +89,23 @@ function ledImage(state: string): ImageData {
  */
 const signCache = new Map<string, Promise<ImageData>>();
 
-export function installImageLoader(map: MLMap, materials: readonly MaterialItem[]): void {
+export function installImageLoader(map: MLMap, materials: readonly MaterialItem[], furniture: readonly FurnitureItem[] = []): void {
   const byId = new Map(materials.map((m) => [m.id, m]));
+  const furn = new Map(furniture.map((f) => [f.id, f]));
   map.setMissingStyleImageResolver(async (id) => {
     if (map.hasImage(id)) return;
     if (id.startsWith('mat:')) {
       const [, mid = '', z = '18'] = id.split(':');
       const m = byId.get(mid);
       const img = m ? patternImage(m, Number(z)) : null;
+      if (img) map.addImage(id, img, { pixelRatio: 2 });
+      return;
+    }
+    if (id.startsWith('furn:')) {
+      // furn:<itemId>[:<material>] — plan symbol with volume, at real scale.
+      const [, itemId = '', mat] = id.split(':');
+      const item = furn.get(itemId);
+      const img = item ? furnitureSprite(item, byId, mat || undefined) : null;
       if (img) map.addImage(id, img, { pixelRatio: 2 });
       return;
     }

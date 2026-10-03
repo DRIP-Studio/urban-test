@@ -391,3 +391,8 @@
 .band { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-11); }
 .color-field { width: 100%; height: 32px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: none; padding: 2px; }
 .text-field.inline { padding: 3px 6px; font-size: var(--fs-12); min-width: 0; }
+.pole-list { list-style: none; margin: 0 0 var(--s-2); padding: 0 0 0 10px; display: flex; flex-direction: column; gap: 4px; border-left: 3px solid var(--text-3); }
+.pole-list li { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--r-2); background: var(--ink-2); font-size: var(--fs-12); }
+.pole-list li.is-sel { box-shadow: inset 0 0 0 1px var(--drip-accent); }
+.pole-list img { width: 28px; height: 28px; object-fit: contain; }
+.pole-list .link { text-align: left; background: none; border: 0; color: var(--text-1); padding: 0; }

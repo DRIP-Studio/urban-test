@@ -108,8 +108,8 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
     }
     const round = item.category === 'vegetation' || item.id === 'furniture.fountain' || item.id === 'furniture.bin' || item.id === 'furniture.bollard' || item.id === 'furniture.hydrant';
     const ring = round ? disc(frame, a.at, Math.max(0.12, item.dims.w / 2)) : rect(frame, a.at, Math.max(0.15, item.dims.w), Math.max(0.15, item.dims.d), a.rotationDeg);
-    fp.push({ type: 'Feature', id: a.id, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { ...base, material: item.material, category: item.category } });
-    pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, type: '' } });
+    fp.push({ type: 'Feature', id: a.id, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { ...base, material: a.material ?? item.material, category: item.category, h: item.dims.h, sprite: true } });
+    pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, type: '', sprite: `furn:${item.id}${a.material && a.material !== item.material ? `:${a.material}` : ''}` } });
   }
   return { fp: fc(fp), pt: fc(pt), signals: fc(sig) };
 }

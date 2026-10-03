@@ -12,6 +12,7 @@ import { removeVertexAt } from '../tools/edit';
 import { useContextMenu } from '../shell/contextMenu';
 import { BASEMAPS } from './basemaps';
 import { installImageLoader } from './images';
+import { PX_PER_M } from './furnitureSprite';
 import { LAYERS, addProjectLayers, setLayerOpacity, setLayerVisible } from './layers';
 import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
 import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
@@ -70,7 +71,7 @@ export function MapView() {
       boxZoom: false, doubleClickZoom: false, dragRotate: true, pitchWithRotate: true, canvasContextAttributes: { antialias: true },
     });
     setMapInstance(map);
-    installImageLoader(map, catalogs.materials.items);
+    installImageLoader(map, catalogs.materials.items, catalogs.furniture.items);
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
 
@@ -100,8 +101,20 @@ export function MapView() {
       applyBasemap(map, useMapUi.getState().basemap);
       const st = useMapUi.getState();
       for (const def of LAYERS) { setLayerVisible(map, def, st.visible[def.id] ?? def.defaultVisible); if (st.opacity[def.id] !== undefined) setLayerOpacity(map, def, st.opacity[def.id]!); }
+      // Furniture symbols are drawn at PX_PER_M px/m (pixelRatio 2): size them in metres at this latitude.
+      const pxPerM19 = 2 ** 19 * 512 / (40_075_016.7 * Math.cos((baseline.origin[1] * Math.PI) / 180));
+      const k = pxPerM19 / (PX_PER_M / 2);
+      if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'icon-size', ['interpolate', ['exponential', 2], ['zoom'], 15, k / 16, 19, k, 22, k * 8]);
+      applyPitchMode();
       useMapUi.setState({ ready: true });
     };
+    // Tilted map: furniture and buildings become real extrusions; flat map: plan symbols with volume.
+    const applyPitchMode = () => {
+      const tilted = map.getPitch() > 12;
+      for (const id of ['asset-fp-extrude', 'buildings-extrude']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'visible' : 'none');
+      if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'visibility', tilted ? 'none' : 'visible');
+    };
+    map.on('pitchend', applyPitchMode);
     map.on('load', init);
     // ZTL LED panels follow the clock: refresh their state every minute.
     const ledTimer = window.setInterval(() => { if (map.loaded()) pushNetwork(); }, 60_000);
