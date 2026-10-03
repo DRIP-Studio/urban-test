@@ -44,11 +44,9 @@ test('signs stay on their coordinate at every zoom and stack on one pole (RB-01,
     expect(r.x > 40 || r.y > 40, `zoom ${z}: not in the corner`).toBeTruthy();
   }
 
-  // Alt+click on the plate adds a second plate to the same pole (one batch, one undo step).
+  // A click on the plate adds a second plate under it on the same pole (one batch, one undo step).
   const q = await focus(page, sign!.at, 19);
-  await page.keyboard.down('Alt');
   await page.mouse.click(q.x, q.y);
-  await page.keyboard.up('Alt');
   await expect.poll(() => opCount(page)).toBe(2);
   const plates = await projectAssets(page);
   expect(plates).toHaveLength(2);
@@ -56,6 +54,11 @@ test('signs stay on their coordinate at every zoom and stack on one pole (RB-01,
   expect(poles.size).toBe(1);
   expect([...poles][0]).toBeTruthy();
   expect(new Set(plates.map((a) => a.properties.stackOrder))).toEqual(new Set([0, 1]));
+  // Alt inverts it: a separate sign on its own pole.
+  await page.keyboard.down('Alt');
+  await page.mouse.click(q.x + 80, q.y + 60);
+  await page.keyboard.up('Alt');
+  await expect.poll(() => opCount(page)).toBe(3);
 
   // Twin shows exactly what 2D has.
   await page.getByRole('button', { name: 'Twin 3D', exact: true }).click();

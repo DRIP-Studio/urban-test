@@ -135,8 +135,8 @@ export function TopBar() {
         <IconButton icon="layers" label="Livelli" shortcut="Ctrl+L" onClick={() => setDock('layers')} />
         <IconButton icon="clock" label="Cronologia e versioni" onClick={() => setDock('history')} />
         <IconButton icon="export" label="Esporta" shortcut="Ctrl+E" onClick={() => setDock('export')} />
-        <IconButton icon="keyboard" label="Scorciatoie" shortcut="?" onClick={() => useShortcuts.getState().toggle()} />
-        <IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} />
+        <span className="tb-opt"><IconButton icon="keyboard" label="Scorciatoie" shortcut="?" onClick={() => useShortcuts.getState().toggle()} /></span>
+        <span className="tb-opt"><IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} /></span>
         <IconButton icon="settings" label="Impostazioni" onClick={() => setDock('settings')} />
         <UserMenu />
       </div>

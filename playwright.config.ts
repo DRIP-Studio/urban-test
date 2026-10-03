@@ -22,6 +22,7 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
     acceptDownloads: true,
     trace: 'retain-on-failure',
-    launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
+    // PW_CHROMIUM_PATH: use a preinstalled Chromium when the pinned browser build is not available.
+    launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}) },
   },
 });

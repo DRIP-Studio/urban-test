@@ -2,6 +2,7 @@ import { logout, useSession } from '../state/session';
 import { setDock, useApp } from '../state/store';
 import { Icon } from '../ui/Icon';
 import { MenuItem, Popover } from '../ui/Popover';
+import { toggleTheme, useTheme } from '../ui/theme';
 
 const ROLE_IT: Record<string, string> = { viewer: 'Lettura', editor: 'Modifica', publisher: 'Pubblicazione civica', admin: 'Amministratore' };
 
@@ -15,6 +16,7 @@ export function UserMenu() {
   const session = useSession((s) => s.session);
   const license = useSession((s) => s.license);
   const inProject = useApp((s) => !!s.project);
+  const theme = useTheme((s) => s.theme);
   const user = session?.user;
   if (!user) return null;
   return (
@@ -32,6 +34,7 @@ export function UserMenu() {
           {license ? <div className="um-head"><span className="plan-chip">{license.planLabel}</span><span>{license.status === 'trialing' ? `${license.daysLeft ?? 0} giorni di prova` : license.validUntil ? `fino al ${new Date(license.validUntil).toLocaleDateString('it-IT')}` : ''}</span></div> : null}
           <div className="menu-sep" />
           {inProject ? <MenuItem icon={<Icon name="settings" size={15} />} label="Account, licenza e integrazioni" onClick={() => { close(); setDock('settings'); }} /> : null}
+          <MenuItem icon={<Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15} />} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={() => { close(); toggleTheme(); }} />
           {session?.mode === 'protected' ? <MenuItem icon={<Icon name="logout" size={15} />} label="Esci" onClick={() => { close(); void logout(); }} /> : null}
         </div>
       )}
