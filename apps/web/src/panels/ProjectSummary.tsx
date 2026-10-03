@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { setTool, useApp, setDock } from '../state/store';
 import { Section, Stat } from '../ui/controls';
 import { Icon } from '../ui/Icon';
+import { SidewalkOverview } from './RulesPanels';
 
 interface MigrationDoc { from: string; report: { level: string; what: string; reason: string }[] }
 
@@ -48,6 +49,7 @@ export function ProjectSummary() {
           <p className="muted">{migration.report.length - issues.length} note informative (elementi rigenerati dal nuovo modello). Origine: {migration.from}</p>
         </Section>
       ) : null}
+      <SidewalkOverview />
       <Section title="Per iniziare" defaultOpen={!scenario.operations.length}>
         <div className="quick">
           <button type="button" onClick={() => setTool('road')}><Icon name="road" /><span>Disegna una strada</span><kbd className="kbd">R</kbd></button>

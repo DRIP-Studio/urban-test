@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import {
   FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
-  coordinateCorridor, groupDemand, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
+  coordinateCorridor, groupDemand, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
 import type { Geometry, LineString, Polygon } from './geojson';
@@ -89,6 +89,7 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
       const demand = lastTraffic ? groupDemand(a, lastTraffic.flows, net) : undefined;
       return { analysis: a, suggested: suggestSignalPlan(net, a, { demand, permissiveLeft: args.permissiveLeft as boolean | undefined }) };
     }
+    case 'sidewalks': return sidewalkCoverage(net, baseline);
     case 'coordinate': {
       const ids = args.planIds as string[];
       const plans = ids.map((id) => net!.signalPlans[id]).filter((p): p is NonNullable<typeof p> => !!p);

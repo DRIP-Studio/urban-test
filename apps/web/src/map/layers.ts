@@ -7,7 +7,7 @@ import { PATTERNS } from './patterns';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -37,6 +37,7 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'labels', label: 'Nomi delle strade', category: 'base', mapLayers: ['labels-text'], defaultVisible: true, source: 'OpenStreetMap' },
   { id: 'project', label: 'Evidenzia modifiche di progetto', category: 'design', mapLayers: ['project-outline', 'project-outline-rb'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#e8772e', label: 'Proposto' }] },
   { id: 'assets', label: 'Arredo, verde, segnali, semafori', category: 'design', mapLayers: ['asset-fp-fill', 'asset-fp-line', 'asset-pt-sign', 'asset-pt-dot', 'signals-icon'], defaultVisible: true, source: 'Esistente (OSM) + progetto' },
+  { id: 'sidewalksEst', label: 'Marciapiedi stimati', category: 'existing', mapLayers: ['sidewalks-est-fill', 'sidewalks-est-line'], defaultVisible: true, source: 'Stima DRIP dove mancano dati e percorsi pedonali (DM 5/11/2001)', legend: [{ color: '#c9b8a0', label: 'Stimato (non rilevato)' }] },
   { id: 'restrictions', label: 'Divieti e limiti di transito', category: 'mobility', mapLayers: ['restrictions-line', 'restrictions-label'], defaultVisible: true, source: 'Progetto + OpenStreetMap (hgv, maxweight, maxheight…)',
     legend: [{ color: '#b9312a', label: 'Divieto mezzi pesanti / transito' }, { color: '#d9a441', label: 'Solo destinazione o carico/scarico' }, { color: '#7e57c2', label: 'Limite di massa o dimensioni' }] },
   { id: 'lanesPref', label: 'Corsie preferenziali', category: 'mobility', mapLayers: ['lanes-pref-line'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#c0392b', label: 'Bus / taxi' }, { color: '#2f7d5b', label: 'Ciclabile' }] },
@@ -87,6 +88,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   // Proposed changes are outlined along their kerbs (and roundabout outer edge), not on every internal surface seam.
   L({ id: 'project-outline', type: 'line', source: 'lines', filter: ['all', ['==', ['get', 'state'], 'project'], ['==', ['get', 'kind'], 'kerb']], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2], 'line-opacity': 0.95 } });
   L({ id: 'project-outline-rb', type: 'line', source: 'surfaces', filter: ['==', ['get', 'kind'], 'roundabout_ring'], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2] } });
+  L({ id: 'sidewalks-est-fill', type: 'fill', source: 'sidewalks-est', minzoom: 15, paint: { 'fill-color': dark ? '#7d7466' : '#cfc6b5', 'fill-opacity': 0.85 } });
+  L({ id: 'sidewalks-est-line', type: 'line', source: 'sidewalks-est', minzoom: 16, paint: { 'line-color': dark ? '#a99c86' : '#9a8f7c', 'line-width': 1, 'line-dasharray': [2, 1.5] } });
   L({ id: 'restrictions-line', type: 'line', source: 'restrictions', layout: { 'line-cap': 'round' }, paint: {
     'line-color': ['match', ['get', 'level'], 'ban', '#b9312a', 'partial', '#d9a441', '#7e57c2'],
     'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 18, 5], 'line-dasharray': [1.2, 1], 'line-opacity': 0.9 } });

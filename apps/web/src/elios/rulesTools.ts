@@ -127,5 +127,19 @@ registerEliosTools([
       return { found: r.project.found, distanceM: Math.round(r.project.distanceM), minutes: Math.round(r.project.durationS / 6) / 10, todayMinutes: r.today.found ? Math.round(r.today.durationS / 6) / 10 : null, warnings: r.project.warnings, steps: r.project.steps.slice(0, 12).map((s) => s.instruction) };
     },
   },
+  {
+    name: 'estimated_sidewalks', kind: 'write', label: 'Marciapiedi stimati',
+    description: 'Attiva o disattiva i marciapiedi stimati (dove mancano dati e percorsi pedonali): per tutto il progetto o per le strade indicate. Non modifica le strade.',
+    parameters: OBJ({ on: { type: 'BOOLEAN', description: 'true = attiva' }, roadName: S('Solo questa strada'), roadIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Solo queste strade' } }, ['on']),
+    async run(a) {
+      const sw = await import('../state/sidewalks');
+      if (!a.roadName && !(Array.isArray(a.roadIds) && a.roadIds.length)) { sw.setAllSides(Boolean(a.on)); return { all: true, on: Boolean(a.on) }; }
+      const ids = new Set(roadsByName(a.roadName, a.roadIds));
+      const keys = [...sw.useSidewalks.getState().bySide.values()].filter((x) => ids.has(x.roadId) && x.status === 'estimated').map((x) => x.key);
+      for (const k of keys) sw.setSideEnabled(k, Boolean(a.on));
+      if (a.on) sw.setSidewalksEnabled(true);
+      return { sides: keys.length, on: Boolean(a.on) };
+    },
+  },
 ]);
 void engine;

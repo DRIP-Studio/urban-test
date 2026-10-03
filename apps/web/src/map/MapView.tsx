@@ -96,6 +96,7 @@ export function MapView() {
       }
       pushNetwork();
       renderSignalHeads();
+      void import('../state/sidewalks').then((m) => m.redrawSidewalks());
       applyBasemap(map, useMapUi.getState().basemap);
       const st = useMapUi.getState();
       for (const def of LAYERS) { setLayerVisible(map, def, st.visible[def.id] ?? def.defaultVisible); if (st.opacity[def.id] !== undefined) setLayerOpacity(map, def, st.opacity[def.id]!); }

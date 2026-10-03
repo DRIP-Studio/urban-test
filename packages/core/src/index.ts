@@ -20,6 +20,7 @@ export * from './analysis/validation';
 export * from './analysis/sidewalks';
 export * from './analysis/restrictions';
 export * from './analysis/zones';
+export * from './analysis/sidewalkEstimate';
 export { buildJunction, armKey } from './physical/junction';
 export { MetricCache, vehicularArms, incidence } from './physical/topology';
 export { MARKING } from './physical/markings';

@@ -8,6 +8,7 @@ import { commit, newId, select, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { Button, Field, NumberField, ProvBadge, Section, Segmented, Select, TextField, Toggle } from '../ui/controls';
 import { ScheduleEditor, describeSchedule } from '../ui/ScheduleEditor';
+import { setAllSides, setSideEnabled, setSidewalksEnabled, useSidewalks } from '../state/sidewalks';
 
 const PROJECT = { kind: 'project' as const, source: 'DRIP Urban scenario' };
 
@@ -232,6 +233,66 @@ export function LanesSection({ road }: { road: Road }) {
         ))}
       </ul>
       <p className="muted">Corsie riservate e preferenziali (art. 7 c. 1 lett. b e c. 9 CdS): fuori dagli orari diventano corsie ordinarie per navigatore e simulazione.</p>
+    </Section>
+  );
+}
+
+const SIDE_STATUS: Record<string, string> = {
+  data: 'Marciapiede nei dati', footway: 'Percorso pedonale separato (OSM)', estimated: 'Stimato', no_room: 'Nessuno spazio: facciate sul ciglio', rural: 'Nessun edificio vicino: non previsto',
+};
+
+/** Sidewalk status of both sides: data, mapped footway, or an estimate that can be switched on/off. */
+export function SidewalkSection({ road }: { road: Road }) {
+  const { doc, bySide, loading } = useSidewalks();
+  const sides = (['left', 'right'] as const).map((side) => ({ side, s: bySide.get(`${road.id}:${side}`) }));
+  if (!sides.some((x) => x.s)) return null;
+  const addToSection = (side: 'left' | 'right', w: number) => {
+    const els = road.section.elements;
+    const el = { id: `${road.id}:sw${side[0]}-${newId('e')}`, kind: 'sidewalk' as const, widthM: w };
+    commit('road.setSection', { roadId: road.id, lanes: road.lanes, section: { elements: side === 'left' ? [el, ...els] : [...els, el] } });
+  };
+  return (
+    <Section title="Marciapiedi">
+      {!doc.enabled ? <p className="muted">Marciapiedi stimati disattivati per il progetto.</p> : null}
+      <ul className="row-list">
+        {sides.map(({ side, s }) => (
+          <li key={side}>
+            <span className="grow"><strong>{side === 'left' ? 'Sinistro' : 'Destro'}</strong> · {s ? SIDE_STATUS[s.status] : loading ? 'calcolo…' : '—'}{s?.status === 'estimated' ? ` ${s.widthM.toString().replace('.', ',')} m` : ''}</span>
+            {s?.status === 'estimated' ? (
+              <>
+                <ProvBadge kind="estimated" />
+                <Toggle compact checked={doc.enabled && !doc.disabled.includes(s.key)} label={`Marciapiede stimato ${side}`} onChange={(v) => { if (!doc.enabled && v) setSidewalksEnabled(true); setSideEnabled(s.key, v); }} />
+                <button type="button" className="chip chip-sm" title="Aggiunge il marciapiede alla sezione di progetto (modifica la strada nello scenario)" onClick={() => addToSection(side, s.widthM)}>In sezione</button>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <p className="muted">I marciapiedi stimati non modificano la strada: sono una sovrapposizione attivabile, larga secondo la classe (DM 5/11/2001, minimo 1,50 m) e limitata dallo spazio prima degli edifici.</p>
+    </Section>
+  );
+}
+
+/** Project-wide switch and counts for estimated sidewalks. */
+export function SidewalkOverview() {
+  const { doc, coverage, loading } = useSidewalks();
+  if (!coverage) return loading ? <p className="muted pad">Calcolo dei marciapiedi stimati…</p> : null;
+  const km = (m: number) => `${(m / 1000).toFixed(1).replace('.', ',')} km`;
+  const est = coverage.sides.filter((s) => s.status === 'estimated');
+  const on = est.filter((s) => !doc.disabled.includes(s.key)).length;
+  return (
+    <Section title="Marciapiedi" defaultOpen={false}>
+      <dl className="kv">
+        <dt>Nei dati</dt><dd>{km(coverage.totals.data)}</dd>
+        <dt>Percorsi pedonali OSM</dt><dd>{km(coverage.totals.footway)}</dd>
+        <dt>Stimati</dt><dd>{km(coverage.totals.estimated)} · {on}/{est.length} lati attivi</dd>
+        <dt>Senza spazio</dt><dd>{km(coverage.totals.no_room)}</dd>
+      </dl>
+      <Toggle checked={doc.enabled} label="Mostra e usa i marciapiedi stimati" onChange={setSidewalksEnabled} />
+      <div className="row">
+        <Button size="sm" onClick={() => setAllSides(true)}>Attiva tutti</Button>
+        <Button size="sm" variant="ghost" onClick={() => setAllSides(false)}>Disattiva tutti</Button>
+      </div>
     </Section>
   );
 }

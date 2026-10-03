@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  LocalFrame, ScenarioHistory, buildGraph, geom, checkRestrictions, osmRestrictions, parseOpeningHours, route, routeVia, zoneGates,
+  LocalFrame, ScenarioHistory, buildGraph, geom, sidewalkCoverage, checkRestrictions, osmRestrictions, parseOpeningHours, route, routeVia, zoneGates,
   type CityBaseline, type Network, type Road, type Scenario,
 } from '../src';
 
@@ -109,5 +109,20 @@ describe('buffer outline', () => {
     expect(area).toBeLessThan(22_000);
     // Every vertex is within ~radius + one cell of the street.
     for (const p of ring) expect(geom.project(L, p).d).toBeLessThan(20 + 20 / 3 + 1);
+  });
+});
+
+describe('sidewalk coverage (no road changed)', () => {
+  it('classifies every side and estimates sidewalks only where there is room and no footway', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const before = JSON.stringify(h.network.roads);
+    const t0 = Date.now();
+    const c = sidewalkCoverage(h.network, baseline);
+    const ms = Date.now() - t0;
+    require('node:fs').writeFileSync('/tmp/claude-0/sw.log', JSON.stringify({ ms, totals: c.totals, sides: c.sides.length }));
+    expect(ms).toBeLessThan(15000);
+    expect(c.totals.estimated).toBeGreaterThan(0);
+    expect(c.sides.filter((s) => s.status === 'estimated').every((s) => s.widthM >= 0.9 && s.widthM <= 2.5 && (s.ring?.length ?? 0) >= 4)).toBe(true);
+    expect(JSON.stringify(h.network.roads)).toBe(before);
   });
 });

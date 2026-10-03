@@ -9,13 +9,13 @@ import { toast } from './toasts';
  * widths come from the free strip between carriageway and building fronts. Undo = restore the automatic
  * version saved just before (Cronologia).
  */
-export async function importExistingSidewalks(): Promise<void> {
+export async function importExistingSidewalks(opts: { silent?: boolean } = {}): Promise<void> {
   const { project, baseline } = useApp.getState();
   if (!project || !baseline) return;
   const r = inferSidewalks(baseline);
-  if (!r.changes.length) { toast.info('Marciapiedi', 'Lo stato esistente è già aggiornato.'); return; }
+  if (!r.changes.length) { if (!opts.silent) toast.info('Marciapiedi', 'Lo stato esistente è già aggiornato.'); return; }
   const km = (r.totalLengthM / 1000).toFixed(1).replace('.', ',');
-  const ok = await confirmAction(
+  const ok = opts.silent || await confirmAction(
     'Importare i marciapiedi esistenti?',
     `${r.roadsWithSidewalks} strade con marciapiede (${km} km di lati), ${r.roadsWithout} senza spazio tra carreggiata e edifici. `
     + `Le larghezze sono misurate sulle sagome degli edifici di OpenStreetMap e marcate come "ricavate", non come rilievo. `

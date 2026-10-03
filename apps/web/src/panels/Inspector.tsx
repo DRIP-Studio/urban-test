@@ -6,7 +6,7 @@ import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Selec
 import { Icon } from '../ui/Icon';
 import { ToolSettings } from './ToolSettings';
 import { RoundaboutInspector } from './RoundaboutPanel';
-import { LanesSection, RestrictionsSection, ZoneInspector } from './RulesPanels';
+import { LanesSection, RestrictionsSection, SidewalkSection, ZoneInspector } from './RulesPanels';
 
 const ROAD_CLASS: Record<string, string> = {
   trunk: 'Strada principale extraurbana', trunk_link: 'Rampa', primary: 'Primaria', secondary: 'Secondaria', tertiary: 'Interquartiere', residential: 'Locale',
@@ -44,6 +44,7 @@ function RoadInspector({ road }: { road: Road }) {
           {lay.elements.map((e) => <span key={e.el.id} className={`ms ms-${e.el.kind}`} style={{ flexGrow: e.el.widthM }} title={`${e.el.kind} · ${e.el.widthM} m`} />)}
         </div>
       </Section>
+      <SidewalkSection road={road} />
       <LanesSection road={road} />
       <RestrictionsSection roads={[road]} />
       <Section title="Provenienza dei dati" defaultOpen={false}>
