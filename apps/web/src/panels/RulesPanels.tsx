@@ -9,6 +9,7 @@ import { toast } from '../state/toasts';
 import { Button, Field, NumberField, ProvBadge, Section, Segmented, Select, TextField, Toggle } from '../ui/controls';
 import { ScheduleEditor, describeSchedule } from '../ui/ScheduleEditor';
 import { NormRef } from '../ui/NormRef';
+import { generateZoneGates } from '../state/suggestions';
 import { setAllSides, setSideEnabled, setSidewalksEnabled, useSidewalks } from '../state/sidewalks';
 
 const PROJECT = { kind: 'project' as const, source: 'DRIP Urban scenario' };
@@ -29,21 +30,7 @@ export function ZoneInspector({ zone }: { zone: Zone }) {
   const active = zoneActiveAt(zone, now.day, now.minutes);
   const gates = Object.values(net.assets).filter((a) => a.properties.zoneId === zone.id && a.state !== 'removed');
   const timed = zone.kind === 'ztl' || zone.kind === 'school' || zone.kind === 'pedestrian' || zone.kind === 'work' || zone.kind === 'low_emission';
-  const generateGates = () => {
-    const found = zoneGates(net, baseline.origin, zone).filter((g) => g.entry);
-    if (!found.length) { toast.warn('Nessun ingresso', 'Nessuna strada veicolare entra nella zona.'); return; }
-    const assets: Asset[] = [];
-    for (const g of found) {
-      const pole = newId('pole');
-      assets.push({ id: newId('a'), type: 'ztl.gate', at: g.at, rotationDeg: g.bearingDeg, state: 'project', properties: { zoneId: zone.id, roadId: g.roadId, label: `Varco ${g.roadName || ''}`.trim() }, provenance: PROJECT });
-      // Fig. II 322/a CdS: ZTL sign at the gate, with the schedule plate below.
-      assets.push({ id: newId('a'), type: 'it.sign.zona_traffico_limitato', at: g.at, rotationDeg: g.bearingDeg, state: 'project', properties: { zoneId: zone.id, poleId: pole, stackOrder: 0, note: describeSchedule(zone.schedule) }, provenance: PROJECT });
-    }
-    const ops: { type: string; payload: unknown }[] = [];
-    if (gates.length) ops.push({ type: 'asset.remove', payload: { assetIds: gates.map((a) => a.id) } });
-    ops.push({ type: 'asset.add', payload: { assets } });
-    if (commit('batch', { label: `Varchi ${zone.name}`, ops }).ok) toast.success('Varchi generati', `${found.length} ingressi con pannello LED e segnale ZTL`);
-  };
+  const generateGates = () => generateZoneGates(zone);
   return (
     <>
       <Section title={zone.name}>

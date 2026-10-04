@@ -26,6 +26,7 @@ import { Skeleton } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/controls';
 import { ContextMenu, StatusBar, ToolHint, ToolRail } from './Chrome';
+import { Suggestions } from './Suggestions';
 import { installShortcuts } from './commands';
 import { TopBar } from './TopBar';
 import { EliosPanel } from '../elios/Elios';
@@ -112,6 +113,7 @@ export function Workspace() {
             {mode === 'twin' ? <Suspense fallback={<div className="fullscreen-state"><span className="spinner lg" /><p>Caricamento del Twin 3D</p></div>}><TwinView /></Suspense> : null}
             {mode === 'present' ? <PresentView /> : null}
             {map ? <ToolHint /> : null}
+            {map ? <Suggestions /> : null}
             {mode !== 'present' ? <EliosPanel /> : null}
           </div>
           {bottom && map ? (

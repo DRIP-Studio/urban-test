@@ -29,13 +29,25 @@ test('traffic calming and custom markings: palette, placement, map hit-test, ins
   await expect.poll(() => opCount(page)).toBe(1);
   await expect(page.getByRole('button', { name: 'Attraversamento pedonale rialzato', expanded: true })).toBeVisible();
 
+  // Next-step suggestion: a speed table must be announced by the «dosso» warning sign (art. 85 Reg.).
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('d');
+  await page.locator('.mk-tile', { hasText: 'Piattaforma rialzata' }).click();
+  await page.mouse.click(p.x, p.y - 60);
+  await expect.poll(() => opCount(page)).toBe(2);
+  const card = page.locator('.suggest-card', { hasText: 'dosso' });
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Posiziona a 30 m' }).click();
+  await expect.poll(() => opCount(page)).toBe(3);
+  await expect(card).toHaveCount(0);
+
   // Custom road text: one click on the lane, oriented on the direction of travel.
   await page.keyboard.press('Escape');
   await page.keyboard.press('w');
   await page.locator('.mk-tile', { hasText: 'Scritta' }).click();
   const q = await focus(page, road.text, 19.5);
   await page.mouse.click(q.x + 12, q.y);
-  await expect.poll(() => opCount(page)).toBe(2);
+  await expect.poll(() => opCount(page)).toBe(4);
 
   // The letters are physical marking polygons with the marking's own ids (clickable on the map).
   const ids = await page.evaluate(async () => {
@@ -48,5 +60,5 @@ test('traffic calming and custom markings: palette, placement, map hit-test, ins
   expect(ids.some((id) => id.startsWith('fm:'))).toBeTruthy();
 
   await page.keyboard.press('Control+z');
-  await expect.poll(() => opCount(page)).toBe(1);
+  await expect.poll(() => opCount(page)).toBe(3);
 });

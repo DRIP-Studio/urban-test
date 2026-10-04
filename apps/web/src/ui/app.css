@@ -219,3 +219,22 @@ h1, h2, h3 { text-wrap: balance; }
 .rail.is-expanded .rail-btn.is-on::before { left: -8px; }
 .rail-btn span kbd { display: none; }
 .rail.is-expanded .rail-btn span kbd { display: inline; }
+
+/* ------------------------------------------------------------------ suggestions (next steps) */
+.suggest {
+  position: absolute; right: 56px; bottom: var(--s-3); z-index: var(--z-map-ui); width: 300px; max-height: calc(100% - 96px); overflow: auto;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--r-3);
+  background: var(--ink-1); border: 1px solid var(--line-1); box-shadow: var(--shadow-float);
+  animation: hint-in-r var(--t-spring) var(--spring) both;
+}
+@keyframes hint-in-r { from { opacity: 0; translate: 8px 0; } to { opacity: 1; translate: 0 0; } }
+.suggest-head { display: flex; align-items: center; gap: 6px; font-size: var(--fs-11, 11px); text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); padding: 0 2px 2px; }
+.suggest-head .count { margin-left: auto; color: var(--drip-accent); }
+.suggest-card { background: var(--ink-2); border-radius: var(--r-2); padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
+.suggest-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-1); }
+.suggest-title strong { flex: 1; font-weight: 600; }
+.suggest-x { border: 0; background: transparent; color: var(--text-3); padding: 2px; border-radius: 4px; cursor: pointer; display: grid; place-items: center; }
+.suggest-x:hover { color: var(--text-1); background: var(--ink-3); }
+.suggest-card p { margin: 0; font-size: var(--fs-12); color: var(--text-2); line-height: 1.4; }
+.suggest-ref { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono, monospace); }
+.suggest-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }

@@ -190,13 +190,20 @@ engine.onPhysical((m) => set({ physStats: m.stats, failedOps: m.failed }));
 export interface CommitResult { ok: boolean; issues: Issue[] }
 
 /** The single entry point for every scenario change (undoable, validated, autosaved). */
+type CommitListener = (before: Network, after: Network, type: string) => void;
+const commitListeners = new Set<CommitListener>();
+/** Called after every successful edit (not on undo/redo): used by the suggestions engine. */
+export function onCommit(l: CommitListener): () => void { commitListeners.add(l); return () => commitListeners.delete(l); }
+
 export function commit<P>(type: string, payload: P, opts: { silent?: boolean } = {}): CommitResult {
   const h = get().history;
   if (!h) return { ok: false, issues: [] };
   try {
+    const before = h.network;
     const { warnings } = h.commit({ type, payload });
     syncFromHistory();
     markDirty();
+    for (const l of commitListeners) { try { l(before, h.network, type); } catch (err) { console.error(err); } }
     if (warnings.length && !opts.silent) toast.warn('Operazione applicata con avvisi', warnings.map((w) => w.message).join(' · '));
     return { ok: true, issues: warnings };
   } catch (e) {
