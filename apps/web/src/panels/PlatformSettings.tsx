@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { ApiKeyInfo, IdentityProviderCfg, Job, LicenseInfo, LocalUser, PlatformConfig, Role, UpdateInfo, WebhookInfo } from '../api/types';
+import type { ApiKeyInfo, IdentityProviderCfg, Job, LicenseInfo, LocalUser, PlatformConfig, Role, UpdateInfo, WebhookInfo, WmsService } from '../api/types';
+import { loadWms } from '../map/wms';
 import { loadPlatformStatus, logout, useSession } from '../state/session';
 import { toast } from '../state/toasts';
 import { Button, Field, IconButton, NumberField, Section, Segmented, Select, Skeleton, TextField, Toggle } from '../ui/controls';
@@ -270,6 +271,74 @@ function ApiSection() {
   );
 }
 
+const WMS_FORMATS = [{ value: 'image/png', label: 'PNG' }, { value: 'image/jpeg', label: 'JPEG' }] as const;
+const WMS_VERSIONS = [{ value: '1.3.0', label: '1.3.0' }, { value: '1.1.1', label: '1.1.1' }] as const;
+const WMS_CRS = [{ value: 'EPSG:3857', label: 'EPSG:3857 (Web Mercator)' }, { value: 'EPSG:4326', label: 'EPSG:4326 (WGS84)' }] as const;
+
+function WmsEditor({ s, onChange, onRemove }: { s: WmsService; onChange: (s: WmsService) => void; onRemove: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const test = async () => {
+    setBusy(true);
+    try {
+      const r = await api.get<{ ok: boolean; message: string }>(`/api/tiles/wms/${encodeURIComponent(s.id)}/test`);
+      (r.ok ? toast.success : toast.error)(r.ok ? 'Servizio WMS raggiungibile' : 'Prova non riuscita', r.message);
+    } catch (e) { toast.error('Prova WMS', err(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="provider">
+      <div className="provider-head"><strong>{s.label}</strong><Toggle compact checked={s.enabled} label={`Attiva ${s.label}`} onChange={(v) => onChange({ ...s, enabled: v })} /></div>
+      <Field label="Nome"><TextField value={s.label} ariaLabel="Nome del servizio" onCommit={(v) => onChange({ ...s, label: v.trim() })} /></Field>
+      <Field label="Indirizzo GetMap (https)" hint="Indirizzo base del servizio, senza parametri"><TextField value={s.url} placeholder="https://…" ariaLabel="Indirizzo WMS" onCommit={(v) => onChange({ ...s, url: v.trim() })} /></Field>
+      <Field label="Layer" hint="Nomi separati da virgola, come nel GetCapabilities"><TextField value={s.layers} ariaLabel="Layer WMS" onCommit={(v) => onChange({ ...s, layers: v.trim() })} /></Field>
+      <Field label="Uso">
+        <Segmented<WmsService['kind']> label="Uso" size="sm" value={s.kind} onChange={(v) => onChange({ ...s, kind: v, transparent: v === 'overlay' ? true : s.transparent })}
+          options={[{ value: 'overlay', label: 'Livello sovrapposto' }, { value: 'basemap', label: 'Base cartografica' }]} />
+      </Field>
+      <div className="grid-2">
+        <Field label="Formato"><Select value={s.format} ariaLabel="Formato" options={WMS_FORMATS} onChange={(v) => onChange({ ...s, format: v })} /></Field>
+        <Field label="Versione"><Select value={s.version} ariaLabel="Versione WMS" options={WMS_VERSIONS} onChange={(v) => onChange({ ...s, version: v })} /></Field>
+        <Field label="Sistema di riferimento"><Select value={s.crs} ariaLabel="Sistema di riferimento" options={WMS_CRS} onChange={(v) => onChange({ ...s, crs: v })} /></Field>
+        <Field label="Zoom minimo"><NumberField value={s.minzoom ?? 0} min={0} max={22} decimals={0} ariaLabel="Zoom minimo" onCommit={(v) => onChange({ ...s, minzoom: v })} /></Field>
+      </div>
+      <Field label="Attribuzione e licenza"><TextField value={s.attribution} ariaLabel="Attribuzione" onCommit={(v) => onChange({ ...s, attribution: v.trim() })} /></Field>
+      <div className="row">
+        <Toggle checked={s.transparent} label="Sfondo trasparente" onChange={(v) => onChange({ ...s, transparent: v })} />
+        <Button size="sm" busy={busy} disabled={!s.enabled} title={s.enabled ? undefined : 'Attiva e salva il servizio per provarlo'} onClick={() => void test()}>Prova</Button>
+        <IconButton icon="trash" size={14} tone="danger" label="Elimina servizio" onClick={() => void confirmAction(`Eliminare «${s.label}»?`, 'Il servizio sparisce dalle basi cartografiche e dai livelli di tutti gli utenti.', { confirmLabel: 'Elimina', danger: true }).then((y) => { if (y) onRemove(); })} />
+      </div>
+    </div>
+  );
+}
+
+/** Official technical maps (regional CTR/DBT, cadastre) as WMS basemaps and overlays, proxied by the server. */
+function WmsSection() {
+  const [list, setList] = useState<readonly WmsService[] | null>(null);
+  useEffect(() => { api.get<PlatformConfig>('/api/platform/config').then((c) => setList(c.wms ?? [])).catch(() => setList(null)); }, []);
+  if (!list) return null;
+  const save = async (next: readonly WmsService[]) => {
+    try {
+      const cfg = await api.put<PlatformConfig>('/api/platform/config', { wms: next });
+      setList(cfg.wms);
+      toast.success('Carte tecniche salvate');
+      void loadWms();
+    } catch (e) { toast.error('Carte tecniche (WMS)', err(e)); }
+  };
+  const add = () => void save([...list, {
+    id: `wms-${Date.now().toString(36)}`, label: 'Nuovo servizio WMS', url: '', layers: '', format: 'image/png', version: '1.3.0',
+    crs: 'EPSG:3857', transparent: true, kind: 'overlay', attribution: '', minzoom: 0, enabled: false,
+  }]);
+  return (
+    <Section title="Carte tecniche e catasto (WMS)" count={list.filter((s) => s.enabled).length} defaultOpen={false}>
+      <p className="muted">Servizi WMS ufficiali (carta tecnica regionale, DBT, catasto) usati come base cartografica o come livello sopra la città. Le tessere passano dal server di DRIP Urban, che contatta solo gli indirizzi elencati qui.</p>
+      {list.map((s) => (
+        <WmsEditor key={s.id} s={s} onChange={(n) => void save(list.map((x) => (x.id === n.id ? n : x)))} onRemove={() => void save(list.filter((x) => x.id !== s.id))} />
+      ))}
+      <Button size="sm" icon="plus" disabled={list.length >= 20} onClick={add}>Aggiungi servizio WMS</Button>
+    </Section>
+  );
+}
+
 /** Account, subscription, updates and (for administrators) identity, users and API integrations. */
 export function PlatformSettings() {
   const role = useSession((s) => s.session?.user?.role);
@@ -279,7 +348,7 @@ export function PlatformSettings() {
       <AccountSection />
       <LicenseSection />
       <UpdatesSection />
-      {role === 'admin' ? <><AccessSection /><UsersSection /><ApiSection /></> : null}
+      {role === 'admin' ? <><AccessSection /><WmsSection /><UsersSection /><ApiSection /></> : null}
     </>
   );
 }

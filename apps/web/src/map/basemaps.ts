@@ -1,3 +1,5 @@
+import { useWms, wmsBasemaps } from './wms';
+
 export interface Basemap {
   readonly id: string;
   readonly label: string;
@@ -9,19 +11,32 @@ export interface Basemap {
   readonly background: string;
   readonly requires?: 'google';
   readonly overlay?: string;
+  readonly minzoom?: number;
+  /** Raster that already shows buildings and land use: the project's city context is hidden over it. */
+  readonly imagery?: boolean;
 }
 
 export const BASEMAPS: readonly Basemap[] = [
   { id: 'technical', label: 'Tecnica', tiles: null, attribution: '© OpenStreetMap contributors (dati del progetto)', maxzoom: 22, theme: 'light', background: '#e9e6df' },
-  { id: 'osm', label: 'OSM', tiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors', maxzoom: 19, theme: 'light', background: '#f2efe9' },
-  { id: 'satellite', label: 'Satellite', tiles: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Esri, Maxar, Earthstar Geographics', maxzoom: 19, theme: 'dark', background: '#1b1d1c' },
-  { id: 'hybrid', label: 'Ibrida', tiles: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', attribution: 'Esri, Maxar, Earthstar Geographics', maxzoom: 19, theme: 'dark', background: '#1b1d1c' },
-  { id: 'terrain', label: 'Terreno', tiles: 'https://tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors', maxzoom: 17, theme: 'light', background: '#eef0e6' },
+  { id: 'osm', label: 'OSM', imagery: true, tiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors', maxzoom: 19, theme: 'light', background: '#f2efe9' },
+  { id: 'satellite', label: 'Satellite', imagery: true, tiles: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Esri, Maxar, Earthstar Geographics', maxzoom: 19, theme: 'dark', background: '#1b1d1c' },
+  { id: 'hybrid', label: 'Ibrida', imagery: true, tiles: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', attribution: 'Esri, Maxar, Earthstar Geographics', maxzoom: 19, theme: 'dark', background: '#1b1d1c' },
+  { id: 'terrain', label: 'Terreno', imagery: true, tiles: 'https://tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors', maxzoom: 17, theme: 'light', background: '#eef0e6' },
   { id: 'dark', label: 'Scura', tiles: null, attribution: '© OpenStreetMap contributors (dati del progetto)', maxzoom: 22, theme: 'dark', background: '#16181b' },
   { id: 'ctr', label: 'Carta tecnica (CTR)', tiles: null, attribution: '© OpenStreetMap contributors (dati del progetto)', maxzoom: 22, theme: 'light', background: '#ffffff' },
   { id: 'cad', label: 'Nessuna · CAD', tiles: null, attribution: '', maxzoom: 22, theme: 'light', background: '#fbfaf8' },
-  { id: 'google_satellite', label: 'Google Satellite', tiles: '/api/tiles/google/satellite/{z}/{x}/{y}', attribution: 'Google', maxzoom: 21, theme: 'dark', background: '#1b1d1c', requires: 'google' },
+  { id: 'google_satellite', label: 'Google Satellite', imagery: true, tiles: '/api/tiles/google/satellite/{z}/{x}/{y}', attribution: 'Google', maxzoom: 21, theme: 'dark', background: '#1b1d1c', requires: 'google' },
 ];
+
+/** Built-in basemaps plus the official WMS maps of kind «basemap» enabled by the administrator. */
+export function allBasemaps(): readonly Basemap[] {
+  const wms = useWms.getState().services;
+  return wms.length ? [...BASEMAPS, ...wmsBasemaps(wms)] : BASEMAPS;
+}
+
+export function basemapById(id: string): Basemap {
+  return allBasemaps().find((b) => b.id === id) ?? BASEMAPS[0]!;
+}
 
 /** Slippy-map tile covering a point, for real thumbnails. */
 export function tileFor(lon: number, lat: number, z: number): { x: number; y: number; z: number } {

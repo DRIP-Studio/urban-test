@@ -3,9 +3,9 @@ import { jsPDF } from 'jspdf';
 import { DEFAULT_TRAFFIC, LocalFrame, NetworkReplayer, buildPhysicalModel, geom, layoutSection, type SafetyScore, type TrafficResult } from '@drip-urban/core';
 import { buildDxf } from '../export/dxf';
 import { engine } from '../engine/engine';
-import { LAYERS } from '../map/layers';
+import { LAYERS, allLayerDefs } from '../map/layers';
 import { getMap, useMapUi } from '../map/mapStore';
-import { BASEMAPS } from '../map/basemaps';
+import { basemapById } from '../map/basemaps';
 import { useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { Button, Section } from '../ui/controls';
@@ -53,8 +53,10 @@ async function composeImage(title: string, subtitle: string): Promise<HTMLCanvas
       g.fillStyle = '#eceae5'; g.fillText(it.label, pad * 2 + 18 * dpr, band + pad * 2 + i * lh + 9 * dpr);
     });
   }
-  const basemap = BASEMAPS.find((b) => b.id === useMapUi.getState().basemap);
-  const attr = `Dati: OpenStreetMap contributors (ODbL)${basemap?.attribution ? ` · Base: ${basemap.attribution}` : ''} · DRIP Urban`;
+  const basemap = basemapById(useMapUi.getState().basemap);
+  // Official WMS overlays in view carry their own licence (e.g. cadastre CC BY 4.0).
+  const official = allLayerDefs().filter((l) => l.category === 'official' && vis[l.id]).map((l) => l.source);
+  const attr = `Dati: OpenStreetMap contributors (ODbL)${basemap.attribution ? ` · Base: ${basemap.attribution}` : ''}${official.map((o) => ` · ${o}`).join('')} · DRIP Urban`;
   g.font = `${11 * dpr}px Ginto, sans-serif`;
   const tw = g.measureText(attr).width;
   g.fillStyle = 'rgba(245,243,239,0.9)'; g.fillRect(W - tw - pad * 2, H + band - 22 * dpr, tw + pad * 2, 22 * dpr);

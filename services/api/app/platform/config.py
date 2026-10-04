@@ -60,6 +60,37 @@ DEFAULTS: dict[str, Any] = {
     "trialDays": 30,
     # Civic platform (Frattamaggiore Si Trasforma or another municipality on the same WordPress plugin).
     "fstUrl": "https://frattamaggioresitrasforma.studiodrip.it",
+    # Official technical maps (WMS) served through /api/tiles/wms/<id>/… (see app/wms.py).
+    "wms": [
+        {
+            "id": "catasto",
+            "label": "Catasto — Agenzia delle Entrate",
+            "url": "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
+            "layers": "CP.CadastralParcel",
+            "format": "image/png",
+            "version": "1.3.0",
+            "crs": "EPSG:3857",
+            "transparent": True,
+            "kind": "overlay",
+            "attribution": "Agenzia delle Entrate — Cartografia catastale (CC BY 4.0)",
+            "minzoom": 15,
+            "enabled": True,
+        },
+        {
+            "id": "ctr",
+            "label": "Carta tecnica regionale (CTR) — inserire URL WMS della Regione",
+            "url": "",
+            "layers": "",
+            "format": "image/png",
+            "version": "1.3.0",
+            "crs": "EPSG:3857",
+            "transparent": False,
+            "kind": "basemap",
+            "attribution": "",
+            "minzoom": 0,
+            "enabled": False,
+        },
+    ],
 }
 
 _lock = threading.Lock()
@@ -99,7 +130,7 @@ def load() -> dict:
     return _env_overrides(cfg)
 
 
-EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement", "fstUrl"}
+EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement", "fstUrl", "wms"}
 
 
 def save(patch: dict) -> dict:
@@ -116,6 +147,9 @@ def save(patch: dict) -> dict:
                 raise ValueError("La piattaforma DRIP richiede un indirizzo https://")
             if k == "fstUrl" and v and not str(v).startswith("https://"):
                 raise ValueError("La piattaforma civica richiede un indirizzo https://")
+            if k == "wms":
+                from app import wms
+                v = wms.validate(v)
             if k == "identityProviders":
                 for p in v:
                     if p.get("issuer") and not str(p["issuer"]).startswith(("https://", "http://localhost", "http://127.0.0.1")):

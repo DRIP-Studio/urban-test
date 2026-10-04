@@ -2,6 +2,7 @@ import type { ExpressionSpecification, Map as MLMap } from 'maplibre-gl';
 import type { MaterialItem } from '../api/types';
 import { fc } from '../engine/geojson';
 import { PATTERNS } from './patterns';
+import { useWms, wmsLayerDefs } from './wms';
 
 /** Every GeoJSON source of the workstation. One owner each (see sources.ts). */
 export const SOURCES = [
@@ -14,17 +15,21 @@ export type SourceId = (typeof SOURCES)[number];
 export interface LayerDef {
   readonly id: string;
   readonly label: string;
-  readonly category: 'base' | 'existing' | 'design' | 'mobility' | 'traffic' | 'safety' | 'environment' | 'transit' | 'analysis';
+  readonly category: 'base' | 'official' | 'existing' | 'design' | 'mobility' | 'traffic' | 'safety' | 'environment' | 'transit' | 'analysis';
   readonly mapLayers: readonly string[];
   readonly defaultVisible: boolean;
   readonly source: string;
   readonly legend?: readonly { color: string; label: string }[];
   /** Opacity property per map layer for the opacity slider. */
   readonly opacity?: readonly [string, string][];
+  /** Opacity before the user moves the slider (default 1). */
+  readonly defaultOpacity?: number;
+  /** Drawn only from this zoom (official WMS maps). */
+  readonly minzoom?: number;
 }
 
 export const CATEGORY_LABEL: Record<LayerDef['category'], string> = {
-  base: 'Base', existing: 'Città esistente', design: 'Progetto', mobility: 'Mobilità', traffic: 'Traffico', safety: 'Sicurezza',
+  base: 'Base', official: 'Carte tecniche e catasto', existing: 'Città esistente', design: 'Progetto', mobility: 'Mobilità', traffic: 'Traffico', safety: 'Sicurezza',
   environment: 'Ambiente', transit: 'Trasporto pubblico', analysis: 'Analisi',
 };
 
@@ -59,6 +64,12 @@ export const LAYERS: readonly LayerDef[] = [
     legend: [{ color: '#d0614f', label: 'Metropolitana' }, { color: '#1d1d1b', label: 'Treno' }, { color: '#8b0209', label: 'Tram' }, { color: '#e8772e', label: 'BRT' }, { color: '#5587a2', label: 'Bus' }] },
   { id: 'bikeshare', label: 'Bike sharing', category: 'transit', mapLayers: ['bike-stations-circle', 'bike-stations-label'], defaultVisible: true, source: 'Stazioni di progetto', legend: [{ color: '#2f7d5b', label: 'Stazione (stalli)' }] },
 ];
+
+/** Static layers plus the official WMS overlays configured by the administrator. */
+export function allLayerDefs(): readonly LayerDef[] {
+  const wms = useWms.getState().services;
+  return wms.length ? [...LAYERS, ...wmsLayerDefs(wms)] : LAYERS;
+}
 
 export function materialColorExpr(materials: readonly MaterialItem[], fallback = '#8a8d90'): ExpressionSpecification {
   const pairs = materials.flatMap((m) => [m.id, m.color]);

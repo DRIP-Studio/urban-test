@@ -270,15 +270,21 @@ async function save(): Promise<void> {
   saving = null;
 }
 
+/** Colleague whose save is waiting to be merged (live collaboration): names the next rebase message. */
+let remoteHint: string | null = null;
+export function setRemoteHint(author: string | null): void { remoteHint = author; }
+
 /**
  * Another window saved first: replay our operations that the server does not have
  * on top of the saved version (operation-log rebase). Nothing is lost: operations
  * that no longer apply stay in the scenario and are reported as not applicable.
+ * `abortIf` is checked once the server copy has arrived (e.g. the user edited meanwhile).
  */
-async function rebaseOnServer(pid: string, sid: string, localOps: readonly Operation[]): Promise<void> {
+async function rebaseOnServer(pid: string, sid: string, localOps: readonly Operation[], opts: { remoteAuthor?: string; abortIf?: () => boolean } = {}): Promise<boolean> {
   const { baseline } = get();
-  if (!baseline) return;
+  if (!baseline) return false;
   const server = await api.get<StoredScenario>(`/api/projects/${encodeURIComponent(pid)}/scenarios/${encodeURIComponent(sid)}`);
+  if (opts.abortIf?.()) return false;
   const known = new Set(server.operations.map((o) => o.id));
   const mine = localOps.filter((o) => !known.has(o.id));
   const merged: StoredScenario = { ...server, operations: [...server.operations, ...mine] };
@@ -286,8 +292,37 @@ async function rebaseOnServer(pid: string, sid: string, localOps: readonly Opera
   const history = new ScenarioHistory(baseline, merged, author, () => newId('op'));
   set({ scenario: { ...merged, revision: server.revision }, history, saveStatus: mine.length ? 'dirty' : 'saved' });
   syncFromHistory();
-  toast.warn('Scenario aggiornato da un’altra finestra', mine.length ? `Le tue ${mine.length} modifiche sono state riapplicate sopra la versione salvata.` : 'Caricata la versione salvata.');
+  const who = opts.remoteAuthor ?? remoteHint;
+  remoteHint = null;
+  const body = mine.length ? `Le tue ${mine.length} modifiche sono state riapplicate sopra la versione salvata.` : 'Caricata la versione salvata.';
+  if (who) (mine.length ? toast.warn : toast.info)(`Aggiornato da ${who}`, body);
+  else toast.warn('Scenario aggiornato da un’altra finestra', body);
   if (mine.length) scheduleSave(100);
+  return true;
+}
+
+let pulling: Promise<unknown> | null = null;
+/**
+ * Live collaboration: someone else saved `sid` at `revision`. With nothing unsaved here the server copy
+ * is loaded through the same rebase path (no local operations to replay); with unsaved work the
+ * caller waits: the next save gets a 409 and rebases on its own.
+ */
+export async function pullRemote(sid: string, revision: number, author: string): Promise<'pulled' | 'pending' | 'ignored'> {
+  if (pulling) await pulling.catch(() => undefined);
+  const { project, scenario } = get();
+  if (!project || !scenario || scenario.id !== sid || scenario.isBaseline || revision <= scenario.revision) return 'ignored';
+  const busy = () => get().saveStatus !== 'saved' || saving !== null;
+  if (busy()) return 'pending';
+  const pid = project.id;
+  const run = rebaseOnServer(pid, sid, [], { remoteAuthor: author, abortIf: () => busy() || get().project?.id !== pid || get().scenario?.id !== sid });
+  pulling = run;
+  try {
+    return (await run) ? 'pulled' : 'pending';
+  } catch {
+    return 'pending';
+  } finally {
+    if (pulling === run) pulling = null;
+  }
 }
 
 export async function flushSave(): Promise<void> {
