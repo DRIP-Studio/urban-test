@@ -1,4 +1,4 @@
-import { LocalFrame, rescalePlan, type CoordinationResult } from '@drip-urban/core';
+import { LocalFrame, rescalePlan, type CoordinationResult, type DetectedCorridor, type PlantDesign } from '@drip-urban/core';
 import { engine } from '../engine/engine';
 import type { JunctionResult } from '../panels/JunctionLab';
 import { planPayload } from '../panels/SignalStudio';
@@ -94,10 +94,43 @@ registerEliosTools([
       const cycleS = Number(a.cycleS) || Math.max(...plans.map((p) => p.cycleS));
       const speedKmh = Number(a.speedKmh) || 40;
       const direction = (a.direction as 'oneway' | 'twoway') || 'oneway';
-      const r = await engine.job<CoordinationResult>('coordinate', { planIds: plans.map((p) => p.id), speedKmh, cycleS, direction });
-      const ok = commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${String(a.roadName ?? '')}`.trim(), speedKmh, direction }, cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS })) });
+      const r = await engine.job<CoordinationResult>('coordinate', { planIds: plans.map((p) => p.id), speedKmh, cycleS: Number(a.cycleS) || null, direction, allowHalfCycle: true });
+      const ok = commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${String(a.roadName ?? '')}`.trim(), speedKmh, direction }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) });
       if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
-      return { junctions: plans.length, cycleS, bandwidthS: r.bandwidthS, bandwidthBackS: r.bandwidthBackS, offsets: r.offsets };
+      return { junctions: plans.length, cycleS: r.cycleS, bandwidthS: r.bandwidthS, bandwidthBackS: r.bandwidthBackS, efficiency: r.efficiency, naiveBandwidthS: r.naiveBandwidthS, warnings: r.warnings, offsets: r.offsets };
+    },
+  },
+  {
+    name: 'coordinate_network', kind: 'write', label: 'Rete semaforica coordinata',
+    description: "Trova automaticamente i corridoi semaforizzati (stessa via o prosecuzione rettilinea, incroci entro 800 m) e applica a ciascuno l'onda verde ottimizzata (banda massima nei due sensi, doppio ciclo per gli incroci minori).",
+    parameters: OBJ({ speedKmh: { type: 'NUMBER', description: 'Velocità di progressione (predefinita 40)' }, direction: { type: 'STRING', enum: ['oneway', 'twoway'], description: 'Banda in un senso o in entrambi (predefinito twoway)' } }),
+    async run(a) {
+      const cs = await engine.job<DetectedCorridor[]>('detectCorridors', {});
+      const taken = new Set<string>();
+      const out = [];
+      for (const c of cs) {
+        if (c.planIds.some((id) => taken.has(id))) continue;
+        const r = await engine.job<CoordinationResult>('coordinate', { planIds: c.planIds, speedKmh: Number(a.speedKmh) || 40, cycleS: null, direction: (a.direction as string) || 'twoway', allowHalfCycle: true });
+        const ok = commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${c.name}`, speedKmh: r.speedKmh, direction: r.direction }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) });
+        if (ok.ok) { c.planIds.forEach((id) => taken.add(id)); out.push({ corridor: c.name, junctions: c.planIds.length, bandwidthS: r.bandwidthS, bandwidthBackS: r.bandwidthBackS }); }
+      }
+      if (!out.length) throw new Error('Nessun corridoio coordinabile: servono almeno due incroci semaforizzati sulla stessa via');
+      return out;
+    },
+  },
+  {
+    name: 'merge_signal_plants', kind: 'write', label: 'Incroci uniti in un impianto unico',
+    description: "Unisce incroci semaforizzati vicini (indicati per piano o per strada) in un unico impianto: un solo regolatore, ciclo comune, sfasamenti legati al tempo di percorrenza interno e verifica dell'accumulo delle code.",
+    parameters: OBJ({ planIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Piani da unire (in ordine)' }, roadName: { type: 'STRING', description: 'In alternativa: strada su cui stanno gli incroci' } }),
+    async run(a) {
+      const net = useApp.getState().network!;
+      let ids = ((a.planIds as string[] | undefined) ?? []).filter((id) => net.signalPlans[id]);
+      if (!ids.length && a.roadName) { const nodes = new Set(matchRoads(net, String(a.roadName)).flatMap((r) => [r.from, r.to])); ids = Object.values(net.signalPlans).filter((p) => nodes.has(p.nodeId)).map((p) => p.id); }
+      if (ids.length < 2) throw new Error('Servono almeno due incroci semaforizzati');
+      const d = await engine.job<PlantDesign>('designPlant', { planIds: ids, speedKmh: 30 });
+      const ok = commit('signal.mergePlant', { plant: { id: newId('plant'), name: `Impianto ${String(a.roadName ?? '')}`.trim(), speedKmh: 30 }, cycleS: d.cycleS, plans: d.plans });
+      if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
+      return { cycleS: d.cycleS, plans: d.plans, links: d.links, warnings: d.warnings };
     },
   },
 ]);

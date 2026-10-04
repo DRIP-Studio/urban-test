@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   FlowSimulation, LocalFrame, OperationRejected, ScenarioHistory, analyzeJunction, analyzeNetwork, auditScenario,
-  SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan, planIssues, signalHeads, coordinateCorridor, optimizeNetworkSignals, rescalePlan, type SignalPlan, type SignalPhase,
+  SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan, planIssues, signalHeads, coordinateCorridor, detectCorridors, designPlant, optimizeNetworkSignals, rescalePlan, type SignalPlan, type SignalPhase,
   type CityBaseline, type Network, type Scenario,
 } from '../src/index';
 
@@ -161,13 +161,49 @@ describe('signals 2.0: directions, permitted lefts, heads, coordination', () => 
     const plans = nodes.map((n) => { const a = analyzeJunction(h.network, baseline.origin, n)!; const p = suggestSignalPlan(h.network, a); h.commit({ type: 'signal.setPlan', payload: full(p, a) }); return h.network.signalPlans[p.id]!; });
     const r = coordinateCorridor(h.network, baseline.origin, plans, 40, 90, 'oneway');
     expect(r.offsets[0]!.offsetS).toBe(0);
-    expect(Math.abs(r.offsets[1]!.offsetS - (r.offsets[1]!.distanceM / (40 / 3.6)) % 90)).toBeLessThanOrEqual(1);
+    expect(r.bandwidthS).toBeGreaterThanOrEqual(r.naiveBandwidthS);
     h.commit({ type: 'signal.coordinate', payload: { coordination: { id: 'c1', name: 'Corridoio', speedKmh: 40, direction: 'oneway' }, cycleS: 90, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS })) } });
     const linked = Object.values(h.network.signalPlans).filter((p) => p.coordination?.id === 'c1');
     expect(linked).toHaveLength(2);
     expect(linked.every((p) => p.cycleS === 90 && p.phases.reduce((t, ph) => t + ph.greenS + ph.yellowS + ph.allRedS, 0) === 90)).toBe(true);
     h.commit({ type: 'signal.uncoordinate', payload: { coordinationId: 'c1' } });
     expect(Object.values(h.network.signalPlans).some((p) => p.coordination)).toBe(false);
+  });
+
+  it('detects a corridor along a street, optimises the two-way band and merges close junctions into one plant', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    // The street with most 3+-arm junctions.
+    const byName = new Map<string, Set<string>>();
+    for (const r of Object.values(h.network.roads)) {
+      if (!r.name) continue;
+      for (const n of [r.from, r.to]) { const a = analyzeJunction(h.network, baseline.origin, n); if (a && a.arms.length >= 3 && a.groups.length >= 3) (byName.get(r.name) ?? byName.set(r.name, new Set()).get(r.name)!).add(n); }
+    }
+    const [street, nodeSet] = [...byName].sort((a, b) => b[1].size - a[1].size)[0]!;
+    expect(nodeSet.size).toBeGreaterThanOrEqual(3);
+    for (const n of nodeSet) { const a = analyzeJunction(h.network, baseline.origin, n)!; h.commit({ type: 'signal.setPlan', payload: full(suggestSignalPlan(h.network, a), a) }); }
+    const corridors = detectCorridors(h.network, baseline.origin, { maxSpacingM: 900 });
+    const c = corridors.find((x) => x.name === street) ?? corridors[0]!;
+    expect(c.planIds.length).toBeGreaterThanOrEqual(2);
+    const plans = c.planIds.map((id) => h.network.signalPlans[id]!);
+    const r = coordinateCorridor(h.network, baseline.origin, plans, 40, null, 'twoway', { allowHalfCycle: true });
+    expect(r.bandwidthS + (r.bandwidthBackS ?? 0)).toBeGreaterThanOrEqual(r.naiveBandwidthS);
+    expect(r.windows.every((w) => w.fwd.length > 0)).toBe(true);
+    h.commit({ type: 'signal.coordinate', payload: { coordination: { id: 'cx', name: c.name, speedKmh: 40, direction: 'twoway' }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) } });
+    for (const pl of Object.values(h.network.signalPlans).filter((p) => p.coordination?.id === 'cx')) {
+      expect(pl.phases.reduce((t, ph) => t + ph.greenS + ph.yellowS + ph.allRedS, 0)).toBe(pl.cycleS);
+      expect([r.cycleS, r.cycleS / 2]).toContain(pl.cycleS);
+    }
+    // Plant: the first two junctions of the corridor as one controller.
+    const two = plans.slice(0, 2).map((p) => h.network.signalPlans[p.id]!);
+    const d = designPlant(h.network, baseline.origin, two, 30);
+    expect(d.plans).toHaveLength(2);
+    expect(d.links[0]!.storageVeh).toBeGreaterThan(0);
+    h.commit({ type: 'signal.mergePlant', payload: { plant: { id: 'pl1', name: 'Impianto', speedKmh: 30 }, cycleS: d.cycleS, plans: d.plans } });
+    const merged = Object.values(h.network.signalPlans).filter((p) => p.plant?.id === 'pl1');
+    expect(merged).toHaveLength(2);
+    expect(new Set(merged.map((p) => p.cycleS)).size).toBe(1);
+    h.commit({ type: 'signal.splitPlant', payload: { plantId: 'pl1' } });
+    expect(Object.values(h.network.signalPlans).some((p) => p.plant)).toBe(false);
   });
 
   it('retimes every plan of the network and keeps coordinated corridors on a common cycle', () => {

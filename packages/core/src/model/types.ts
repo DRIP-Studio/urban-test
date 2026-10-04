@@ -338,7 +338,10 @@ export interface SignalPhase {
   readonly greenMovements?: Readonly<Record<string, readonly TurnKind[]>>;
 }
 
-/** Corridor coordination (green wave) shared by several plans. */
+/**
+ * Coordination shared by several plans: a corridor (green wave, `SignalPlan.coordination`) or a plant
+ * (several close junctions run as one controller, `SignalPlan.plant`).
+ */
 export interface SignalCoordination {
   readonly id: string;
   readonly name: string;
@@ -346,6 +349,12 @@ export interface SignalCoordination {
   readonly order: number;
   readonly speedKmh: number;
   readonly direction: 'oneway' | 'twoway';
+  /** Absent = 'corridor'. */
+  readonly mode?: 'corridor' | 'plant';
+  /** Plant: the junctions are merged into one controller (impianto unico): same cycle, linked offsets. */
+  readonly merged?: boolean;
+  /** Corridor: this (minor) junction runs half the common cycle (doppio ciclo). */
+  readonly halfCycle?: boolean;
 }
 
 export interface SignalPlan {
@@ -362,6 +371,8 @@ export interface SignalPlan {
   /** Heads not installed: lane group id, `ped:<roadId>` (both sides) or `ped:<roadId>:<0|1>`. */
   readonly disabledHeads?: readonly string[];
   readonly coordination?: SignalCoordination;
+  /** Merged plant (impianto unico) this junction belongs to; mode 'plant'. */
+  readonly plant?: SignalCoordination;
 }
 
 export type ZoneKind = 'ztl' | 'pedestrian' | 'school' | 'zone30' | 'low_emission' | 'parking' | 'work';

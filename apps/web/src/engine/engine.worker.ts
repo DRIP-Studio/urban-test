@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import {
   FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
-  coordinateCorridor, groupDemand, optimizeNetworkSignals, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
+  coordinateCorridor, detectCorridors, designPlant, groupDemand, optimizeNetworkSignals, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
 import type { Geometry, LineString, Polygon } from './geojson';
@@ -99,7 +99,12 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
     case 'coordinate': {
       const ids = args.planIds as string[];
       const plans = ids.map((id) => net!.signalPlans[id]).filter((p): p is NonNullable<typeof p> => !!p);
-      return coordinateCorridor(net, o, plans, args.speedKmh as number, args.cycleS as number, args.direction as 'oneway' | 'twoway');
+      return coordinateCorridor(net, o, plans, args.speedKmh as number, (args.cycleS as number | null) ?? null, args.direction as 'oneway' | 'twoway', { allowHalfCycle: args.allowHalfCycle as boolean | undefined });
+    }
+    case 'detectCorridors': return detectCorridors(net, o, { maxSpacingM: args.maxSpacingM as number | undefined });
+    case 'designPlant': {
+      const plans = (args.planIds as string[]).map((id) => net!.signalPlans[id]).filter((p): p is NonNullable<typeof p> => !!p);
+      return designPlant(net, o, plans, args.speedKmh as number | undefined);
     }
     case 'traffic': {
       lastTraffic = estimateTraffic(net, baseline, args.params as Parameters<typeof estimateTraffic>[2]);

@@ -25,3 +25,4 @@ export { buildJunction, armKey } from './physical/junction';
 export { MetricCache, vehicularArms, incidence } from './physical/topology';
 export { MARKING } from './physical/markings';
 export * from './analysis/vertical';
+export * from './analysis/coordination';

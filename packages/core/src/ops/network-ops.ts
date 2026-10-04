@@ -409,8 +409,41 @@ export const signalSetHeads = defineOperation<{ readonly planId: string; readonl
 export interface SignalCoordinatePayload {
   readonly coordination: { readonly id: string; readonly name: string; readonly speedKmh: number; readonly direction: 'oneway' | 'twoway' };
   readonly cycleS: number;
-  /** Ordered upstream → downstream. */
-  readonly plans: readonly { readonly planId: string; readonly offsetS: number }[];
+  /**
+   * Ordered upstream → downstream. `halfCycle`: the junction runs cycleS/2 (doppio ciclo).
+   * `shared`: the junction already belongs to another corridor (crossing of two corridors): its
+   * offset is kept as given and it stays in its own corridor.
+   */
+  readonly plans: readonly { readonly planId: string; readonly offsetS: number; readonly halfCycle?: boolean; readonly shared?: boolean }[];
+  /** Plans off the corridor that move with it (other members of a merged plant): new offset only. */
+  readonly extraPlans?: readonly { readonly planId: string; readonly offsetS: number }[];
+}
+
+const mod = (x: number, m: number) => ((x % m) + m) % m;
+const fixedTime = (pl: SignalPlan) => pl.phases.reduce((t, ph) => t + ph.yellowS + ph.allRedS + 5, 0);
+
+/**
+ * Keeps the common-cycle invariant: every plan reachable from `seeds` through corridors and plants
+ * runs `cycleS` (half of it for half-cycle corridor members); offsets are kept modulo the new cycle.
+ */
+function syncCycles(signalPlans: Record<string, SignalPlan>, seeds: readonly string[], cycleS: number): void {
+  const seen = new Set<string>();
+  const queue = [...seeds];
+  while (queue.length) {
+    const id = queue.pop()!;
+    if (seen.has(id) || !signalPlans[id]) continue;
+    seen.add(id);
+    const pl = signalPlans[id]!;
+    const target = pl.coordination?.halfCycle ? cycleS / 2 : cycleS;
+    if (pl.cycleS !== target) {
+      const r = rescalePlan(pl, target);
+      signalPlans[id] = { ...r, offsetS: mod(Math.round(pl.offsetS), r.cycleS) };
+    }
+    for (const other of Object.values(signalPlans)) {
+      if (seen.has(other.id)) continue;
+      if ((pl.coordination && other.coordination?.id === pl.coordination.id) || (pl.plant && other.plant?.id === pl.plant.id)) queue.push(other.id);
+    }
+  }
 }
 
 /** Links the plans of several junctions in one corridor: common cycle, computed offsets. */
@@ -420,22 +453,35 @@ export const signalCoordinate = defineOperation<SignalCoordinatePayload>({
   validate(net, p) {
     const issues: Issue[] = [];
     if (p.plans.length < 2) issues.push(err('coord.size', 'Servono almeno due incroci semaforizzati'));
-    const missing = p.plans.filter((x) => !net.signalPlans[x.planId]);
+    const all = [...p.plans, ...(p.extraPlans ?? [])];
+    const missing = all.filter((x) => !net.signalPlans[x.planId]);
     if (missing.length) issues.push(err('coord.missing', `Piani inesistenti: ${missing.map((x) => x.planId).join(', ')}`));
     if (!(p.cycleS >= 30 && p.cycleS <= 180)) issues.push(err('coord.cycle', 'Ciclo comune fuori intervallo 30–180 s'));
     if (!(p.coordination.speedKmh >= 10 && p.coordination.speedKmh <= 90)) issues.push(err('coord.speed', 'Velocità di progetto 10–90 km/h'));
-    for (const x of p.plans) {
+    for (const x of all) {
       const pl = net.signalPlans[x.planId];
-      if (pl && pl.phases.reduce((t, ph) => t + ph.yellowS + ph.allRedS + 5, 0) > p.cycleS) issues.push(err('coord.short', `Ciclo comune troppo corto per ${pl.name}`));
+      const half = 'halfCycle' in x && x.halfCycle;
+      if (half && (p.cycleS % 2 || p.cycleS / 2 < 20)) issues.push(err('coord.half', `Doppio ciclo non ammesso per ${pl?.name ?? x.planId}: ciclo comune dispari o mezzo ciclo < 20 s`));
+      if (pl && fixedTime(pl) > (half ? p.cycleS / 2 : p.cycleS)) issues.push(err('coord.short', `Ciclo comune troppo corto per ${pl.name}`));
     }
     return issues;
   },
   apply(net, p) {
     const signalPlans = { ...net.signalPlans };
     p.plans.forEach((x, order) => {
-      const pl = rescalePlan(signalPlans[x.planId]!, p.cycleS);
-      signalPlans[x.planId] = { ...pl, offsetS: ((x.offsetS % pl.cycleS) + pl.cycleS) % pl.cycleS, mode: pl.mode === 'fixed_time' ? 'green_wave' : pl.mode, coordination: { ...p.coordination, order } };
+      const cyc = x.halfCycle ? p.cycleS / 2 : p.cycleS;
+      const pl = rescalePlan(signalPlans[x.planId]!, cyc);
+      const keep = x.shared && pl.coordination && pl.coordination.id !== p.coordination.id;
+      signalPlans[x.planId] = {
+        ...pl, offsetS: mod(Math.round(x.offsetS), pl.cycleS), mode: pl.mode === 'fixed_time' ? 'green_wave' : pl.mode,
+        coordination: keep ? pl.coordination : { ...p.coordination, order, mode: 'corridor', ...(x.halfCycle ? { halfCycle: true } : {}) },
+      };
     });
+    for (const x of p.extraPlans ?? []) {
+      const pl = rescalePlan(signalPlans[x.planId]!, p.cycleS);
+      signalPlans[x.planId] = { ...pl, offsetS: mod(Math.round(x.offsetS), pl.cycleS) };
+    }
+    syncCycles(signalPlans, [...p.plans, ...(p.extraPlans ?? [])].map((x) => x.planId), p.cycleS);
     return { ...net, signalPlans };
   },
 });
@@ -449,7 +495,78 @@ export const signalUncoordinate = defineOperation<{ readonly coordinationId: str
     for (const pl of Object.values(signalPlans)) {
       if (pl.coordination?.id !== p.coordinationId) continue;
       const { coordination: _c, ...rest } = pl;
-      signalPlans[pl.id] = { ...rest, mode: pl.mode === 'green_wave' ? 'fixed_time' : pl.mode };
+      // A half-cycle junction goes back to the full cycle of the corridor.
+      const restored = pl.coordination.halfCycle ? rescalePlan(rest, pl.cycleS * 2) : rest;
+      signalPlans[pl.id] = { ...restored, mode: pl.mode === 'green_wave' ? 'fixed_time' : pl.mode };
+    }
+    return { ...net, signalPlans };
+  },
+});
+
+export interface SignalMergePlantPayload {
+  readonly plant: { readonly id: string; readonly name: string; readonly speedKmh?: number };
+  readonly cycleS: number;
+  /** Offsets fixed by the internal travel times (see designPlant). */
+  readonly plans: readonly { readonly planId: string; readonly offsetS: number }[];
+}
+
+/**
+ * Merges close junctions into one plant (impianto unico): one cycle, offsets linked by the travel time
+ * on the short internal links so they never store a queue. Corridors touching the plant follow the
+ * new cycle.
+ */
+export const signalMergePlant = defineOperation<SignalMergePlantPayload>({
+  type: 'signal.mergePlant',
+  label: (p) => `Impianto unico ${p.plant.name} (${p.plans.length} incroci)`,
+  validate(net, p) {
+    const issues: Issue[] = [];
+    if (p.plans.length < 2) issues.push(err('plant.size', 'Servono almeno due incroci semaforizzati'));
+    if (new Set(p.plans.map((x) => x.planId)).size !== p.plans.length) issues.push(err('plant.dup', 'Incrocio ripetuto'));
+    const missing = p.plans.filter((x) => !net.signalPlans[x.planId]);
+    if (missing.length) issues.push(err('plant.missing', `Piani inesistenti: ${missing.map((x) => x.planId).join(', ')}`));
+    if (!(p.cycleS >= 30 && p.cycleS <= 180)) issues.push(err('plant.cycle', 'Ciclo comune fuori intervallo 30–180 s'));
+    for (const x of p.plans) {
+      const pl = net.signalPlans[x.planId];
+      if (!pl) continue;
+      if (fixedTime(pl) > p.cycleS) issues.push(err('plant.short', `Ciclo comune troppo corto per ${pl.name}`));
+      if (pl.plant && pl.plant.id !== p.plant.id) issues.push(warn('plant.moved', `${pl.name} lascia l'impianto ${pl.plant.name}`, [pl.id]));
+      if (pl.coordination && pl.cycleS !== p.cycleS) issues.push(warn('plant.corridor', `Il corridoio ${pl.coordination.name} passa al ciclo ${p.cycleS} s: ricalcola l'onda verde`, [pl.id]));
+    }
+    return issues;
+  },
+  apply(net, p) {
+    const signalPlans = { ...net.signalPlans };
+    const ids = new Set(p.plans.map((x) => x.planId));
+    // Members leaving another plant: a plant left with a single junction is dissolved.
+    const left = new Set(p.plans.map((x) => signalPlans[x.planId]!.plant?.id).filter((x): x is string => !!x && x !== p.plant.id));
+    for (const pid of left) {
+      const rest = Object.values(signalPlans).filter((x) => x.plant?.id === pid && !ids.has(x.id));
+      if (rest.length < 2) for (const x of rest) { const { plant: _p, ...r } = x; signalPlans[x.id] = r; }
+    }
+    p.plans.forEach((x, order) => {
+      const pl = rescalePlan(signalPlans[x.planId]!, p.cycleS);
+      const coordination = pl.coordination?.halfCycle ? { ...pl.coordination, halfCycle: false } : pl.coordination;
+      signalPlans[x.planId] = {
+        ...pl, coordination, offsetS: mod(Math.round(x.offsetS), pl.cycleS),
+        plant: { id: p.plant.id, name: p.plant.name, order, speedKmh: p.plant.speedKmh ?? 30, direction: 'twoway', mode: 'plant', merged: true },
+      };
+    });
+    syncCycles(signalPlans, [...ids], p.cycleS);
+    return { ...net, signalPlans };
+  },
+});
+
+/** Splits a merged plant back into independent junctions (timings unchanged). */
+export const signalSplitPlant = defineOperation<{ readonly plantId: string }>({
+  type: 'signal.splitPlant',
+  label: () => 'Separa impianto unico',
+  validate: (net, p) => (Object.values(net.signalPlans).some((x) => x.plant?.id === p.plantId) ? [] : [err('plant.missing', 'Impianto inesistente')]),
+  apply(net, p) {
+    const signalPlans = { ...net.signalPlans };
+    for (const pl of Object.values(signalPlans)) {
+      if (pl.plant?.id !== p.plantId) continue;
+      const { plant: _p, ...rest } = pl;
+      signalPlans[pl.id] = rest;
     }
     return { ...net, signalPlans };
   },

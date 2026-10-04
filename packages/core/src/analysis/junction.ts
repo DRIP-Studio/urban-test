@@ -280,6 +280,14 @@ const turnFactor = (turns: readonly TurnKind[]) => (turns.length === 1 && turns[
 /** Default approach volume (veh/h per inbound lane) when no traffic estimate is available. */
 const DEFAULT_VPH: Record<string, number> = { motorway: 1200, trunk: 900, primary: 700, secondary: 550, tertiary: 420, unclassified: 260, residential: 180, living_street: 80, service: 80 };
 
+/** Volume of a lane group (veh/h): from `demand` when given, else typical flow for the road class. */
+export function groupVolume(net: Network, g: Pick<LaneGroup, 'id' | 'roadId' | 'laneIds' | 'turns'>, demand?: Readonly<Record<string, number>>): number {
+  const d = demand?.[g.id];
+  if (d !== undefined) return d;
+  const road = net.roads[g.roadId];
+  return (DEFAULT_VPH[road?.roadClass ?? ''] ?? 250) * g.laneIds.length * (g.turns.length === 1 && g.turns[0] !== 'through' ? 0.35 : 1);
+}
+
 export interface SignalDesign {
   readonly cycleS: number;
   readonly lostTimeS: number;
@@ -302,12 +310,7 @@ export function suggestSignalPlan(net: Network, a: JunctionAnalysis, opts: { cyc
   const allowed = new Set(permissive ? a.permissivePairs.map(([x, y]) => [x, y].sort().join('|')) : []);
   const badMov = new Set(a.movementConflicts.map(([x, y]) => [x, y].sort().join('|')).filter((k) => !allowed.has(k)));
   const groupOk = (g1: LaneGroup, g2: LaneGroup) => g1.turns.every((t1) => g2.turns.every((t2) => !badMov.has([`${g1.id}:${t1}`, `${g2.id}:${t2}`].sort().join('|'))));
-  const q = (g: LaneGroup) => {
-    const d = opts.demand?.[g.id];
-    if (d !== undefined) return d;
-    const road = net.roads[g.roadId];
-    return (DEFAULT_VPH[road?.roadClass ?? ''] ?? 250) * g.laneIds.length * (g.turns.length === 1 && g.turns[0] !== 'through' ? 0.35 : 1);
-  };
+  const q = (g: LaneGroup) => groupVolume(net, g, opts.demand);
   const sat = (g: LaneGroup) => SAT_PER_LANE * g.laneIds.length * turnFactor(g.turns);
   const y = (g: LaneGroup) => Math.min(0.9, q(g) / sat(g));
   const axisOf = (g: LaneGroup) => {
@@ -470,74 +473,6 @@ export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
   return out;
 }
 
-// ---------------------------------------------------------------- coordination (green wave)
-
-export interface CoordinationResult {
-  readonly cycleS: number;
-  readonly offsets: readonly { readonly planId: string; readonly offsetS: number; readonly distanceM: number; readonly travelS: number }[];
-  /** Green band (s) through every junction in the main direction, and in the opposite one for two-way. */
-  readonly bandwidthS: number;
-  readonly bandwidthBackS: number | null;
-}
-
-/** Duration (s) of the green of the plan's coordinated (main) phase: the first phase. */
-const mainGreen = (p: SignalPlan) => p.phases[0]?.greenS ?? 0;
-
-/** Green interval [start, end) of the main phase within the cycle, given the offset. */
-function band(p: SignalPlan, offset: number, cycle: number): [number, number] {
-  return [offset % cycle, (offset % cycle) + mainGreen(p)];
-}
-
-/**
- * Offsets for a corridor of signalised junctions (ordered upstream → downstream) so that a platoon at
- * `speedKmh` meets green everywhere: offset_i = offset_{i−1} + d_i / v (mod C), common cycle C.
- * For two-way corridors each offset is snapped to the value (forward ideal or simultaneous/alternate
- * system) that maximises the smaller of the two bands.
- */
-export function coordinateCorridor(net: Network, frameOrigin: LngLat, plans: readonly SignalPlan[], speedKmh: number, cycleS: number, direction: 'oneway' | 'twoway'): CoordinationResult {
-  const frame = new LocalFrame(frameOrigin);
-  const v = speedKmh / 3.6;
-  const pos = plans.map((p) => frame.toMetric(net.nodes[p.nodeId]!.at) as V);
-  const dists = pos.map((q, i) => (i === 0 ? 0 : dist(pos[i - 1]!, q)));
-  const cum = dists.map((_, i) => dists.slice(0, i + 1).reduce((t, d) => t + d, 0));
-  const ideal = cum.map((d) => d / v);
-  let offsets = ideal.map((t) => ((t % cycleS) + cycleS) % cycleS);
-  const bandOf = (offs: number[], back: boolean) => {
-    // Window that stays green at every junction for a vehicle starting at the reference.
-    let lo = -Infinity, hi = Infinity;
-    plans.forEach((p, i) => {
-      const travel = back ? (ideal[ideal.length - 1]! - ideal[i]!) : ideal[i]!;
-      const [s, e] = band(p, offs[i]!, cycleS);
-      // Shift the band to the cycle closest to the arrival time.
-      const k = Math.round((travel - s) / cycleS);
-      lo = Math.max(lo, s + k * cycleS - travel);
-      hi = Math.min(hi, e + k * cycleS - travel);
-    });
-    return Math.max(0, hi - lo);
-  };
-  if (direction === 'twoway') {
-    // Try, junction by junction, the forward-ideal offset or its half-cycle shift (alternate system).
-    for (let i = 1; i < plans.length; i++) {
-      const candidates = [offsets[i]!, (offsets[i]! + cycleS / 2) % cycleS, 0];
-      let best = offsets[i]!, score = -1;
-      for (const c of candidates) {
-        const trial = [...offsets];
-        trial[i] = c;
-        const sc = Math.min(bandOf(trial.slice(0, i + 1), false), bandOf(trial.slice(0, i + 1), true));
-        if (sc > score) { score = sc; best = c; }
-      }
-      offsets[i] = best;
-    }
-  }
-  offsets = offsets.map((o) => Math.round(o));
-  return {
-    cycleS,
-    offsets: plans.map((p, i) => ({ planId: p.id, offsetS: offsets[i]!, distanceM: Math.round(dists[i]!), travelS: Math.round(ideal[i]! * 10) / 10 })),
-    bandwidthS: Math.round(bandOf(offsets, false)),
-    bandwidthBackS: direction === 'twoway' ? Math.round(bandOf(offsets, true)) : null,
-  };
-}
-
 /** Scales the greens of a plan to a new cycle, keeping yellow and all-red. */
 export function rescalePlan(plan: SignalPlan, cycleS: number): SignalPlan {
   const fixed = plan.phases.reduce((t, p) => t + p.yellowS + p.allRedS, 0);
@@ -562,8 +497,9 @@ export interface SignalOptimization {
 /**
  * Network-wide retiming ("ottimizza tutti i semafori"): Webster on every signal plan with the given
  * demand, keeping what the designer decided (mode, permitted lefts, removed heads, coordination).
- * Coordinated corridors keep their offsets and get a common cycle — the longest of the corridor —
- * so the green wave survives; greens are rescaled in proportion.
+ * Plans linked by a corridor or merged into one plant keep their offsets and get a common cycle — the
+ * longest of the group (a half-cycle junction counts double and keeps its half) — so the green wave
+ * survives; greens are rescaled in proportion.
  */
 export function optimizeNetworkSignals(net: Network, frameOrigin: LngLat, demandFor?: (a: JunctionAnalysis) => Readonly<Record<string, number>> | undefined): SignalOptimization[] {
   const out: SignalOptimization[] = [];
@@ -572,18 +508,31 @@ export function optimizeNetworkSignals(net: Network, frameOrigin: LngLat, demand
     if (!a || !a.groups.length) continue;
     const { design, ...s } = suggestSignalPlan(net, a, { demand: demandFor?.(a), permissiveLeft: plan.permissiveLeft });
     out.push({
-      plan: { ...s, id: plan.id, name: plan.name, mode: plan.mode, offsetS: plan.offsetS, actuation: plan.actuation, permissiveLeft: plan.permissiveLeft, disabledHeads: plan.disabledHeads, coordination: plan.coordination },
+      plan: { ...s, id: plan.id, name: plan.name, mode: plan.mode, offsetS: plan.offsetS, actuation: plan.actuation, permissiveLeft: plan.permissiveLeft, disabledHeads: plan.disabledHeads, coordination: plan.coordination, plant: plan.plant },
       analysis: a, beforeCycleS: plan.cycleS, design,
     });
   }
-  const corridors = new Map<string, number[]>();
-  out.forEach((o, i) => { const c = o.plan.coordination; if (c) corridors.set(c.id, [...(corridors.get(c.id) ?? []), i]); });
-  for (const idx of corridors.values()) {
-    const cycle = Math.max(...idx.map((i) => out[i]!.plan.cycleS));
+  // Groups of plans sharing a cycle: connected through corridors and plants.
+  const parent = out.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
+  const firstOf = new Map<string, number>();
+  out.forEach((o, i) => {
+    for (const key of [o.plan.coordination && `c:${o.plan.coordination.id}`, o.plan.plant && `p:${o.plan.plant.id}`]) {
+      if (!key) continue;
+      const j = firstOf.get(key);
+      if (j === undefined) firstOf.set(key, i); else parent[find(i)] = find(j);
+    }
+  });
+  const groups = new Map<number, number[]>();
+  out.forEach((o, i) => { if (o.plan.coordination || o.plan.plant) groups.set(find(i), [...(groups.get(find(i)) ?? []), i]); });
+  for (const idx of groups.values()) {
+    const half = (i: number) => !!out[i]!.plan.coordination?.halfCycle;
+    let cycle = Math.max(...idx.map((i) => out[i]!.plan.cycleS * (half(i) ? 2 : 1)));
+    cycle += cycle % 2 && idx.some(half) ? 1 : 0;
     for (const i of idx) {
       const o = out[i]!;
-      const p = rescalePlan(o.plan, cycle);
-      out[i] = { ...o, plan: { ...p, offsetS: Math.round(o.plan.offsetS % p.cycleS) }, corridorCycleS: p.cycleS };
+      const p = rescalePlan(o.plan, half(i) ? cycle / 2 : cycle);
+      out[i] = { ...o, plan: { ...p, offsetS: Math.round(o.plan.offsetS % p.cycleS) }, corridorCycleS: cycle };
     }
   }
   return out;

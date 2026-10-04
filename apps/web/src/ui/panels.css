@@ -415,3 +415,7 @@
 .profile-setup { display: grid; gap: 10px; justify-items: center; }
 .profile-setup-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; }
 .issue-list li.err { color: var(--err); }
+.sub-title { margin: var(--s-3) 0 var(--s-2); font-size: var(--fs-12); font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; }
+.plant-design { margin-top: var(--s-3); padding: var(--s-3); border-radius: var(--r-2); background: var(--ink-2); display: grid; gap: var(--s-2); }
+.table tr.is-err td { color: var(--err); }
+.corridor { margin-top: var(--s-3); display: grid; gap: var(--s-2); }
