@@ -121,7 +121,9 @@ export async function openProject(pid: string): Promise<void> {
     const project = await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(pid)}`);
     set({ loading: 'Caricamento della città' });
     // The baseline is cached as immutable; its revision changes when the existing state is updated.
-    const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(pid)}/baseline?rev=${project.baselineRevision ?? 0}`);
+    const area = project.large && project.workArea ? `&bbox=${project.workArea.map((x) => x.toFixed(6)).join(',')}` : '';
+    if (project.large) set({ loading: 'Caricamento della zona di lavoro' });
+    const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(pid)}/baseline?rev=${project.baselineRevision ?? 0}${area}`);
     set({ loading: 'Costruzione del modello fisico' });
     await engine.init(baseline);
     set({ project, baseline, loading: null, mode: 'design', tool: 'select', selection: null, dock: null });
@@ -353,3 +355,13 @@ export const openDock = (dock: string) => set({ dock });
 
 // Development-only handle for automated UI verification (stripped from production builds).
 if (import.meta.env.DEV) (window as unknown as { __drip: unknown }).__drip = { useApp, commit, undo, redo };
+
+/** Large projects: moves the work area (e.g. to the visible map) and reloads the city around it. */
+export async function moveWorkArea(bbox: readonly [number, number, number, number]): Promise<void> {
+  const project = get().project;
+  if (!project?.large) return;
+  await flushSave();
+  await api.patch(`/api/projects/${encodeURIComponent(project.id)}`, { workArea: bbox });
+  set({ project: null });
+  await openProject(project.id);
+}

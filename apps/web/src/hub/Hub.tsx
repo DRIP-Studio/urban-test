@@ -27,13 +27,13 @@ function pendingRecoveries(): { pid: string; sid: string; at: string }[] {
   return out;
 }
 
-/** Import size: single download up to 20 km², tiles of ~16 km² above (big cities), refused above 2 000 km². */
+/** Import size: single download up to 20 km², tiles of ~16 km² above (big cities), refused above 5 000 km² (a whole city such as Rome). */
 function areaHint(km2: number, osm: boolean): string {
   const a = `${km2 < 10 ? km2.toFixed(2).replace('.', ',') : Math.round(km2).toLocaleString('it-IT')} km²`;
   if (!osm || km2 <= 20) return a;
-  if (km2 > 2000) return `${a} · oltre 2.000 km²: scegli un municipio o un quartiere`;
-  const tiles = Math.ceil(km2 / 16);
-  return `${a} · città grande: import a ${tiles} tasselli, circa ${Math.max(2, Math.round(tiles * 0.6))}–${Math.round(tiles * 1.5)} min (download OpenStreetMap)`;
+  if (km2 > 5000) return `${a} · oltre 5.000 km²: scegli un'area più piccola`;
+  const tiles = Math.ceil(km2 / Math.max(16, km2 / 120));
+  return `${a} · città grande: import a ${tiles} tasselli, circa ${Math.max(2, Math.round(tiles * 0.6))}–${Math.round(tiles * 1.5)} min; si lavora per zone (fino a 36 km²) con la città intera sempre visibile`;
 }
 
 function NewProject({ templates, onClose }: { templates: Template[]; onClose: () => void }) {

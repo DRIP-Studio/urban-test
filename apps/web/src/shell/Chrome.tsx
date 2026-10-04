@@ -3,7 +3,7 @@ import type { LngLat } from '@drip-urban/core';
 import { api } from '../api/client';
 import { flyTo, getMap, useMapUi } from '../map/mapStore';
 import { deleteSelection, duplicateSelection, pasteAt } from '../state/actions';
-import { select, setDock, setMode, setTool, useApp, commit } from '../state/store';
+import { moveWorkArea, select, setDock, setMode, setTool, useApp, commit } from '../state/store';
 import { dismiss, useToasts } from '../state/toasts';
 import { GROUP_LABEL, TOOLS } from '../tools/registry';
 import { setLive, useLive } from '../state/live';
@@ -92,10 +92,11 @@ export function StatusBar() {
       </button>
       <button type="button" className={`sb-item sb-toggle ${snap.angle ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, angle: !s.snap.angle } }))}>Angolo 15°</button>
       <LiveToggle />
+      <WorkAreaControl />
       <span className="sb-spacer" />
       {failed.length ? (
         <button type="button" className="sb-item sb-warn" onClick={() => { setMode('analyze'); setDock('audit'); }}>
-          <Icon name="warning" size={13} />{failed.length} operazioni non applicabili
+          <Icon name="warning" size={13} />{failed.length} {project?.large ? 'modifiche fuori dalla zona di lavoro o non applicabili' : 'operazioni non applicabili'}
         </button>
       ) : null}
       {scenario ? <span className="sb-item">{scenario.operations.length} modifiche</span> : null}
@@ -244,6 +245,28 @@ function LiveToggle() {
   return (
     <button type="button" className={`sb-item sb-toggle ${enabled ? 'is-on' : ''}`} title="Aggiornamento automatico di verifiche, analisi e mappe a ogni modifica" onClick={() => setLive(!enabled)}>
       <span className={`live-dot ${enabled ? (running ? 'is-busy' : 'is-on') : ''}`} />Live {enabled ? (running ? '· aggiorno' : 'on') : 'off'}
+    </button>
+  );
+}
+
+/** Large projects: the loaded work area and a command to move it to the visible map. */
+function WorkAreaControl() {
+  const project = useApp((s) => s.project);
+  const baseline = useApp((s) => s.baseline);
+  const [busy, setBusy] = useState(false);
+  if (!project?.large || !baseline) return null;
+  const [w, s, e, n] = baseline.bbox;
+  const km2 = Math.abs(e - w) * 111.32 * Math.cos(((s + n) / 2) * Math.PI / 180) * Math.abs(n - s) * 110.57;
+  const move = async () => {
+    const m = getMap();
+    if (!m) return;
+    const b = m.getBounds();
+    setBusy(true);
+    try { await moveWorkArea([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]); } finally { setBusy(false); }
+  };
+  return (
+    <button type="button" className="sb-item sb-toggle is-on" title="Progetto grande: si lavora per zone. Inquadra un'altra parte della città e premi per caricarla (fino a 36 km²)." onClick={() => void move()} disabled={busy}>
+      <Icon name="map" size={13} />Zona di lavoro {km2.toFixed(1).replace('.', ',')} km² · {busy ? 'caricamento…' : 'lavora qui'}
     </button>
   );
 }

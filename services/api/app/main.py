@@ -41,7 +41,7 @@ TEMPLATES = [
 
 SINGLE_IMPORT_KM2 = 20.0
 TILE_KM2 = 16.0
-MAX_IMPORT_KM2 = 2000.0
+MAX_IMPORT_KM2 = 5000.0
 
 
 def area_km2(w: float, s: float, e: float, n: float) -> float:
@@ -143,7 +143,8 @@ def create_project(body: dict = Body(...)) -> dict:
         raise HTTPException(402, f"Area di {km2:.0f} km²: l'import di città grandi richiede il piano DRIP con «Città grandi»")
     if limit and km2 > limit and st.get("enforcement") == "strict":
         raise HTTPException(402, f"Area di {km2:.0f} km² oltre il limite del tuo abbonamento ({limit} km²)")
-    tiles = split_bbox(w, s, e, n, TILE_KM2) if km2 > SINGLE_IMPORT_KM2 else [(w, s, e, n)]
+    # At most ~120 Overpass requests: tiles grow with the area (Rome ≈ 40 km² each).
+    tiles = split_bbox(w, s, e, n, max(TILE_KM2, km2 / 120)) if km2 > SINGLE_IMPORT_KM2 else [(w, s, e, n)]
     author = _author()
 
     def run(report):
@@ -249,10 +250,20 @@ async def import_package(file: UploadFile = File(...)) -> dict:
         raise _err(exc) from exc
 
 
-@app.get("/api/projects/{pid}/baseline")
-def baseline(pid: str) -> Response:
+@app.get("/api/projects/{pid}/overview")
+def overview(pid: str) -> Response:
+    """Whole-city roads (simplified) of a large project, for the overview at low zoom."""
     try:
-        data = ps.baseline_bytes(pid)
+        data = ps.overview_bytes(pid)
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+    return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip", "Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/api/projects/{pid}/baseline")
+def baseline(pid: str, bbox: str | None = None) -> Response:
+    try:
+        data = ps.baseline_subset_bytes(pid, [float(x) for x in bbox.split(",")]) if bbox else ps.baseline_bytes(pid)
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
     return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip", "Cache-Control": "private, max-age=31536000, immutable"})

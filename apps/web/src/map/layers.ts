@@ -8,7 +8,7 @@ import { useWms, wmsLayerDefs } from './wms';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'sign-poles', 'signs3d', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures', 'plan-zones', 'plan-constraints', 'func-class', 'islands', 'drain-pipes', 'drain-nodes',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures', 'plan-zones', 'plan-constraints', 'func-class', 'islands', 'drain-pipes', 'drain-nodes', 'overview', 'work-area',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -34,6 +34,7 @@ export const CATEGORY_LABEL: Record<LayerDef['category'], string> = {
 };
 
 export const LAYERS: readonly LayerDef[] = [
+  { id: 'overview', label: 'Città intera (vista d\'insieme)', category: 'base', mapLayers: ['overview-line', 'work-area-line'], defaultVisible: true, source: 'Progetto grande: tutte le strade, zona di lavoro tratteggiata' },
   { id: 'buildings', label: 'Edifici', category: 'existing', mapLayers: ['buildings-fill', 'buildings-line', 'buildings-removed', 'buildings-removed-line'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['buildings-fill', 'fill-opacity']] },
   { id: 'context', label: 'Verde, acque, aree', category: 'existing', mapLayers: ['context-fill'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['context-fill', 'fill-opacity']] },
   { id: 'surfaces', label: 'Superfici stradali e marciapiedi', category: 'existing', mapLayers: ['surfaces-fill', 'surfaces-outline'], defaultVisible: true, source: 'Modello fisico DRIP (da sezione e corsie)', opacity: [['surfaces-fill', 'fill-opacity']] },
@@ -97,6 +98,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   const L = (spec: Parameters<MLMap['addLayer']>[0]) => { if (!map.getLayer(spec.id)) map.addLayer(spec); };
 
   L({ id: 'context-fill', type: 'fill', source: 'context', paint: { 'fill-color': ['match', ['get', 'kind'], 'water', dark ? '#24394a' : '#b9cfd9', 'green', dark ? '#22301f' : '#cdd8bf', 'leisure', dark ? '#22301f' : '#d3dcc4', 'parking', dark ? '#25272a' : '#dcd9d2', 'square', dark ? '#2a2b2d' : '#e2ddd3', dark ? '#202225' : '#dfdbd2'], 'fill-opacity': 0.9 } });
+  L({ id: 'overview-line', type: 'line', source: 'overview', paint: { 'line-color': dark ? '#5a5f66' : '#a9a49a', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, ['match', ['get', 'c'], ['motorway', 'trunk', 'primary'], 1.4, 0.4], 15, ['match', ['get', 'c'], ['motorway', 'trunk', 'primary'], 5, ['secondary', 'tertiary'], 3, 1.5]], 'line-opacity': 0.85 } });
+  L({ id: 'work-area-line', type: 'line', source: 'work-area', paint: { 'line-color': '#e8772e', 'line-width': 2, 'line-dasharray': [3, 2] } });
   L({ id: 'buildings-fill', type: 'fill', source: 'buildings', filter: ['!', ['get', 'removed']], paint: { 'fill-color': dark ? '#2b2e33' : '#d6d1c7', 'fill-opacity': 0.95 } });
   L({ id: 'buildings-removed', type: 'fill', source: 'buildings', filter: ['get', 'removed'], paint: { 'fill-color': '#d0614f', 'fill-opacity': 0.08 } });
   L({ id: 'buildings-removed-line', type: 'line', source: 'buildings', filter: ['get', 'removed'], paint: { 'line-color': '#d0614f', 'line-width': 1.2, 'line-dasharray': [3, 2] } });

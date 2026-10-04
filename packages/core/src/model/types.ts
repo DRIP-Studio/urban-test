@@ -218,6 +218,8 @@ export interface CityBaseline {
   readonly features: Readonly<Record<string, CityFeature>>;
   readonly assets: Readonly<Record<string, Asset>>;
   readonly sources: readonly Provenance[];
+  /** Large projects: full extent of the city when this baseline is a work area. */
+  readonly fullBbox?: readonly [number, number, number, number];
 }
 
 /** One authored change. Scenarios are ordered lists of these. */
@@ -267,6 +269,9 @@ export interface ProjectMeta {
   readonly baselineRevision?: number;
   readonly scenarioIds: readonly string[];
   readonly activeScenarioId: string;
+  /** Whole city (large area): the workstation loads only `workArea` from the tiled baseline. */
+  readonly large?: boolean;
+  readonly workArea?: readonly [number, number, number, number];
 }
 
 export type JunctionControl = 'uncontrolled' | 'priority' | 'stop' | 'signal' | 'roundabout';

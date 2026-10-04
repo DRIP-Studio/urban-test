@@ -1,3 +1,4 @@
+import { api } from '../api/client';
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { MapMouseEvent, RasterSourceSpecification } from 'maplibre-gl';
@@ -141,6 +142,13 @@ export function MapView() {
       addProjectLayers(map, catalogs.materials.items, theme === 'dark');
       removedRef = useApp.getState().network?.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef));
       setSource('context', contextFC(baseline));
+      // Large project: whole-city roads around the loaded work area.
+      const proj = useApp.getState().project;
+      if (proj?.large) {
+        const [w, s, e, n] = baseline.bbox;
+        setSource('work-area', { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: [[w, s], [e, s], [e, n], [w, n], [w, s]] }, properties: {} }] });
+        void api.get<{ type: 'FeatureCollection'; features: unknown[] }>(`/api/projects/${encodeURIComponent(proj.id)}/overview`).then((fcx) => setSource('overview', fcx as never)).catch(() => undefined);
+      } else { setSource('overview', null); setSource('work-area', null); }
       if (engine.lastPhysical) {
         setSource('surfaces', engine.lastPhysical.surfaces); setSource('markings', engine.lastPhysical.markings); setSource('lines', engine.lastPhysical.lines);
       }

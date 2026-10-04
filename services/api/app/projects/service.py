@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from app.settings import SETTINGS
+from app.projects import tiles
 from app.storage import atomic_write_bytes, atomic_write_json, read_json, safe_id
 
 DOC_NAMES = {"presentation", "civic", "transit", "safety", "traffic", "settings", "notes", "layers", "migration", "sidewalks", "mobility", "models", "elios", "terrain", "pricelist", "wms", "urbanplan", "trafficplan", "drainage"}
@@ -87,6 +88,10 @@ def _touch(pid: str, **changes: Any) -> dict:
 
 def update_meta(pid: str, changes: dict) -> dict:
     allowed = {k: v for k, v in changes.items() if k in {"name", "description", "status", "kind", "activeScenarioId", "author"}}
+    if isinstance(changes.get("workArea"), list) and len(changes["workArea"]) == 4:
+        meta = get_meta(pid)
+        if meta.get("large"):
+            allowed["workArea"] = tiles.clamp_work_area([float(x) for x in changes["workArea"]], meta["bbox"])
     if "name" in allowed and not (2 <= len(str(allowed["name"]).strip()) <= 120):
         raise ValueError("Il nome deve avere 2–120 caratteri")
     with _lock(pid):
@@ -102,6 +107,9 @@ def create_project(*, name: str, kind: str, author: str, baseline: dict, descrip
     d.mkdir(parents=True, exist_ok=False)
     created = now_iso()
     atomic_write_json(d / "baseline.json.gz", baseline, gz=True)
+    large = tiles.is_large(baseline)
+    if large:
+        tiles.build_tiles(d, baseline)
     base = {"id": "baseline", "name": "Stato attuale", "description": f"Città com'è oggi · {source_label}",
             "isBaseline": True, "locked": True, "archived": False, "createdAt": created, "operations": [], "revision": 0}
     first = {"id": "scenario-a", "name": "Scenario A", "isBaseline": False, "locked": False, "archived": False,
@@ -115,11 +123,32 @@ def create_project(*, name: str, kind: str, author: str, baseline: dict, descrip
         "bbox": baseline["bbox"], "crs": "EPSG:4326", "timezone": "Europe/Rome",
         "baselineId": baseline["id"], "scenarioIds": [s["id"] for s in rows], "activeScenarioId": rows[1]["id"] if len(rows) > 1 else "baseline",
         "source": source_label,
+        **({"large": True, "workArea": tiles.default_work_area([float(x) for x in baseline["bbox"]])} if large else {}),
         **({"description": description} if description else {}),
     }
     atomic_write_json(d / "project.json", meta)
     audit(pid, author, "project.create", {"source": source_label})
     return meta
+
+
+def baseline_subset_bytes(pid: str, bbox: list[float]) -> bytes:
+    """Work-area baseline of a large project (gzip JSON)."""
+    import gzip
+    import json as _json
+    meta = get_meta(pid)
+    d = project_dir(pid)
+    if not meta.get("large"):
+        return baseline_bytes(pid)
+    head = {"id": meta.get("baselineId"), "name": meta.get("city"), "sources": [{"kind": "osm", "source": meta.get("source", "")}]}
+    sub = tiles.subset(d, head, tiles.clamp_work_area(bbox, meta["bbox"]))
+    return gzip.compress(_json.dumps(sub, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), compresslevel=5)
+
+
+def overview_bytes(pid: str) -> bytes:
+    p = project_dir(pid) / "overview.json.gz"
+    if not p.exists():
+        raise NotFound("Vista d'insieme non disponibile (progetto non grande)")
+    return p.read_bytes()
 
 
 def baseline_bytes(pid: str) -> bytes:
@@ -391,6 +420,8 @@ def patch_baseline_roads(pid: str, roads: Any, label: str, provenance_key: str, 
         rev = int(meta.get("baselineRevision") or 0)
         _archive_baseline(d, rev)
         atomic_write_json(d / "baseline.json.gz", base, gz=True)
+        if meta.get("large"):
+            tiles.build_tiles(d, base)
         meta = {**read_json(d / "project.json"), "baselineRevision": rev + 1, "updatedAt": now_iso()}
         atomic_write_json(d / "project.json", meta)
         audit(pid, author, "baseline.patch", {"label": label[:160], "roads": len(roads), "provenance": prov, "revision": rev + 1})
