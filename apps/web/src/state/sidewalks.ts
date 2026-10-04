@@ -28,10 +28,10 @@ function draw(): void {
   const { doc, coverage } = useSidewalks.getState();
   if (!coverage || !doc.enabled) { setSource('sidewalks-est', null); return; }
   const off = new Set(doc.disabled);
-  const feats: Feature[] = coverage.sides.filter((s) => s.status === 'estimated' && s.ring && !off.has(s.key)).map((s) => ({
-    type: 'Feature', id: s.key, geometry: { type: 'Polygon', coordinates: [[...s.ring!.map((p) => [p[0], p[1]]), [s.ring![0]![0], s.ring![0]![1]]]] },
-    properties: { id: s.key, roadId: s.roadId, widthM: s.widthM },
-  }));
+  const feats: Feature[] = coverage.sides.filter((s) => s.status === 'estimated' && !off.has(s.key)).flatMap((s) => (s.rings ?? (s.ring ? [s.ring] : [])).map((ring, i): Feature => ({
+    type: 'Feature', id: `${s.key}:${i}`, geometry: { type: 'Polygon', coordinates: [[...ring.map((p) => [p[0], p[1]]), [ring[0]![0], ring[0]![1]]]] },
+    properties: { id: `${s.key}:${i}`, side: s.key, roadId: s.roadId, widthM: s.widthM },
+  })));
   setSource('sidewalks-est', fc(feats));
 }
 

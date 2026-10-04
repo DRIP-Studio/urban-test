@@ -119,10 +119,49 @@ describe('sidewalk coverage (no road changed)', () => {
     const t0 = Date.now();
     const c = sidewalkCoverage(h.network, baseline);
     const ms = Date.now() - t0;
-    require('node:fs').writeFileSync('/tmp/claude-0/sw.log', JSON.stringify({ ms, totals: c.totals, sides: c.sides.length }));
     expect(ms).toBeLessThan(15000);
     expect(c.totals.estimated).toBeGreaterThan(0);
     expect(c.sides.filter((s) => s.status === 'estimated').every((s) => s.widthM >= 0.9 && s.widthM <= 2.5 && (s.ring?.length ?? 0) >= 4)).toBe(true);
     expect(JSON.stringify(h.network.roads)).toBe(before);
+  });
+});
+
+describe('estimated sidewalks are geometrically sound', () => {
+  it('never enter buildings, other carriageways or junction centres', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const net = h.network;
+    const f = new LocalFrame(baseline.origin);
+    const t0 = Date.now();
+    const c = sidewalkCoverage(net, baseline);
+    const ms = Date.now() - t0;
+    expect(ms).toBeLessThan(8000);
+    const pieces = c.sides.filter((s) => s.status === 'estimated').flatMap((s) => (s.rings ?? []).map((r) => ({ s, ring: r.map((q) => f.toMetric(q) as geom.V) })));
+    expect(pieces.length).toBeGreaterThan(50);
+    // Buildings: index footprints by a coarse grid.
+    const cell = 50, idx = new Map<string, geom.V[][]>();
+    for (const b of Object.values(baseline.buildings)) {
+      const r = b.footprint.map((q) => f.toMetric(q) as geom.V);
+      const xs = r.map((p) => p[0]), ys = r.map((p) => p[1]);
+      for (let x = Math.floor(Math.min(...xs) / cell); x <= Math.floor(Math.max(...xs) / cell); x++) for (let y = Math.floor(Math.min(...ys) / cell); y <= Math.floor(Math.max(...ys) / cell); y++) (idx.get(`${x},${y}`) ?? idx.set(`${x},${y}`, []).get(`${x},${y}`)!).push(r);
+    }
+    let bad = 0, checked = 0;
+    for (const p of pieces.slice(0, 600)) {
+      const xs = p.ring.map((q) => q[0]), ys = p.ring.map((q) => q[1]);
+      const near = new Set<geom.V[]>();
+      for (let x = Math.floor(Math.min(...xs) / cell); x <= Math.floor(Math.max(...xs) / cell); x++) for (let y = Math.floor(Math.min(...ys) / cell); y <= Math.floor(Math.max(...ys) / cell); y++) for (const r of idx.get(`${x},${y}`) ?? []) near.add(r);
+      let a = 0;
+      for (const r of near) a += geom.polygonIntersectionArea(p.ring, r);
+      checked++;
+      if (a > 0.5) bad++;
+    }
+    // Allow a few: the facade sampling is every 2 m, so a corner can clip a building slightly.
+    expect(bad / checked).toBeLessThan(0.03);
+    // Junction centres (≥ 3 vehicular arms): no piece within 3 m of the node.
+    const deg = new Map<string, number>();
+    for (const r of Object.values(net.roads)) for (const n of [r.from, r.to]) deg.set(n, (deg.get(n) ?? 0) + 1);
+    const centres = [...deg].filter(([, d]) => d >= 3).map(([n]) => f.toMetric(net.nodes[n]!.at) as geom.V);
+    let inside = 0;
+    for (const p of pieces) for (const c0 of centres) if (Math.abs(p.ring[0]![0] - c0[0]) < 40 && Math.abs(p.ring[0]![1] - c0[1]) < 40 && geom.pointInRing(c0, p.ring)) inside++;
+    expect(inside).toBe(0);
   });
 });

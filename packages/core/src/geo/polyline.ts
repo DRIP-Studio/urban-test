@@ -269,3 +269,93 @@ export function convexHull(points: readonly V[]): V[] {
   for (const q of [...p].reverse()) { while (hi.length >= 2 && cr(hi[hi.length - 2]!, hi[hi.length - 1]!, q) <= 0) hi.pop(); hi.push(q); }
   return [...lo.slice(0, -1), ...hi.slice(0, -1)];
 }
+
+/** Point-in-polygon (even–odd), any orientation; points on the boundary may go either way. */
+export function pointInRing(p: V, ring: readonly V[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!, b = ring[j]!;
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Ear-clipping triangulation of a simple ring (any orientation, closing point optional).
+ * Degenerate (collinear) ears are dropped; a ring that is not simple is triangulated as far as possible.
+ */
+export function triangulate(ring: readonly V[]): [V, V, V][] {
+  let pts = dedupe(ring, 1e-6);
+  if (pts.length > 1 && dist(pts[0]!, pts[pts.length - 1]!) <= 1e-6) pts = pts.slice(0, -1);
+  if (pts.length < 3) return [];
+  if (ringArea(pts) < 0) pts = [...pts].reverse();
+  const idx = pts.map((_, i) => i);
+  const out: [V, V, V][] = [];
+  const cr = (o: V, a: V, b: V) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  let guard = 0;
+  while (idx.length > 3 && guard++ < 4 * pts.length * pts.length) {
+    let clipped = false;
+    for (let k = 0; k < idx.length; k++) {
+      const ia = idx[(k + idx.length - 1) % idx.length]!, ib = idx[k]!, ic = idx[(k + 1) % idx.length]!;
+      const a = pts[ia]!, b = pts[ib]!, c = pts[ic]!;
+      const turn = cr(a, b, c);
+      if (turn < 0) continue;
+      if (turn > 1e-12) {
+        let blocked = false;
+        for (const iv of idx) {
+          if (iv === ia || iv === ib || iv === ic) continue;
+          const v = pts[iv]!;
+          if (cr(a, b, v) >= 0 && cr(b, c, v) >= 0 && cr(c, a, v) >= 0) { blocked = true; break; }
+        }
+        if (blocked) continue;
+        out.push([a, b, c]);
+      }
+      idx.splice(k, 1);
+      clipped = true;
+      break;
+    }
+    if (!clipped) break;
+  }
+  if (idx.length === 3) {
+    const [a, b, c] = idx.map((i) => pts[i]!) as [V, V, V];
+    if (Math.abs(cr(a, b, c)) > 1e-12) out.push([a, b, c]);
+  }
+  return out;
+}
+
+/** Area of the intersection of two convex counter-clockwise polygons (Sutherland–Hodgman). */
+export function convexIntersectionArea(subject: readonly V[], clip: readonly V[]): number {
+  let poly: V[] = [...subject];
+  for (let i = 0; i < clip.length && poly.length; i++) {
+    const a = clip[i]!, b = clip[(i + 1) % clip.length]!;
+    const side = (p: V) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    const next: V[] = [];
+    for (let j = 0; j < poly.length; j++) {
+      const p = poly[j]!, q = poly[(j + 1) % poly.length]!;
+      const sp = side(p), sq = side(q);
+      if (sp >= 0) next.push(p);
+      if ((sp >= 0) !== (sq >= 0)) next.push(lerp(p, q, sp / (sp - sq)));
+    }
+    poly = next;
+  }
+  return poly.length >= 3 ? Math.abs(ringArea(poly)) : 0;
+}
+
+/** Area (m²) of the intersection of two simple polygons, via their triangulations. Shared edges count zero. */
+export function polygonIntersectionArea(a: readonly V[], b: readonly V[]): number {
+  const box = (r: readonly V[]) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of r) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    return [x0, y0, x1, y1] as const;
+  };
+  const A = box(a), B = box(b);
+  if (A[0] > B[2] || B[0] > A[2] || A[1] > B[3] || B[1] > A[3]) return 0;
+  const ta = triangulate(a).map((t) => ({ t, b: box(t) }));
+  const tb = triangulate(b).map((t) => ({ t, b: box(t) }));
+  let s = 0;
+  for (const x of ta) for (const y of tb) {
+    if (x.b[0] > y.b[2] || y.b[0] > x.b[2] || x.b[1] > y.b[3] || y.b[1] > x.b[3]) continue;
+    s += convexIntersectionArea(x.t, y.t);
+  }
+  return s;
+}

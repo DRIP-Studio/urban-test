@@ -1,5 +1,5 @@
 import { LocalFrame } from '../geo/projection';
-import { add, band, dot, intersectLines, leftNormal, lengthOf, mul, sampleAt, sub, unit, type V } from '../geo/polyline';
+import { add, dot, pointInRing, intersectLines, leftNormal, lengthOf, mul, sampleAt, sub, unit, type V } from '../geo/polyline';
 import type { CityBaseline, LngLat, Network, Road } from '../model/types';
 import { isPedestrianRoad, layoutSection } from '../physical/section';
 
@@ -22,8 +22,12 @@ export interface SidewalkSide {
   readonly side: 'left' | 'right';
   readonly status: SideStatus;
   readonly widthM: number;
-  /** Band polygon outside the carriageway (WGS84), for estimated sidewalks. */
+  /** Band polygon outside the carriageway (WGS84), for estimated sidewalks: the first piece. */
   readonly ring?: readonly LngLat[];
+  /** All pieces of the estimated sidewalk: interrupted at junctions, other carriageways and where the facades leave no room. */
+  readonly rings?: readonly (readonly LngLat[])[];
+  /** Estimated length actually drawn (m). */
+  readonly estimatedM?: number;
   readonly lengthM: number;
 }
 
@@ -61,6 +65,13 @@ const segDist = (p: V, a: V, b: V) => {
   return Math.hypot(p[0] - q[0], p[1] - q[1]);
 };
 
+/** Spacing of the samples along each side (m) and clearances. */
+const STEP = 2;
+const JUNCTION_MARGIN = 2.5; // corner radius allowance where another carriageway starts (DM 19/4/2006 raccordi)
+const SIDE_MARGIN = 0.3;
+const MIN_WIDTH = 0.9; // DM 236/1989 §8.2.1: minimum clear width of a pedestrian path
+const MIN_PIECE = 6;
+
 export function sidewalkCoverage(net: Network, baseline: CityBaseline): SidewalkCoverage {
   const frame = new LocalFrame(baseline.origin);
   // Building edges (facades) and pedestrian ways (footways, paths, pedestrian streets).
@@ -70,13 +81,30 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
     for (let i = 0; i < ring.length; i++) facades.push({ a: ring[i]!, b: ring[(i + 1) % ring.length]!, v: null });
   }
   const nearFacade = grid(facades);
+  // Building footprints by grid cell, for point-in-building tests.
+  const bcell = new Map<string, V[][]>();
+  for (const bd of Object.values(baseline.buildings)) {
+    const ring = bd.footprint.map((q) => frame.toMetric(q) as V);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of ring) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    for (let x = Math.floor(x0 / CELL); x <= Math.floor(x1 / CELL); x++) for (let y = Math.floor(y0 / CELL); y <= Math.floor(y1 / CELL); y++) (bcell.get(`${x},${y}`) ?? bcell.set(`${x},${y}`, []).get(`${x},${y}`)!).push(ring);
+  }
+  const inBuilding = (q: V) => (bcell.get(`${Math.floor(q[0] / CELL)},${Math.floor(q[1] / CELL)}`) ?? []).some((r) => pointInRing(q, r));
   const walks: { a: V; b: V; v: V }[] = [];
+  // Every vehicular carriageway (roundabout rings included): estimated sidewalks never enter one.
+  const carriage: { a: V; b: V; v: { roadId: string; half: number } }[] = [];
+  const degree = new Map<string, number>();
   for (const r of Object.values(net.roads)) {
-    if (!isPedestrianRoad(r) && !['footway', 'path', 'pedestrian', 'steps'].includes(r.roadClass)) continue;
     const ax = r.axis.map((q) => frame.toMetric(q) as V);
-    for (let i = 1; i < ax.length; i++) walks.push({ a: ax[i - 1]!, b: ax[i]!, v: unit(sub(ax[i]!, ax[i - 1]!)) });
+    const ped = isPedestrianRoad(r) || ['footway', 'path', 'pedestrian', 'steps'].includes(r.roadClass);
+    if (ped) { for (let i = 1; i < ax.length; i++) walks.push({ a: ax[i - 1]!, b: ax[i]!, v: unit(sub(ax[i]!, ax[i - 1]!)) }); continue; }
+    const lay = layoutSection(r);
+    const half = Math.max(Math.abs(lay.cwLeft), Math.abs(lay.cwRight), 1.5);
+    for (let i = 1; i < ax.length; i++) carriage.push({ a: ax[i - 1]!, b: ax[i]!, v: { roadId: r.id, half } });
+    for (const n of [r.from, r.to]) degree.set(n, (degree.get(n) ?? 0) + 1);
   }
   const nearWalk = grid(walks);
+  const nearRoad = grid(carriage);
   const ray = (p: V, dir: V, maxD: number): number | null => {
     const end = add(p, mul(dir, maxD));
     let best: number | null = null;
@@ -96,43 +124,87 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
     const lay = layoutSection(road);
     const els = road.section.elements;
     const tag = road.tags?.sidewalk ?? road.tags?.['sidewalk:both'];
+    const ends = [frame.toMetric(net.nodes[road.from]?.at ?? road.axis[0]!) as V, frame.toMetric(net.nodes[road.to]?.at ?? road.axis[road.axis.length - 1]!) as V];
+    const atJunction = [(degree.get(road.from) ?? 0) >= 3, (degree.get(road.to) ?? 0) >= 3];
+    /** True when the point lies on another road's carriageway (with a corner allowance near junctions). */
+    const blocked = (q: V): boolean => {
+      for (const c of nearRoad(q, 12)) {
+        if (c.v.roadId === road.id) continue;
+        const nearEnd = (atJunction[0] && Math.hypot(q[0] - ends[0]![0], q[1] - ends[0]![1]) < 25) || (atJunction[1] && Math.hypot(q[0] - ends[1]![0], q[1] - ends[1]![1]) < 25);
+        if (segDist(q, c.a, c.b) < c.v.half + (nearEnd ? JUNCTION_MARGIN : SIDE_MARGIN)) return true;
+      }
+      return false;
+    };
     for (const side of ['left', 'right'] as const) {
       const sign = side === 'left' ? 1 : -1;
       const edge = side === 'left' ? lay.cwLeft : lay.cwRight;
       const outer = side === 'left' ? lay.outerLeft : lay.outerRight;
       const has = side === 'left' ? els[0]?.kind === 'sidewalk' : els[els.length - 1]?.kind === 'sidewalk';
       const key = `${road.id}:${side}`;
-      const push = (status: SideStatus, widthM: number, ring?: LngLat[]) => {
-        sides.push({ key, roadId: road.id, side, status, widthM, lengthM: Math.round(L), ...(ring ? { ring } : {}) });
-        totals[status] += L;
+      const push = (status: SideStatus, widthM: number, rings?: LngLat[][], estimatedM?: number) => {
+        sides.push({ key, roadId: road.id, side, status, widthM, lengthM: Math.round(L), ...(rings?.length ? { ring: rings[0], rings, estimatedM: Math.round(estimatedM ?? 0) } : {}) });
+        totals[status] += status === 'estimated' ? estimatedM ?? 0 : L;
       };
       if (has) { push('data', Math.abs(outer - edge)); continue; }
       // Samples along the side: facade gap and parallel footway.
-      let walkHits = 0, facadeHits = 0, n = 0;
-      const gaps: number[] = [];
-      for (let s = 4; s <= L - 4; s += 5) {
-        n++;
-        const { p, t } = sampleAt(axis, s);
+      const want = SIDEWALK_WIDTH[road.roadClass] ?? 1.5;
+      let walkHits = 0, facadeHits = 0;
+      const samples: { s: number; p: V; n: V; w: number }[] = [];
+      for (let s = 0; s <= L + 1e-6; s += STEP) {
+        const st = Math.min(s, L);
+        const { p, t } = sampleAt(axis, st);
         const nrm = mul(leftNormal(t), sign);
         const start = add(p, mul(leftNormal(t), edge));
         const g = ray(start, nrm, 30);
-        if (g !== null) { facadeHits++; gaps.push(g); }
-        // A footway 0.5–8 m beyond the kerb, roughly parallel: the sidewalk is mapped separately.
+        if (g !== null) facadeHits++;
         const probe = add(start, mul(nrm, 3));
         if (nearWalk(probe, 6).some((w) => segDist(probe, w.a, w.b) < 5.5 && Math.abs(dot(w.v, t)) > 0.85)) walkHits++;
+        // Width here: the standard width, limited by the free space before the facade.
+        let w = Math.min(want, g === null ? want : g - 0.05);
+        // Not on another carriageway: check the inner, middle and outer points of the band.
+        if (w >= MIN_WIDTH && [0.2, w / 2, w].some((o) => blocked(add(start, mul(nrm, o))))) w = 0;
+        samples.push({ s: st, p: start, n: nrm, w });
       }
+      const n = samples.length;
       if (!n) continue;
       if (tag === 'separate' || walkHits / n >= 0.5) { push('footway', 0); continue; }
       if (tag === 'no' || tag === 'none' || (side === 'left' && tag === 'right') || (side === 'right' && tag === 'left')) { push('rural', 0); continue; }
       if (facadeHits / n < 0.2) { push('rural', 0); continue; }
-      const free = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length * 0.25)] ?? 0;
-      if (free < 1.0) { push('no_room', 0); continue; }
-      const want = SIDEWALK_WIDTH[road.roadClass] ?? 1.5;
-      const w = Math.round(Math.min(want, free - 0.1) * 10) / 10;
-      if (w < 0.9) { push('no_room', 0); continue; }
-      const a = edge, b = edge + sign * w;
-      const ring = band(axis, Math.max(a, b), Math.min(a, b)).map((q) => frame.toLngLat(q));
-      push('estimated', w, ring);
+      // Contiguous runs with room become pieces; widths are smoothed to avoid saw-teeth.
+      const rings: LngLat[][] = [];
+      let drawn = 0, wsum = 0, wcount = 0;
+      let run: typeof samples = [];
+      const flush = () => {
+        if (run.length >= 2 && run[run.length - 1]!.s - run[0]!.s >= MIN_PIECE) {
+          const ws = run.map((q, i) => Math.min(...run.slice(Math.max(0, i - 1), i + 2).map((x) => x.w)));
+          const inner = run.map((q) => q.p);
+          const outerPts = run.map((q, i) => add(q.p, mul(q.n, Math.round(ws[i]! * 20) / 20)));
+          rings.push([...inner, ...outerPts.reverse()].map((q) => frame.toLngLat(q)));
+          drawn += run[run.length - 1]!.s - run[0]!.s;
+          for (const w of ws) { wsum += w; wcount++; }
+        }
+        run = [];
+      };
+      // Between two samples the band must stay out of buildings: probe the outer edge and the middle line,
+      // shrinking the width (or cutting the piece) where a footprint is hit.
+      for (let i = 0; i < samples.length; i++) {
+        const a = samples[i]!, b = samples[i + 1] ?? samples[i]!;
+        while (a.w >= MIN_WIDTH) {
+          let hit = inBuilding(add(a.p, mul(a.n, 0.15)));
+          for (let k = 0; k <= 4 && !hit; k++) {
+            const t = k / 4, base = add(a.p, mul(sub(b.p, a.p), t)), nn = unit(add(mul(a.n, 1 - t), mul(b.n, t)));
+            const w = Math.min(a.w, b.w >= MIN_WIDTH ? b.w : a.w);
+            hit = inBuilding(add(base, mul(nn, w))) || inBuilding(add(base, mul(nn, w / 2)));
+          }
+          if (!hit) break;
+          a.w = a.w - 0.25 >= MIN_WIDTH ? a.w - 0.25 : 0;
+          if (b !== a && b.w > a.w && a.w > 0) b.w = a.w;
+        }
+      }
+      for (const q of samples) { if (q.w >= MIN_WIDTH) run.push(q); else flush(); }
+      flush();
+      if (!rings.length) { push('no_room', 0); continue; }
+      push('estimated', Math.round((wsum / Math.max(1, wcount)) * 10) / 10, rings, drawn);
     }
   }
   for (const k of Object.keys(totals) as SideStatus[]) totals[k] = Math.round(totals[k]);
