@@ -38,9 +38,11 @@ export interface SidewalkCoverage {
 
 /** Recommended sidewalk width by road class (m): DM 5/11/2001 minimum 1,50; DPR 503/1996 accessibility. */
 export const SIDEWALK_WIDTH: Readonly<Record<string, number>> = {
-  primary: 2.5, secondary: 2.25, tertiary: 2.0, unclassified: 1.75, residential: 1.5, living_street: 1.5,
+  primary: 2.5, secondary: 2.25, tertiary: 2.0, unclassified: 1.75, residential: 1.5, living_street: 1.5, trunk: 2.5, service: 1.5,
 };
-const SKIP = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'track', 'service', 'construction', 'roundabout', 'steps', 'path', 'cycleway', 'footway', 'pedestrian']);
+const SKIP = new Set(['motorway', 'motorway_link', 'trunk_link', 'track', 'construction', 'roundabout', 'steps', 'path', 'cycleway', 'footway', 'pedestrian', 'bridleway', 'raceway']);
+/** Classes that in a town always get sidewalks (service only when it is a street, not a driveway). */
+const URBAN_CLASS = new Set(['primary', 'secondary', 'tertiary', 'residential', 'living_street', 'unclassified', 'trunk', 'service']);
 const CELL = 25;
 
 function grid<T>(items: { a: V; b: V; v: T }[]) {
@@ -120,7 +122,7 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
     if (isPedestrianRoad(road) || SKIP.has(road.roadClass) || road.tags?.roundabout) continue;
     const axis = road.axis.map((q) => frame.toMetric(q) as V);
     const L = lengthOf(axis);
-    if (L < 8) continue;
+    if (L < 8 || (road.roadClass === 'service' && (L < 40 || ['driveway', 'parking_aisle', 'drive-through'].includes(road.tags?.service ?? '')))) continue;
     const lay = layoutSection(road);
     const els = road.section.elements;
     const tag = road.tags?.sidewalk ?? road.tags?.['sidewalk:both'];
@@ -169,7 +171,10 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
       if (!n) continue;
       if (tag === 'separate' || walkHits / n >= 0.5) { push('footway', 0); continue; }
       if (tag === 'no' || tag === 'none' || (side === 'left' && tag === 'right') || (side === 'right' && tag === 'left')) { push('rural', 0); continue; }
-      if (facadeHits / n < 0.2) { push('rural', 0); continue; }
+      // Built-up area: facades along the side, or buildings within 60 m of the road (estimated everywhere in town).
+      const mid = sampleAt(axis, L / 2).p;
+      const urban = facadeHits / n >= 0.2 || nearFacade(mid, 60).some((e) => segDist(mid, e.a, e.b) < 60) || URBAN_CLASS.has(road.roadClass) && nearFacade(mid, 150).length > 0;
+      if (!urban) { push('rural', 0); continue; }
       // Contiguous runs with room become pieces; widths are smoothed to avoid saw-teeth.
       const rings: LngLat[][] = [];
       let drawn = 0, wsum = 0, wcount = 0;

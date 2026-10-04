@@ -6,6 +6,7 @@ import { deleteSelection, duplicateSelection, pasteAt } from '../state/actions';
 import { select, setDock, setMode, setTool, useApp, commit } from '../state/store';
 import { dismiss, useToasts } from '../state/toasts';
 import { GROUP_LABEL, TOOLS } from '../tools/registry';
+import { setLive, useLive } from '../state/live';
 import { pickAt } from '../tools/select';
 import { usePicks } from '../tools/picks';
 import { toggleElios, useElios } from '../elios/Elios';
@@ -90,6 +91,7 @@ export function StatusBar() {
         Griglia {gridM.toString().replace('.', ',')} m
       </button>
       <button type="button" className={`sb-item sb-toggle ${snap.angle ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, angle: !s.snap.angle } }))}>Angolo 15°</button>
+      <LiveToggle />
       <span className="sb-spacer" />
       {failed.length ? (
         <button type="button" className="sb-item sb-warn" onClick={() => { setMode('analyze'); setDock('audit'); }}>
@@ -234,5 +236,14 @@ export function CommandPalette() {
         </div>
       </div>
     </div>
+  );
+}
+
+function LiveToggle() {
+  const { enabled, running } = useLive();
+  return (
+    <button type="button" className={`sb-item sb-toggle ${enabled ? 'is-on' : ''}`} title="Aggiornamento automatico di verifiche, analisi e mappe a ogni modifica" onClick={() => setLive(!enabled)}>
+      <span className={`live-dot ${enabled ? (running ? 'is-busy' : 'is-on') : ''}`} />Live {enabled ? (running ? '· aggiorno' : 'on') : 'off'}
+    </button>
   );
 }

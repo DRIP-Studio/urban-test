@@ -3,6 +3,7 @@ import { checkCompliance, citeNorm, normById, type ComplianceFinding, type Sever
 import { fc, type Feature, type Point } from '../engine/geojson';
 import { flyTo, setSource, toggleLayer } from '../map/mapStore';
 import { openDock, select, useApp, type Selection } from './store';
+import { registerLive } from './live';
 
 /**
  * Normativa e verifiche: compliance findings of the active scenario, the map overlay and the
@@ -30,6 +31,9 @@ export const useNorms = create<NormsState>(() => ({
 export const SEVERITY_LABEL: Record<Severity, string> = { error: 'Non conforme', warning: 'Da verificare', info: 'Informazione' };
 
 /** Runs the checks on the active scenario (synchronous, ~0,1 s on a town). */
+// Live: once computed, the checks follow every edit.
+registerLive('norms', () => { if (useNorms.getState().findings) runChecks(); });
+
 export function runChecks(): ComplianceFinding[] {
   const { network, baseline, catalogs, netVersion } = useApp.getState();
   if (!network || !baseline) return [];

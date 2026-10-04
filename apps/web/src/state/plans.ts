@@ -5,7 +5,8 @@ import {
 } from '@drip-urban/core';
 import { api } from '../api/client';
 import { fc, type Feature } from '../engine/geojson';
-import { setSource, toggleLayer } from '../map/mapStore';
+import { setSource, toggleLayer, useMapUi } from '../map/mapStore';
+import { registerLive } from './live';
 import { useApp } from './store';
 import { toast } from './toasts';
 
@@ -59,6 +60,8 @@ export function drawFunctionalClasses(): void {
     properties: { id: r.id, cls: cls[r.id]!, color: FUNCTIONAL_COLOR[cls[r.id]!], authored: !!r.functionalClass },
   }))));
 }
+
+registerLive('func-class', () => { if (useMapUi.getState().visible['func-class']) drawFunctionalClasses(); });
 
 export function showPlanLayers(which: 'urban' | 'traffic', on = true): void {
   if (which === 'urban') { toggleLayer('plan-zones', on); toggleLayer('plan-constraints', on); }

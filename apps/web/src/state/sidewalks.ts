@@ -1,3 +1,4 @@
+import { registerLive } from './live';
 import { create } from 'zustand';
 import type { SidewalkCoverage, SidewalkSide } from '@drip-urban/core';
 import { api } from '../api/client';
@@ -42,7 +43,6 @@ async function saveDoc(doc: SidewalkDoc): Promise<void> {
   if (p) await api.put(`/api/projects/${encodeURIComponent(p.id)}/docs/sidewalks`, doc).catch(() => undefined);
 }
 
-let timer: ReturnType<typeof setTimeout> | null = null;
 export async function refreshSidewalks(): Promise<void> {
   useSidewalks.setState({ loading: true });
   try {
@@ -81,9 +81,5 @@ export function setAllSides(on: boolean): void {
   void saveDoc({ ...useSidewalks.getState().doc, enabled: true, disabled: on ? [] : (cov?.sides.filter((s) => s.status === 'estimated').map((s) => s.key) ?? []) });
 }
 
-// Recompute after network edits (debounced), so new roads get their estimate.
-useApp.subscribe((st, prev) => {
-  if (st.netVersion === prev.netVersion || !st.project) return;
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(() => void refreshSidewalks(), 1500);
-});
+// Live: recomputed after every edit (debounced by the live hub), so new roads get their estimate.
+registerLive('sidewalks', () => (useApp.getState().project ? refreshSidewalks() : undefined));

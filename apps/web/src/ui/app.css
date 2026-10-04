@@ -238,3 +238,7 @@ h1, h2, h3 { text-wrap: balance; }
 .suggest-card p { margin: 0; font-size: var(--fs-12); color: var(--text-2); line-height: 1.4; }
 .suggest-ref { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono, monospace); }
 .suggest-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); margin-right: 6px; vertical-align: 0; }
+.live-dot.is-on { background: var(--ok); }
+.live-dot.is-busy { background: var(--drip-accent); animation: live-pulse 0.9s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: 0.35; } }

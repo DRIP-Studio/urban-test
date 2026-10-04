@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_TRAFFIC, type SimFrame, type TrafficParams, type TrafficResult } from '@drip-urban/core';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
+import { registerLive } from '../state/live';
 import { fc, type Feature } from '../engine/geojson';
 import { flyTo, getMap, setSource, toggleLayer } from '../map/mapStore';
 import { optimizeAllSignals, type OptimizeSummary } from '../traffic/signals';
@@ -139,6 +140,8 @@ function Estimate() {
   const [p, setP] = useState<TrafficParams>(DEFAULT_TRAFFIC);
   const [res, setRes] = useState<{ today: TrafficResult; project: TrafficResult } | null>(null);
   const [busy, setBusy] = useState(false);
+  const runRef = useRef<() => Promise<void>>(async () => undefined);
+  useEffect(() => registerLive('traffic-estimate', () => (res ? runRef.current() : undefined)), [res]);
   const run = async () => {
     setBusy(true);
     try {
@@ -149,6 +152,8 @@ function Estimate() {
     } catch (e) { toast.error('Stima traffico', e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
+  runRef.current = run;
+
   const d = (a: number, b: number) => Math.round(b - a);
   return (
     <>

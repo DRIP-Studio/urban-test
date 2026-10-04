@@ -4,6 +4,7 @@ import { engine } from '../engine/engine';
 import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import { useApp } from './store';
+import { registerLive } from './live';
 
 /** Storm drainage: last analysis (rational method) and the map overlay coloured by pipe filling. */
 interface DrainageState { idf: IdfParams; result: DrainageResult | null; version: number }
@@ -20,6 +21,8 @@ export function catchmentSurfaces(): CatchmentSurface[] {
     return [{ id: String(pr.id ?? ''), kind: String(pr.kind ?? 'carriageway'), material: pr.material, ring: rings[0].slice(0, -1).map((q) => [q[0]!, q[1]!] as [number, number]) }];
   });
 }
+
+registerLive('drainage', () => { if (useDrainage.getState().result) runDrainage(); });
 
 export function runDrainage(autoSize = false): DrainageResult | null {
   const { network, baseline, netVersion } = useApp.getState();
