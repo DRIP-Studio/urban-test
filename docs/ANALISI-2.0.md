@@ -155,8 +155,21 @@ Aggiunto nella 2.0 (aggiornamento del 4 ottobre):
 | **WMS ufficiali** | Fatto | carte tecniche e catasto come base o sovrapposizione, opacità regolabile, proxy sicuro (solo servizi configurati) |
 | Modellazione 3D libera | Escluso su richiesta | si importano modelli glTF/GLB già pronti |
 
+Aggiunto il 4 ottobre sera (dettaglio in [PARITA-INFRAWORKS-CIVIL3D](PARITA-INFRAWORKS-CIVIL3D.md)):
+
+| Funzione | Stato | Dove / come |
+|---|---|---|
+| **Segnaletica orizzontale di ogni tipo** | Fatto | strumento *Segnaletica* (W), segnaletica automatica di preselezione, stalli, fermate |
+| **Moderazione del traffico e rialzati** | Fatto | strumento *Moderazione* (D), limiti art. 179 Reg. |
+| **Viadotti, ponti, gallerie** | Fatto | Inspector della strada, tag OSM, pile 3D |
+| **Andamento planimetrico** | Fatto | Profilo → *Andamento planimetrico*, verifiche DM 2001 § 5.2 |
+| **Drenaggio urbano** | Fatto | strumento *Drenaggio* (C) e pannello di verifica |
+| **Piano urbanistico, PGTU, PUMS** | Fatto | pannello *Piani* |
+| **Twin sul terreno reale** | Fatto | DTM, livellette, scarpate |
+| **Suggerimenti contestuali** | Fatto | pannello *Prossimi passi* sulla mappa |
+| **Veicoli ed edifici realistici, demolizione** | Fatto | mappa inclinata e Twin |
+
 Limiti dichiarati:
-- il profilo di progetto non solleva ancora le superfici nel Twin (che resta su terreno ellissoidico);
 - i movimenti terra non considerano il pacchetto stradale;
 - la demolizione nel computo è stimata per strada intera;
 - la collaborazione funziona con un solo processo server;

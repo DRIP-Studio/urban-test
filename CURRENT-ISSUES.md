@@ -1,6 +1,6 @@
 # CURRENT-ISSUES — DRIP Urban 2.0
 
-Formato: id · descrizione · causa radice · stato · fix · test. Aggiornato il 2026-10-03.
+Formato: id · descrizione · causa radice · stato · fix · test. Aggiornato il 2026-10-04.
 
 ## P0 — blocker
 
@@ -22,7 +22,10 @@ Nessun P0 aperto.
 | V2-04 | Carte tecniche ufficiali (WMS CTR/DBT regionali, catasto) | URL della CTR regionale non fornito | **parziale** — WMS configurabili, catasto AdE preimpostato (EPSG:3857 da verificare sul servizio reale) | inserire l'URL WMS della Regione in Impostazioni | `test_wms.py` |
 | V2-05 | Ritorno verso FST | il plugin FST espone solo API di lettura | aperto | ricevitore del webhook `publication.created` (con `reportIds`) sul portale | `test_fst_reports_filtered_to_project_area_and_configurable_portal` |
 | V2-06 | Altimetria, computi, IFC/LandXML | — | **chiuso** | DTM, profili, sezioni, movimenti terra; computo metrico; IFC 4.3 e LandXML | `vertical.test.ts`, `test_terrain.py`, `quantities.test.ts`, `ifc.test.ts`, `landxml.test.ts` |
-| V2-07 | Profilo di progetto non applicato alle superfici del Twin | il Twin usa terreno ellissoidico | aperto | drappeggiare superfici e arredo su DTM + profilo | — |
+| V2-07 | Profilo di progetto non applicato alle superfici del Twin | il Twin usava terreno ellissoidico | **chiuso** | terreno DTM a tasselli, superfici drappeggiate su terreno e livellette, scarpate, edifici e arredi alla quota del suolo | `twin-heights.test.ts` |
+| V2-09 | Clotoidi e cigli di progetto | l'asse da rilievo è una polilinea | aperto | l'andamento planimetrico riconosce rettifili e curve circolari; il progetto delle curve di transizione e della sopraelevazione per corsia non c'è | `streetscape.test.ts` (alignment) |
+| V2-10 | Reti in pressione (acquedotto, gas) e sottoservizi | fuori perimetro | aperto | c'è il drenaggio a gravità; le reti in pressione restano da fare | — |
+| V2-11 | Nuvole di punti e 3D Tiles fotogrammetrici | fuori perimetro | aperto | si importano DTM .asc e modelli glTF; LAS/LAZ e 3D Tiles no | — |
 | V2-08 | Collaborazione solo con un processo server | hub eventi in memoria | aperto | per installazioni multi-processo serve un broker (Redis) | `test_collab.py` |
 
 ## P1 — major

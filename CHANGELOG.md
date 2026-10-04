@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.0 — aggiornamento del 2026-10-04 (sera)
+
+### Segnaletica orizzontale e moderazione del traffico
+- Strumento «Segnaletica» (W): linee continue, tratteggiate, doppie, miste, gialle, zig-zag, arresto, dare precedenza, triangoli, frecce, scritte, simboli, stalli, zebrature, chevron, box giallo; colori bianco, giallo, blu, rosso, rosa, verde; riferimenti artt. 137–155 Reg.
+- Scritte, simboli e frecce con un clic, orientati sul senso di marcia e centrati sulla corsia.
+- Segnaletica automatica: frecce e linee continue di preselezione dalle svolte delle corsie, stalli colorati dalla sezione, fermate bus con zig-zag e «BUS».
+- Strumento «Moderazione» (D): dossi con i limiti dell'art. 179, piattaforme e attraversamenti rialzati, cuscini berlinesi, bande rumorose, incroci rialzati.
+- Ponti, viadotti e gallerie: rilevati dai tag OSM o impostati nell'Inspector; pile 3D e ombra in mappa.
+
+### Suggerimenti «Prossimi passi»
+- Dopo ogni modifica: marciapiedi, limiti di velocità, regolazione degli incroci, segnali e rialzo degli attraversamenti, varchi ZTL e Zona 30, presegnalamento dei dossi, coordinamento semaforico. Ogni suggerimento ha la norma e un'azione in un clic.
+
+### Veicoli, edifici, modelli
+- Veicoli 3D realistici (auto in vari colori, furgoni, camion, bus 12 m, ambulanze) in mappa e nel Twin.
+- Edifici con facciate in intonaco e tetti in coppi; demolizione e ripristino nello scenario.
+- La posa di un modello importato libera l'area da edifici e arredi esistenti.
+
+### Piani e opere (Civil 3D / InfraWorks)
+- Piano urbanistico: import PUC/PRG (Shapefile/GeoJSON, Gauss-Boaga/UTM), standard DM 1444/68, conformità dell'edificato, vincoli e fasce di rispetto, verifica del progetto.
+- Piano del traffico: classificazione funzionale PGTU, isole ambientali → Zone 30/ZTL, indicatori PUMS.
+- Drenaggio urbano: strumento (C), metodo razionale, Gauckler-Strickler, dimensionamento DN.
+- Andamento planimetrico con verifiche DM 5/11/2001 § 5.2.
+- Twin sul terreno reale (DTM, livellette, scarpate).
+
+### Elios
+- Nuovi strumenti: `add_traffic_calming`, `set_road_structure`, `set_lane_turns`, `urban_standards`, `classify_network`, `environmental_islands`, `pums_indicators`, `check_drainage`, `alignment_report`.
+
 ## 2.0.0 — aggiornamento del 2026-10-04
 
 ### Arredo 3D
