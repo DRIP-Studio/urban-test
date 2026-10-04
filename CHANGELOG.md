@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.0.0 — aggiornamento del 2026-10-04
+
+### Arredo 3D
+- 45 modelli rifatti (389 pezzi) con rotazioni, tronchi di cono ed ellissoidi.
+- Stesse geometrie in pianta (renderer a facce ombreggiate), sulla mappa inclinata (un'estrusione per pezzo con quote reali) e nel Twin.
+
+### Altimetria
+- DTM da Copernicus GLO-90 o da file LiDAR .asc.
+- Profilo longitudinale con livellette e raccordi parabolici e verifiche DM 5/11/2001.
+- Sezioni trasversali, sterri e riporti.
+
+### Computo metrico estimativo
+- Capitoli e quantità dal modello.
+- Prezziario regionale importabile da CSV.
+- Sicurezza, IVA ed export CSV.
+
+### Export BIM
+- IFC 4.3 georeferenziato.
+- LandXML 1.2 con assi, profili e DTM.
+
+### Carte ufficiali e collaborazione
+- WMS configurabili, con il catasto dell'Agenzia delle Entrate preimpostato e proxy sicuro.
+- Collaborazione in tempo reale: presenze e aggiornamento automatico dalle modifiche dei colleghi.
+
+### Elios
+- Nuovi strumenti: `load_terrain`, `road_profile_report`, `design_road_profile`.
+
+### Test
+Core 46, web 53, API 40, end-to-end 9.
+
 ## 2.0.0 — 2026-10-03
 
 Analisi completa delle richieste in [docs/ANALISI-2.0.md](docs/ANALISI-2.0.md).

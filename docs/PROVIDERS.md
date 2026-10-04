@@ -25,6 +25,8 @@ Regola generale: senza un provider configurato, l'app funziona lo stesso con dat
 | OpenStreetMap (Overpass) | import di nuove aree come job; la baseline di Frattamaggiore è già inclusa | ODbL; fino a 20 km² in una richiesta, oltre a tasselli da 16 km² fino a 2.000 km² (limite secondo l'abbonamento) |
 | Nominatim | ricerca luoghi nella palette comandi e scelta dell'area di un nuovo progetto | User-Agent identificato, rispetto dei limiti d'uso |
 | Open-Meteo e Open-Meteo Air Quality (CAMS) | meteo e qualità dell'aria nel pannello Analisi | provenienza dichiarata con link |
+| Copernicus DEM GLO-90 tramite Open-Meteo Elevation API | modello del terreno del progetto (profili, sezioni, movimenti terra) | 90 m nativi, campionati su griglia; © DLR e Airbus, distribuito da ESA. In alternativa: DTM LiDAR regionale in ESRI ASCII Grid |
+| WMS configurati (catasto Agenzia delle Entrate, CTR/DBT regionali) | carte tecniche come base o sovrapposizione | richiesti tramite il server locale solo per i servizi configurati; cache di 24 ore |
 | Tile OSM, Esri World Imagery, OpenTopoMap | basemap raster | attribuzione sempre visibile |
 | FST, API pubblica `fst-mobile/v1/maps/reports` e `…/projects` | segnalazioni e progetti civici in sola lettura, filtrati sull'area del progetto | cache di 5 minuti (forzabile con *Aggiorna*); nessuna scrittura verso il plugin; portale configurabile (`fstUrl`, `DRIP_FST_URL`) |
 | Piattaforma DRIP | licenze, aggiornamenti, DRIP ID | vedi [PLATFORM](PLATFORM.md); senza piattaforma: prova di 30 giorni o ultima licenza valida per 14 giorni |

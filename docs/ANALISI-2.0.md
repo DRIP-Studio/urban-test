@@ -1,6 +1,6 @@
 # DRIP Urban 2.0 — analisi sistematica delle richieste
 
-Data: 3 ottobre 2026. Branch: `urban-2.0`.
+Data: 4 ottobre 2026 (aggiornata). Branch: `urban-2.0`.
 
 Ogni richiesta del committente ha uno stato:
 - **Fatto**: funziona ed è coperto da test o da verifica visiva;
@@ -13,9 +13,9 @@ Test al momento del rilascio:
 
 | Suite | Test superati |
 |---|---|
-| Core | 41 |
-| Web | 14 |
-| API | 23 |
+| Core | 46 |
+| Web | 53 |
+| API | 40 |
 | End-to-end | 9, con baseline visive aggiornate alla nuova grafica |
 
 ## 1. Grafica e marchio
@@ -59,6 +59,7 @@ Test al momento del rilascio:
 |---|---|---|
 | Pali con più cartelli uno sotto l'altro | Fatto | un clic su un cartello esistente aggiunge il pannello sotto (Alt crea un palo separato); riordino e rimozione nell'Inspector; avviso art. 81 Reg. CdS oltre due segnali |
 | Arredo 3D anche in 2D | Fatto | simbolo in pianta con volume, ombra e scala reale; inclinando la mappa diventa estrusione 3D |
+| Modelli 3D dell'arredo più curati | Fatto | 45 modelli rifatti con 389 pezzi (panchina a doghe su fianchi in ghisa, lampioni con braccio e armatura, rastrelliere ad archetto, pensiline vetrate, idranti, semafori con visiera e pannello di contrasto, alberi con chioma articolata…); pezzi ruotati, tronchi di cono ed ellissoidi; stesse geometrie in pianta, sulla mappa inclinata (un'estrusione per pezzo) e nel Twin. Rigenerabili con `tools/furniture/build_models.py` |
 | Import di modelli 3D (stile SketchUp) | Fatto | glTF/GLB per progetto, unità incluse (pollici SketchUp), dimensioni lette dal modello; impronta in 2D e geometria vera nel Twin |
 | Pannelli a messaggio variabile | Fatto | PMV a catalogo, testo manuale o automatico dal traffico live (code, incidenti, chiusure entro 2 km) |
 
@@ -118,7 +119,7 @@ Test al momento del rilascio:
 |---|---|---|
 | Città grandi (Roma, New York, Londra) | Fatto | import OSM a tasselli da 16 km² con ripresa, fino a 2.000 km²; limiti legati all'abbonamento; stima di area e tempi |
 | Algoritmi di ottimizzazione | Fatto | aggiornamento incrementale del modello fisico (solo le parti cambiate); indice spaziale; Webster di rete; DP e buffer per le zone |
-| Mappa tecnica regolamentare dei comuni | Parziale | basemap "Carta tecnica" in stile CTR; export DXF in UTM con layer in italiano (per Civil 3D e AutoCAD); tavola PDF A3 con cartiglio. **Manca il collegamento ai WMS ufficiali** delle CTR/DBT regionali (ad es. Regione Campania), da aggiungere quando ne verranno forniti gli indirizzi |
+| Mappa tecnica regolamentare dei comuni | Fatto | basemap "Carta tecnica" in stile CTR; **WMS ufficiali** configurabili come base o sovrapposizione (catasto dell'Agenzia delle Entrate preimpostato; CTR/DBT regionale da inserire con l'URL della Regione), tramite proxy locale con cache; export DXF in UTM con layer in italiano, IFC 4.3, LandXML; tavola PDF A3 con cartiglio |
 | Adeguamento alle normative | Parziale | controlli e richiami nell'interfaccia su CdS e Regolamento (artt. 7, 41, 78, 81), DM 5/11/2001 e DM 19/04/2006; Elios conosce anche il DM 236/1989 (accessibilità). Non sostituisce la verifica del progettista |
 
 ## 11. Frattamaggiore Si Trasforma
@@ -141,24 +142,25 @@ Test al momento del rilascio:
 | Camion senza percorso nel navigatore | Corretto |
 | Linee TPL perse durante il caricamento | Corretto |
 
-## 13. "Più potente di Civil 3D + InfraWorks + SketchUp": cosa manca ancora
+## 13. "Più potente di Civil 3D + InfraWorks + SketchUp"
 
-DRIP Urban 2.0 copre bene:
-- la pianificazione e il progetto preliminare dello spazio stradale;
-- il traffico e la regolazione;
-- il TPL;
-- la comunicazione civica.
+Aggiunto nella 2.0 (aggiornamento del 4 ottobre):
 
-Per arrivare all'esecutivo come Civil 3D servono ancora:
+| Funzione | Stato | Dove / come |
+|---|---|---|
+| **Altimetria** | Fatto | DTM per progetto: Copernicus DEM GLO-90 (gratuito, 90 m) o DTM LiDAR regionale in ESRI ASCII Grid (UTM WGS84/ETRS89/RDN2008). Pannello *Profilo longitudinale*: terreno, livellette e raccordi parabolici con vertici trascinabili, proposta automatica raccordata alle strade vicine, verifiche DM 5/11/2001 (pendenze per categoria, raggi minimi per la visibilità d'arresto), sezioni trasversali con scarpate, sterri e riporti per aree medie |
+| **Computo metrico estimativo** | Fatto | Strumento *Computo metrico*: capitoli (movimenti terra, pavimentazioni, demolizioni, cordoli, segnaletica, arredo e verde, impianti semaforici), quantità dal modello fisico, prezziario regionale importabile da CSV, prezzi modificabili per riga, oneri della sicurezza, IVA, export CSV. I prezzi predefiniti sono indicativi e dichiarati come tali |
+| **IFC 4.3 e LandXML** | Fatto | IFC4X3 georeferenziato (IfcMapConversion su UTM), superfici sul DTM, arredo e segnali; LandXML 1.2 con assi, profili e DTM come TIN, per Civil 3D e InfraWorks |
+| **Collaborazione in tempo reale** | Fatto | eventi in diretta (SSE): chi è nel progetto e in quale scenario, aggiornamento automatico quando un collega salva, unione delle modifiche con il rebase esistente |
+| **WMS ufficiali** | Fatto | carte tecniche e catasto come base o sovrapposizione, opacità regolabile, proxy sicuro (solo servizi configurati) |
+| Modellazione 3D libera | Escluso su richiesta | si importano modelli glTF/GLB già pronti |
 
-1. **Altimetria:** DTM (dati LiDAR del MASE o regionali), profili longitudinali, livellette, sezioni con scavi e riporti.
-2. **Computo metrico:** quantità per materiale e prezziari regionali.
-3. **Formati BIM/GIS:** IFC 4.3 (infrastrutture), LandXML, DWG nativo (oggi DXF R12).
-4. **Modellazione 3D libera stile SketchUp:** spingi/tira, gruppi. Oggi si importano modelli già pronti.
-5. **Collaborazione in tempo reale tra più utenti sullo stesso scenario.** Oggi c'è il controllo delle revisioni con rebase.
-6. **WMS ufficiali** delle carte tecniche regionali e del catasto (Agenzia delle Entrate).
-
-Ordine consigliato: 6 → 1 → 2 → 3 → 5 → 4.
+Limiti dichiarati:
+- il profilo di progetto non solleva ancora le superfici nel Twin (che resta su terreno ellissoidico);
+- i movimenti terra non considerano il pacchetto stradale;
+- la demolizione nel computo è stimata per strada intera;
+- la collaborazione funziona con un solo processo server;
+- il DWG nativo non c'è: si usano DXF, IFC e LandXML.
 
 ## 14. Configurazione necessaria da parte di DRIP
 
@@ -171,3 +173,5 @@ Ordine consigliato: 6 → 1 → 2 → 3 → 5 → 4.
 4. **Endpoint della piattaforma:** `/v1/licenses/activate`, `/v1/licenses/validate`, `/v1/releases/drip-urban/latest`.
 5. **Chiave HERE**, per traffico live, incidenti e PMV automatici.
 6. **Lato FST:** ricevitore del webhook `publication.created`, per collegare le pubblicazioni alle segnalazioni.
+7. **URL WMS della CTR/DBT regionale** (Impostazioni → Carte tecniche e catasto) e, se disponibile, il **DTM LiDAR** regionale in .asc.
+8. **Prezziario regionale** in CSV per il computo metrico.

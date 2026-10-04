@@ -19,9 +19,11 @@ Nessun P0 aperto.
 | V2-01 | Token del design system del sito | studiodrip.it non raggiungibile dall'ambiente di sviluppo | aperto | fornire i token (colori, raggi, spaziature, ombre) e aggiornare `tokens.css` | baseline visive |
 | V2-02 | Endpoint della piattaforma DRIP | da implementare lato piattaforma | aperto | `/v1/licenses/activate`, `/v1/licenses/validate`, `/v1/releases/drip-urban/latest` (docs/PLATFORM.md) | `test_license_trial_without_platform`, `test_update_check_reports_unreachable_platform` |
 | V2-03 | Client DRIP ID | da registrare | aperto | client `drip-urban`, redirect `/api/auth/oidc/callback`, ruoli `drip-urban-*`, claim `drip_*` | — |
-| V2-04 | Carte tecniche ufficiali (WMS CTR/DBT regionali, catasto) | indirizzi dei servizi non forniti | aperto | aggiungere basemap WMS quando disponibili; oggi stile CTR su dati OSM | — |
+| V2-04 | Carte tecniche ufficiali (WMS CTR/DBT regionali, catasto) | URL della CTR regionale non fornito | **parziale** — WMS configurabili, catasto AdE preimpostato (EPSG:3857 da verificare sul servizio reale) | inserire l'URL WMS della Regione in Impostazioni | `test_wms.py` |
 | V2-05 | Ritorno verso FST | il plugin FST espone solo API di lettura | aperto | ricevitore del webhook `publication.created` (con `reportIds`) sul portale | `test_fst_reports_filtered_to_project_area_and_configurable_portal` |
-| V2-06 | Altimetria, computi, IFC/LandXML | fuori perimetro 2.0 | aperto | vedi docs/ANALISI-2.0.md §13 | — |
+| V2-06 | Altimetria, computi, IFC/LandXML | — | **chiuso** | DTM, profili, sezioni, movimenti terra; computo metrico; IFC 4.3 e LandXML | `vertical.test.ts`, `test_terrain.py`, `quantities.test.ts`, `ifc.test.ts`, `landxml.test.ts` |
+| V2-07 | Profilo di progetto non applicato alle superfici del Twin | il Twin usa terreno ellissoidico | aperto | drappeggiare superfici e arredo su DTM + profilo | — |
+| V2-08 | Collaborazione solo con un processo server | hub eventi in memoria | aperto | per installazioni multi-processo serve un broker (Redis) | `test_collab.py` |
 
 ## P1 — major
 
