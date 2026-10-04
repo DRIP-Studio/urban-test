@@ -1,4 +1,4 @@
-import type { Asset, Network, Oneway, Road, RoadRestrictions } from '../model/types';
+import type { Asset, Network, Oneway, Road, RoadRestrictions, VerticalProfile } from '../model/types';
 import { defineOperation, type Issue } from './registry';
 
 const err = (code: string, message: string, targetIds?: string[]): Issue => ({
@@ -123,6 +123,37 @@ export const roadSetRestrictions = defineOperation<RoadSetRestrictionsPayload>({
       };
     }
     return { ...net, roads };
+  },
+});
+
+export interface RoadSetVerticalPayload {
+  readonly roadId: string;
+  /** null removes the vertical alignment (the road follows the terrain again). */
+  readonly vertical: VerticalProfile | null;
+}
+
+export const roadSetVertical = defineOperation<RoadSetVerticalPayload>({
+  type: 'road.setVertical',
+  label: (p) => (p.vertical ? 'Profilo longitudinale' : 'Rimuovi profilo longitudinale'),
+  validate(net, p) {
+    const issues: Issue[] = [];
+    if (!net.roads[p.roadId]) return [err('road.missing', `Strada ${p.roadId} inesistente`, [p.roadId])];
+    const v = p.vertical;
+    if (v) {
+      if (v.pvis.length < 2) issues.push(err('vertical.pvis', 'Servono almeno due vertici altimetrici'));
+      v.pvis.forEach((q, i) => {
+        if (!Number.isFinite(q.station) || !Number.isFinite(q.elevation) || q.elevation < -500 || q.elevation > 9000) issues.push(err('vertical.value', `Vertice ${i + 1}: progressiva o quota non valida`));
+        if (i > 0 && !(q.station > v.pvis[i - 1]!.station)) issues.push(err('vertical.order', 'Le progressive devono essere crescenti'));
+        if (q.curveLength !== undefined && !(q.curveLength >= 0 && q.curveLength <= 2000)) issues.push(err('vertical.curve', `Vertice ${i + 1}: raccordo non valido`));
+      });
+    }
+    return issues;
+  },
+  apply(net, p) {
+    const road = net.roads[p.roadId]!;
+    const { vertical: _old, ...rest } = road;
+    const next: Road = { ...(p.vertical ? { ...rest, vertical: p.vertical } : rest), provenance: { ...road.provenance, vertical: { kind: 'project', source: 'DRIP Urban scenario' } } };
+    return { ...net, roads: { ...net.roads, [p.roadId]: next } };
   },
 });
 

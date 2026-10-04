@@ -120,9 +120,40 @@ export interface Road {
   readonly surface?: string;
   /** Authored restrictions (project); when absent, OSM tags apply. */
   readonly restrictions?: RoadRestrictions;
+  /** Vertical alignment (profilo longitudinale); when absent the road follows the terrain. */
+  readonly vertical?: VerticalProfile;
   /** Provenance per attribute name; `geometry` and `width` are always present. */
   readonly provenance: Readonly<Record<string, Provenance>>;
   readonly tags?: Readonly<Record<string, string>>;
+}
+
+/** Vertical point of intersection: chainage from node `from` (m), elevation a.s.l. (m), parabolic curve length (m). */
+export interface VerticalPVI {
+  readonly station: number;
+  readonly elevation: number;
+  readonly curveLength?: number;
+}
+
+export interface VerticalProfile {
+  /** ≥ 2 PVIs, strictly increasing stations, first at 0 and last at the road length. */
+  readonly pvis: readonly VerticalPVI[];
+}
+
+/**
+ * Digital terrain model on a regular lon/lat grid (project doc `terrain`):
+ * z[j * nx + i], i west→east, j south→north, metres a.s.l.; NaN-free (missing cells interpolated).
+ */
+export interface TerrainGrid {
+  readonly west: number;
+  readonly south: number;
+  readonly east: number;
+  readonly north: number;
+  readonly nx: number;
+  readonly ny: number;
+  readonly z: readonly number[];
+  readonly source: string;
+  readonly resolutionM: number;
+  readonly fetchedAt?: string;
 }
 
 export interface Building {
