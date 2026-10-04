@@ -58,7 +58,8 @@ export interface UserInfo { readonly name: string; readonly role: 'viewer' | 'ed
 export interface SignItem { readonly id: string; readonly file: string; readonly label: string; readonly family: string }
 export interface SignCatalog { readonly source: string; readonly license: string; readonly licenseUrl: string; readonly families: Record<string, string>; readonly items: SignItem[] }
 
-export interface ModelPart { readonly shape: 'box' | 'cylinder' | 'sphere' | 'cone'; readonly size?: [number, number, number]; readonly r?: number; readonly h?: number; readonly at: [number, number, number]; readonly mat: string }
+/** Procedural part of a catalogue item; geometry conventions in models/parts.ts. */
+export interface ModelPart { readonly shape: 'box' | 'cylinder' | 'sphere' | 'cone' | 'frustum' | 'ellipsoid'; readonly size?: [number, number, number]; readonly r?: number; readonly r2?: number; readonly h?: number; readonly at: [number, number, number]; readonly rot?: [number, number, number]; readonly mat: string }
 export interface FurnitureItem { readonly id: string; readonly label: string; readonly category: string; readonly dims: { w: number; d: number; h: number }; readonly material: string; readonly model: ModelPart[]; readonly signal?: { heads: string }; readonly led?: { kind: string }; readonly gltf?: string; readonly scale?: number }
 export interface FurnitureCatalog { readonly categories: Record<string, string>; readonly items: FurnitureItem[] }
 

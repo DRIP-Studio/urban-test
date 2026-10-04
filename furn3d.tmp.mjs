@@ -1,0 +1,33 @@
+import { chromium } from '@playwright/test';
+const SD='/tmp/claude-0/-home-user-urban/047d2a46-5fe5-5d2c-a160-6709b148b5f9/scratchpad';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args:['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+const ctx = await b.newContext({ viewport: { width: 1440, height: 1000 }, storageState: SD+'/state.json' });
+const p = await ctx.newPage();
+const logs=[]; p.on('pageerror', e => logs.push('PAGEERROR '+e.message));
+await p.goto('http://127.0.0.1:8765/'); await p.waitForTimeout(1500);
+console.log(await p.evaluate(async () => (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: 'DripUrban2026' }) })).status));
+await ctx.storageState({ path: SD+'/state.json' });
+const meta = await p.evaluate(async () => (await (await fetch('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ template: 'frattamaggiore', name: 'Arredo 3D' }) })).json()));
+const bb = meta.bbox; const c = [(bb[0]+bb[2])/2, (bb[1]+bb[3])/2];
+const types = ['furniture.bench','furniture.light_pole','vegetation.tree','furniture.bus_shelter','furniture.bike_rack','furniture.light_pedestrian','furniture.bin','furniture.bollard','furniture.planter','furniture.kiosk','traffic.vms','furniture.hydrant'];
+const assets = types.map((t,i) => ({ id:'f'+i, type:t, at:[c[0] + (i%4)*0.00007 - 0.0001, c[1] + Math.floor(i/4)*0.00006 - 0.00006], rotationDeg:0, state:'project', properties:{}, provenance:{kind:'project',source:'test'} }));
+let n=0; const script=[[{functionCall:{name:'apply_operations',args:{label:'arredo',ops:[{type:'asset.add',payload:{assets}}]}}}],[{text:'ok'}]];
+await p.route('**/api/elios/chat', async (route) => { await route.fulfill({ json: { status:'ok', parts: script[n++] ?? [{text:'ok'}] } }); });
+await p.goto('http://127.0.0.1:8765/#/p/'+meta.id); await p.waitForTimeout(9000);
+await p.screenshot({ path: SD+'/shots/furn-dbg.png' });
+await p.click('.elios-orb'); await p.fill('.elios-input textarea', 'x'); await p.keyboard.press('Enter'); await p.waitForTimeout(4000);
+await p.click('.elios-head button[aria-label=Chiudi]', { timeout: 3000 }).catch(() => {});
+const box = await p.locator('.ws-stage').boundingBox();
+const cx = box.x + box.width/2, cy = box.y + box.height/2;
+await p.mouse.move(cx, cy);
+for (let i=0;i<10;i++){ await p.mouse.wheel(0,-400); await p.waitForTimeout(200);} 
+await p.waitForTimeout(2500);
+await p.screenshot({ path: SD+'/shots/furn-2d.png' });
+// tilt: right-button drag upwards
+await p.mouse.move(cx, cy); await p.mouse.down({ button: 'right' }); for (let i=0;i<10;i++){ await p.mouse.move(cx+i*6, cy - i*25); await p.waitForTimeout(40);} await p.mouse.up({ button: 'right' });
+await p.waitForTimeout(3000);
+await p.screenshot({ path: SD+'/shots/furn-tilt.png' });
+await p.getByRole('button', { name: /^Twin 3D/ }).first().click(); await p.waitForTimeout(20000);
+await p.screenshot({ path: SD+'/shots/furn-twin.png' });
+console.log(logs.join('\n'));
+await b.close();

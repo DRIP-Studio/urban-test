@@ -5,7 +5,7 @@ import { PATTERNS } from './patterns';
 
 /** Every GeoJSON source of the workstation. One owner each (see sources.ts). */
 export const SOURCES = [
-  'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'signals',
+  'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
   'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents',
 ] as const;
@@ -136,7 +136,7 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'civic-point', type: 'circle', source: 'civic', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': ['match', ['get', 'kind'], 'report', '#d9a441', 'task', '#5587a2', '#7a1f32'], 'circle-stroke-color': '#f5f3ef', 'circle-stroke-width': 2 } });
   // Catalogue furniture is drawn by the volume symbol (asset-3d); the footprint only shows removed items.
   L({ id: 'asset-fp-fill', type: 'fill', source: 'asset-fp', minzoom: 15, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.15, ['boolean', ['get', 'sprite'], false], 0, ['==', ['get', 'category'], 'vegetation'], 0.78, 0.95] } });
-  L({ id: 'asset-fp-extrude', type: 'fill-extrusion', source: 'asset-fp', minzoom: 15, layout: { visibility: 'none' }, filter: ['!=', ['get', 'state'], 'removed'], paint: { 'fill-extrusion-color': mat, 'fill-extrusion-height': ['coalesce', ['get', 'h'], 1], 'fill-extrusion-opacity': 0.95 } });
+  L({ id: 'asset-fp-extrude', type: 'fill-extrusion', source: 'asset-parts', minzoom: 15, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': mat, 'fill-extrusion-base': ['coalesce', ['get', 'b'], 0], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 1], 'fill-extrusion-opacity': 0.97 } });
   L({ id: 'buildings-extrude', type: 'fill-extrusion', source: 'buildings', minzoom: 14, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#3a3e44' : '#ddd8ce', 'fill-extrusion-height': ['coalesce', ['get', 'h'], 9], 'fill-extrusion-base': ['coalesce', ['get', 'minH'], 0], 'fill-extrusion-opacity': 0.92 } });
   L({ id: 'asset-3d', type: 'symbol', source: 'asset-pt', minzoom: 16, filter: ['has', 'sprite'], layout: {
     'icon-image': ['get', 'sprite'], 'icon-size': 0.25, 'icon-rotate': ['get', 'rot'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map',

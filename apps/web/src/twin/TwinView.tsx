@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { partCenter, rotationMatrix } from '../models/parts';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { VEHICLE_SPECS, pedestrianState, signalState, type Asset, type SignalHead, type SimFrame } from '@drip-urban/core';
@@ -73,17 +74,25 @@ function furniturePrimitive(assets: Asset[], items: Map<string, FurnitureItem>, 
     ids.add(a.id);
     const base = enuMatrix(a.at[0], a.at[1], a.elevationM ?? 0, a.rotationDeg);
     for (const part of item.model) {
+      const vf = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
       let geometry: Cesium.Geometry | Cesium.GeometryFactory;
-      let lift = 0;
-      if (part.shape === 'box') { geometry = Cesium.BoxGeometry.fromDimensions({ dimensions: new Cesium.Cartesian3(...part.size!), vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }); lift = part.size![2] / 2; }
-      else if (part.shape === 'cylinder') { geometry = new Cesium.CylinderGeometry({ length: part.h!, topRadius: part.r!, bottomRadius: part.r!, vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }); lift = part.h! / 2; }
-      else if (part.shape === 'cone') { geometry = new Cesium.CylinderGeometry({ length: part.h!, topRadius: 0, bottomRadius: part.r!, vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }); lift = part.h! / 2; }
-      else { geometry = new Cesium.EllipsoidGeometry({ radii: new Cesium.Cartesian3(part.r!, part.r!, part.r! * 0.9), vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }); }
-      const local = Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(part.at[0], part.at[1], part.at[2] + lift));
-      inst.push(new Cesium.GeometryInstance({ id: a.id, geometry, modelMatrix: Cesium.Matrix4.multiply(base, local, new Cesium.Matrix4()), attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(colorOf(materials, part.mat === 'foliage' && a.material ? a.material : part.mat)) } }));
+      if (part.shape === 'box') geometry = Cesium.BoxGeometry.fromDimensions({ dimensions: new Cesium.Cartesian3(...(part.size ?? [0.5, 0.5, 0.5])), vertexFormat: vf });
+      else if (part.shape === 'cylinder' || part.shape === 'cone' || part.shape === 'frustum') {
+        const r = part.r ?? 0.2;
+        geometry = new Cesium.CylinderGeometry({ length: part.h ?? 1, bottomRadius: r, topRadius: part.shape === 'cone' ? 0 : part.r2 ?? r, slices: 24, vertexFormat: vf });
+      } else {
+        const radii = part.shape === 'sphere' ? [part.r ?? 0.5, part.r ?? 0.5, (part.r ?? 0.5) * 0.9] : part.size ?? [0.5, 0.5, 0.5];
+        geometry = new Cesium.EllipsoidGeometry({ radii: new Cesium.Cartesian3(radii[0], radii[1], radii[2]), vertexFormat: vf });
+      }
+      // Same conventions as the 2D symbol (models/parts.ts): centre, then rotation about it.
+      const rm = rotationMatrix(part.rot);
+      const local = Cesium.Matrix4.fromRotationTranslation(new Cesium.Matrix3(rm[0], rm[1], rm[2], rm[3], rm[4], rm[5], rm[6], rm[7], rm[8]), new Cesium.Cartesian3(...partCenter(part)));
+      const mat = part.mat === 'foliage' && a.material ? a.material : part.mat;
+      const col = colorOf(materials, mat);
+      inst.push(new Cesium.GeometryInstance({ id: a.id, geometry, modelMatrix: Cesium.Matrix4.multiply(base, local, new Cesium.Matrix4()), attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(mat === 'glass' || mat === 'water' ? col.withAlpha(0.5) : col) } }));
     }
   }
-  return { prim: inst.length ? new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent: false }), asynchronous: true }) : null, ids };
+  return { prim: inst.length ? new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent: true, closed: true }), asynchronous: true }) : null, ids };
 }
 
 export function TwinView() {

@@ -1,6 +1,7 @@
 import { LocalFrame, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
+import { partPrints } from '../models/parts';
 import { fc, type Feature, type LineString, type Point, type Polygon } from '../engine/geojson';
 
 const close = (r: readonly LngLat[]) => [...r.map((p) => [p[0], p[1]]), [r[0]![0], r[0]![1]]];
@@ -69,6 +70,7 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
   const fp: Feature<Polygon>[] = [];
   const pt: Feature<Point>[] = [];
   const sig: Feature<Point>[] = [];
+  const parts: Feature<Polygon>[] = [];
   // Signs on the same pole stack upwards in screen space; anchor stays the pole position.
   const poles = new Map<string, Asset[]>();
   for (const a of Object.values(net.assets)) {
@@ -115,9 +117,18 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
     const round = item.category === 'vegetation' || item.id === 'furniture.fountain' || item.id === 'furniture.bin' || item.id === 'furniture.bollard' || item.id === 'furniture.hydrant';
     const ring = round ? disc(frame, a.at, Math.max(0.12, item.dims.w / 2)) : rect(frame, a.at, Math.max(0.15, item.dims.w), Math.max(0.15, item.dims.d), a.rotationDeg);
     fp.push({ type: 'Feature', id: a.id, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { ...base, material: a.material ?? item.material, category: item.category, h: item.dims.h, sprite: true } });
+    if (a.state !== 'removed') {
+      // One extrusion per part (pole, arm, lamp head…) for the tilted map: real base and top heights.
+      const c = frame.toMetric(a.at), ang = (-a.rotationDeg * Math.PI) / 180, cs = Math.cos(ang), sn = Math.sin(ang);
+      partPrints(item.model).forEach((pp, k) => {
+        const pts = pp.ring.map(([x, y]) => { const ll = frame.toLngLat([c[0] + x * cs - y * sn, c[1] + x * sn + y * cs]); return [ll[0], ll[1]]; });
+        const mat = pp.mat === 'foliage' && a.material ? a.material : pp.mat;
+        parts.push({ type: 'Feature', id: `${a.id}:${k}`, geometry: { type: 'Polygon', coordinates: [[...pts, pts[0]!]] }, properties: { id: `${a.id}:${k}`, assetId: a.id, state: a.state, material: mat, b: pp.base + (a.elevationM ?? 0), h: pp.top + (a.elevationM ?? 0) } });
+      });
+    }
     pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, type: '', sprite: `furn:${item.id}${a.material && a.material !== item.material ? `:${a.material}` : ''}` } });
   }
-  return { fp: fc(fp), pt: fc(pt), signals: fc(sig) };
+  return { fp: fc(fp), pt: fc(pt), signals: fc(sig), parts: fc(parts) };
 }
 
 const CLS = ['car', 'van', 'truck', 'bus', 'emergency'] as const;

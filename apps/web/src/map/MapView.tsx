@@ -118,7 +118,7 @@ export function MapView() {
       const cat = useApp.getState().catalogs?.furniture;
       if (cat && cat !== furnCat) { furnCat = cat; furnitureById = new Map(cat.items.map((i) => [i.id, i])); }
       const a = assetsFC(network, baseline.origin, furnitureById);
-      syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals);
+      syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals); syncSource('asset-parts', a.parts);
       setSource('selection', selectionFC(selection, network));
     };
     const init = () => {
