@@ -49,6 +49,7 @@ export const COMMANDS: Command[] = [
   { id: 'history', label: 'Cronologia e versioni', group: 'Progetto', when: inProject, run: () => setDock('history') },
   { id: 'export', label: 'Esporta', group: 'Progetto', shortcut: 'Ctrl+E', when: inProject, run: () => setDock('export') },
   { id: 'sidewalks', label: 'Importa marciapiedi esistenti (dalle sagome degli edifici)', group: 'Progetto', when: inProject, run: () => void importExistingSidewalks() },
+  { id: 'quantities', label: 'Computo metrico estimativo dello scenario', group: 'Progetto', when: inProject, run: () => setDock('quantities') },
   { id: 'connect', label: 'Aggancia strade non collegate (senza deformare la rete)', group: 'Progetto', when: inProject, run: () => { setMode('design'); setDock('connect'); } },
   { id: 'audit', label: 'Verifica progetto (geometria, topologia, semafori)', group: 'Analisi', when: inProject, run: () => { setMode('analyze'); setDock('audit'); } },
   { id: 'settings', label: 'Impostazioni e chiavi API', group: 'Sistema', when: () => true, run: () => setDock('settings') },
