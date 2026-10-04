@@ -186,7 +186,7 @@
 .twin { position: absolute; inset: 0; }
 .twin-canvas { position: absolute; inset: 0; }
 .twin-canvas .cesium-widget-credits { font-size: 10px; }
-.twin-toolbar { position: absolute; top: var(--s-3); left: var(--s-3); display: flex; gap: var(--s-2); align-items: center; background: var(--glass-strong); border: 1px solid var(--line-2); border-radius: var(--r-3); padding: 6px; }
+.twin-toolbar { position: absolute; top: var(--s-3); left: var(--s-3); max-width: calc(100% - 2 * var(--s-3)); display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; background: var(--glass-strong); border: 1px solid var(--line-2); border-radius: var(--r-3); padding: 6px; }
 .twin-status { position: absolute; bottom: var(--s-3); left: var(--s-3); display: flex; gap: var(--s-4); font-size: var(--fs-11); background: var(--glass-strong); border-radius: var(--r-2); padding: 5px 10px; color: var(--text-2); }
 
 /* ------------------------------------------------------------------ present & before/after */

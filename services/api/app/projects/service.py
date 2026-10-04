@@ -23,7 +23,7 @@ from typing import Any
 from app.settings import SETTINGS
 from app.storage import atomic_write_bytes, atomic_write_json, read_json, safe_id
 
-DOC_NAMES = {"presentation", "civic", "transit", "safety", "traffic", "settings", "notes", "layers", "migration", "sidewalks", "mobility", "models", "elios", "terrain", "pricelist", "wms"}
+DOC_NAMES = {"presentation", "civic", "transit", "safety", "traffic", "settings", "notes", "layers", "migration", "sidewalks", "mobility", "models", "elios", "terrain", "pricelist", "wms", "urbanplan", "trafficplan", "drainage"}
 SCENARIO_KEYS = {"id", "name", "description", "isBaseline", "locked", "archived", "createdAt", "operations", "revision", "updatedAt", "author"}
 _locks: dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()

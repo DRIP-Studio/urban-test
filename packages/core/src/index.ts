@@ -30,3 +30,8 @@ export * from './analysis/vertical';
 export * from './analysis/coordination';
 export * from './norms/library';
 export * from './norms/checks';
+export * from './analysis/urbanplan';
+export * from './analysis/trafficplan';
+export * from './ops/plan-ops';
+export * from './analysis/drainage';
+export * from './ops/drainage-ops';

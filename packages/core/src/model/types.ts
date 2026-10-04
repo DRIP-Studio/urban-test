@@ -109,6 +109,10 @@ export interface RoadRestrictions {
   readonly note?: string;
 }
 
+/** Functional road classes of the Direttive PGTU (G.U. 24/6/1995, § 3.1.2). */
+export type FunctionalClass =
+  | 'autostrada' | 'scorrimento_veloce' | 'interquartiere' | 'scorrimento' | 'quartiere' | 'interzonale' | 'locale';
+
 export interface Road {
   readonly id: string;
   readonly from: string;
@@ -128,6 +132,8 @@ export interface Road {
   readonly vertical?: VerticalProfile;
   /** Bridge / viaduct / tunnel. */
   readonly structure?: RoadStructure;
+  /** Functional class in the traffic plan (PGTU, Direttive 12/4/1995); absent = not classified. */
+  readonly functionalClass?: FunctionalClass;
   /** Provenance per attribute name; `geometry` and `width` are always present. */
   readonly provenance: Readonly<Record<string, Provenance>>;
   readonly tags?: Readonly<Record<string, string>>;
@@ -476,6 +482,34 @@ export interface RoadStructure {
   readonly piersEveryM?: number;
 }
 
+export type DrainageNodeKind = 'inlet' | 'manhole' | 'outfall';
+
+/** Node of the storm sewer network (rete di drenaggio): caditoia, pozzetto or scarico. */
+export interface DrainageNode {
+  readonly id: string;
+  readonly kind: DrainageNodeKind;
+  readonly at: LngLat;
+  readonly name?: string;
+  /** Rim / ground elevation (quota chiusino), m a.s.l. or relative datum when there is no DTM. */
+  readonly rimElevation?: number;
+  readonly rimSource?: 'dtm' | 'manual';
+  /** Invert elevation (quota di scorrimento), m. */
+  readonly invertElevation: number;
+}
+
+/** Circular pipe between two drainage nodes; slope from the node inverts, length from the positions. */
+export interface DrainagePipe {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
+  readonly diameterMm: number;
+  /** Material label (PVC, PEAD, cls…). */
+  readonly material: string;
+  /** Gauckler–Strickler coefficient, m^(1/3)/s. */
+  readonly ks: number;
+  readonly name?: string;
+}
+
 /** The editable, derived state of one scenario: baseline + operations replayed. */
 export interface Network {
   readonly nodes: Readonly<Record<string, RoadNode>>;
@@ -492,4 +526,7 @@ export interface Network {
   readonly markings?: Readonly<Record<string, Marking>>;
   /** Baseline buildings removed in the scenario (e.g. replaced by an imported model). */
   readonly removedBuildings?: Readonly<Record<string, true>>;
+  /** Storm sewer network; absent in networks from before 2.0 (treated as empty). */
+  readonly drainageNodes?: Readonly<Record<string, DrainageNode>>;
+  readonly drainagePipes?: Readonly<Record<string, DrainagePipe>>;
 }

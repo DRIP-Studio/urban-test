@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 import time
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import civic, collab, elios, jobs, providers, terrain, transit, wms
+from app import civic, collab, elios, jobs, providers, terrain, transit, urbanplan, wms
 from app.city.legacy_city import convert_city
 from app.projects import service as ps
 from app.projects.migrate53 import legacy_summary, load_seed, migrate
@@ -591,6 +594,51 @@ async def terrain_upload(pid: str, epsg: int = 32633, file: UploadFile = File(..
         grid = terrain.resample_ascii(raw.decode("utf-8", errors="replace"), epsg, [float(x) for x in meta["bbox"]])
         ps.put_doc(pid, "terrain", {"grid": grid}, _author())
         return {"nx": grid["nx"], "ny": grid["ny"], "resolutionM": grid["resolutionM"], "coverage": grid["coverage"], "min": min(grid["z"]), "max": max(grid["z"])}
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
+# ------------------------------------------------------------------ urban plan (PUC/PRG zoning and constraints)
+
+async def _plan_layer(file: UploadFile, epsg: int | None):
+    raw = await file.read(80 * 1024 * 1024 + 1)
+    if len(raw) > 80 * 1024 * 1024:
+        raise ValueError("File oltre 80 MB: ritaglia l'area del progetto")
+    name = (file.filename or "").lower()
+    if name.endswith(".zip"):
+        return urbanplan.parse_shapefile_zip(raw, epsg)
+    if name.endswith((".geojson", ".json")):
+        return urbanplan.parse_geojson(raw, epsg)
+    raise ValueError("Formato non supportato: carica uno Shapefile zippato (.zip) o un GeoJSON")
+
+
+@app.post("/api/projects/{pid}/urbanplan/preview")
+async def urbanplan_preview(pid: str, file: UploadFile = File(...), epsg: int | None = None, opts: str = Form("{}")) -> dict:
+    """Fields, detected CRS, DM 1444 classes found and suggested field mapping of a zoning layer."""
+    try:
+        meta = ps.get_meta(pid)
+        layer = await _plan_layer(file, epsg)
+        return urbanplan.preview(layer, [float(x) for x in meta["bbox"]], json.loads(opts or "{}"))
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
+@app.post("/api/projects/{pid}/urbanplan/import")
+async def urbanplan_import(pid: str, file: UploadFile = File(...), epsg: int | None = None, opts: str = Form("{}")) -> dict:
+    """Imports zones (zone omogenee DM 1444/68 with rules) or constraints into the `urbanplan` document."""
+    try:
+        meta = ps.get_meta(pid)
+        layer = await _plan_layer(file, epsg)
+        o = json.loads(opts or "{}")
+        try:
+            doc = ps.get_doc(pid, "urbanplan")
+        except Exception:  # noqa: BLE001
+            doc = None
+        at = datetime.now(timezone.utc).isoformat()
+        prefix = ("vin" if o.get("target") == "constraints" else "zto") + "-" + uuid.uuid4().hex[:6]
+        new_doc, report = urbanplan.import_into(doc if isinstance(doc, dict) else None, layer, [float(x) for x in meta["bbox"]], o, prefix, at)
+        ps.put_doc(pid, "urbanplan", new_doc, _author())
+        return report
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
 
