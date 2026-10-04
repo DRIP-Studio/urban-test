@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { jsPDF } from 'jspdf';
-import { DEFAULT_TRAFFIC, LocalFrame, NetworkReplayer, buildPhysicalModel, geom, layoutSection, type SafetyScore, type TrafficResult } from '@drip-urban/core';
+import { DEFAULT_TRAFFIC, LocalFrame, NetworkReplayer, buildPhysicalModel, geom, layoutSection, type SafetyScore, type TerrainGrid, type TrafficResult } from '@drip-urban/core';
+import { api } from '../api/client';
 import { buildDxf } from '../export/dxf';
+import { buildIfc } from '../export/ifc';
+import { buildLandXml } from '../export/landxml';
 import { engine } from '../engine/engine';
 import { LAYERS } from '../map/layers';
 import { getMap, useMapUi } from '../map/mapStore';
@@ -139,6 +142,18 @@ export function ExportSheet() {
     const text = buildDxf({ network: net, physical, buildings: Object.values(baseline.buildings), origin: baseline.origin, title: `${project.name} · ${scenario.name}` });
     download(`${base}.dxf`, new Blob([text], { type: 'application/dxf' }));
   };
+  /** Project DTM (doc `terrain`), null when not acquired yet or unreachable. */
+  const terrain = async () => (await api.get<{ grid?: TerrainGrid } | null>(`/api/projects/${encodeURIComponent(project.id)}/docs/terrain`).catch(() => null))?.grid ?? null;
+  const ifc = async () => {
+    const physical = buildPhysicalModel(net, { origin: baseline.origin, features: baseline.features });
+    const furniture = useApp.getState().catalogs?.furniture.items ?? [];
+    const text = buildIfc({ network: net, physical, origin: baseline.origin, title: `${project.name} · ${scenario.name}`, terrain: await terrain(), furniture, fileName: `${base}.ifc` });
+    download(`${base}.ifc`, new Blob([text], { type: 'application/x-step' }));
+  };
+  const landXml = async () => {
+    const text = buildLandXml({ network: net, origin: baseline.origin, title: `${project.name} · ${scenario.name}`, terrain: await terrain() });
+    download(`${base}.xml`, new Blob([text], { type: 'application/xml' }));
+  };
   /** A3 technical sheet: CTR map at a standard scale, title block (cartiglio), north arrow, scale bar. */
   const tavola = async () => {
     const map = getMap();
@@ -200,6 +215,8 @@ export function ExportSheet() {
     ['pdf', 'Report PDF', 'Copertina, mappa, metriche oggi/scenario', pdf],
     ['tavola', 'Tavola tecnica A3 (PDF)', 'Carta tecnica in scala nominale (1:500, 1:1000, 1:2000…), cartiglio, nord e scala grafica', tavola],
     ['dxf', 'DXF per CAD (Civil 3D, AutoCAD, QGIS)', 'Carreggiate, marciapiedi, cordoli, segnaletica, assi, edifici, arredo e zone su layer separati, in UTM metri', dxf],
+    ['ifc', 'IFC 4.3 (BIM, InfraWorks, Revit)', 'Strada, pavimentazioni, verde, terreno, arredo e segnali come oggetti BIM georeferenziati (UTM)', ifc],
+    ['landxml', 'LandXML (Civil 3D: assi, profili, DTM)', 'Assi stradali come tracciati, profili longitudinali e modello del terreno (TIN) in UTM metri', landXml],
     ['roads', 'CSV strade', 'Attributi e stato di ogni strada', roadsCsv],
     ['traffic', 'CSV traffico (stima)', 'Flussi stimati per strada e verso, ore 8', trafficCsv],
     ['safety', 'CSV sicurezza', 'Classifica incroci con fattori e base dei dati', safetyCsv],
