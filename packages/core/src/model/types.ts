@@ -490,6 +490,36 @@ export interface RoadStructure {
   readonly piersEveryM?: number;
 }
 
+export type WaterNodeKind = 'junction' | 'reservoir' | 'tank' | 'hydrant' | 'valve';
+
+/** Node of the water supply network (rete acquedotto in pressione). */
+export interface WaterNode {
+  readonly id: string;
+  readonly kind: WaterNodeKind;
+  readonly at: LngLat;
+  /** Ground / node elevation, m. */
+  readonly elevation: number;
+  /** Base demand, l/s (junctions and hydrants). */
+  readonly demandLs?: number;
+  /** Fixed hydraulic head for reservoirs and tanks, m. */
+  readonly headM?: number;
+  readonly name?: string;
+}
+
+/** Pressurised pipe (Hazen–Williams). */
+export interface WaterPipe {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
+  readonly diameterMm: number;
+  readonly material: string;
+  /** Hazen–Williams roughness coefficient C. */
+  readonly c: number;
+  /** Length override (m); otherwise from the node positions. */
+  readonly lengthM?: number;
+  readonly status?: 'open' | 'closed';
+}
+
 export type DrainageNodeKind = 'inlet' | 'manhole' | 'outfall';
 
 /** Node of the storm sewer network (rete di drenaggio): caditoia, pozzetto or scarico. */
@@ -537,4 +567,7 @@ export interface Network {
   /** Storm sewer network; absent in networks from before 2.0 (treated as empty). */
   readonly drainageNodes?: Readonly<Record<string, DrainageNode>>;
   readonly drainagePipes?: Readonly<Record<string, DrainagePipe>>;
+  /** Water supply network (absent = none). */
+  readonly waterNodes?: Readonly<Record<string, WaterNode>>;
+  readonly waterPipes?: Readonly<Record<string, WaterPipe>>;
 }

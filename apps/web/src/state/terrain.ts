@@ -34,13 +34,13 @@ export async function fetchTerrain(spacingM = 60): Promise<TerrainGrid | null> {
 }
 
 /** ESRI ASCII Grid (.asc) with its EPSG code. */
-export async function uploadTerrain(file: File, epsg: number): Promise<TerrainGrid | null> {
+export async function uploadTerrain(file: File, epsg: number, spacingM = 2): Promise<TerrainGrid | null> {
   const p = useApp.getState().project;
   if (!p) return null;
   const fd = new FormData();
   fd.append('file', file);
   useTerrain.setState({ busy: `Lettura di ${file.name}` });
-  try { await api.post(`/api/projects/${p.id}/terrain/upload?epsg=${epsg}`, fd); }
+  try { await api.post(`/api/projects/${p.id}/terrain/upload?epsg=${epsg}&spacing=${spacingM}`, fd); }
   finally { useTerrain.setState({ busy: null }); }
   return loadTerrain();
 }

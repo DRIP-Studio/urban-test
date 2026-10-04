@@ -593,18 +593,31 @@ def terrain_fetch(pid: str, body: dict = Body(default={})) -> dict:
 
 
 @app.post("/api/projects/{pid}/terrain/upload")
-async def terrain_upload(pid: str, epsg: int = 32633, file: UploadFile = File(...)) -> dict:
-    """ESRI ASCII Grid DTM (e.g. regional LiDAR) resampled over the project area."""
+async def terrain_upload(pid: str, epsg: int = 32633, spacing: float = 2.0, file: UploadFile = File(...)) -> dict:
+    """DTM from an ESRI ASCII Grid (regional LiDAR), a LAS point cloud or an XYZ text file, resampled over the project area."""
     try:
         meta = ps.get_meta(pid)
-        raw = await file.read(200 * 1024 * 1024 + 1)
-        if len(raw) > 200 * 1024 * 1024:
-            raise ValueError("File DTM oltre 200 MB: ritaglia l'area del progetto")
-        if not (file.filename or "").lower().endswith((".asc", ".txt")):
-            raise ValueError("Formato non supportato: carica un ESRI ASCII Grid (.asc)")
-        grid = terrain.resample_ascii(raw.decode("utf-8", errors="replace"), epsg, [float(x) for x in meta["bbox"]])
+        raw = await file.read(1024 * 1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024 * 1024:
+            raise ValueError("File oltre 1 GB: ritaglia l'area del progetto")
+        name = (file.filename or "").lower()
+        bbox = [float(x) for x in meta["bbox"]]
+        sp = max(0.5, float(spacing))
+        if name.endswith(".laz"):
+            raise ValueError("LAZ compresso non supportato: decomprimi in LAS")
+        if name.endswith(".las"):
+            grid = terrain.grid_from_points(*terrain.read_las(raw), epsg, bbox, sp, label="LAS")
+        elif name.endswith((".asc", ".txt", ".xyz", ".csv")):
+            text = raw.decode("utf-8", errors="replace")
+            head = text[:400].lower()
+            if name.endswith(".asc") or ("ncols" in head and "nrows" in head):
+                grid = terrain.resample_ascii(text, epsg, bbox)
+            else:
+                grid = terrain.grid_from_points(*terrain.read_xyz(text), epsg, bbox, sp, label="XYZ")
+        else:
+            raise ValueError("Formato non supportato: ESRI ASCII Grid (.asc), nuvola LAS (.las) o punti XYZ (.xyz, .txt, .csv)")
         ps.put_doc(pid, "terrain", {"grid": grid}, _author())
-        return {"nx": grid["nx"], "ny": grid["ny"], "resolutionM": grid["resolutionM"], "coverage": grid["coverage"], "min": min(grid["z"]), "max": max(grid["z"])}
+        return {"nx": grid["nx"], "ny": grid["ny"], "resolutionM": grid["resolutionM"], "coverage": grid["coverage"], "min": min(grid["z"]), "max": max(grid["z"]), "source": grid["source"]}
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
 

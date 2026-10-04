@@ -23,18 +23,20 @@ const pct = (a: VerticalPVI, b: VerticalPVI) => ((b.elevation - a.elevation) / M
 function TerrainSetup() {
   const busy = useTerrain((s) => s.busy);
   const [epsg, setEpsg] = useState('32633');
+  const [spacing, setSpacing] = useState(2);
   const file = useRef<HTMLInputElement>(null);
   const run = (p: Promise<TerrainGrid | null>) => p.then((g) => g && toast.success('Modello del terreno pronto', `${g.nx} × ${g.ny} punti · passo ${fmt(g.resolutionM, 0)} m`)).catch((e: unknown) => toast.error('Terreno', e instanceof Error ? e.message : String(e)));
   return (
     <div className="profile-setup">
       <Empty icon="profile" title="Serve il modello del terreno (DTM)">
-        <span>Scarica Copernicus DEM (90 m, gratuito) per l'area del progetto, oppure carica il DTM LiDAR del geoportale regionale in formato ESRI ASCII Grid (.asc) per profili e computi più precisi.</span>
+        <span>Scarica Copernicus DEM (90 m, gratuito) per l'area del progetto, oppure carica il rilievo: DTM LiDAR regionale (ESRI ASCII Grid .asc), nuvola di punti LAS (si usano i punti classificati terreno) o punti XYZ da stazione totale/GNSS.</span>
       </Empty>
       <div className="profile-setup-actions">
         <Button variant="primary" icon="download" busy={!!busy} onClick={() => void run(fetchTerrain(60))}>Scarica DTM Copernicus</Button>
         <Select value={epsg} ariaLabel="Sistema di riferimento del file" options={EPSG} onChange={setEpsg} />
-        <Button icon="upload" disabled={!!busy} onClick={() => file.current?.click()}>Carica DTM (.asc)</Button>
-        <input ref={file} type="file" accept=".asc,.txt" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void run(uploadTerrain(f, Number(epsg))); }} />
+        <NumberField value={spacing} unit="m" min={0.5} max={30} step={0.5} decimals={1} ariaLabel="Passo della griglia per nuvole di punti" onCommit={setSpacing} />
+        <Button icon="upload" disabled={!!busy} onClick={() => file.current?.click()}>Carica rilievo (.asc, .las, .xyz)</Button>
+        <input ref={file} type="file" accept=".asc,.txt,.las,.xyz,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void run(uploadTerrain(f, Number(epsg), spacing)); }} />
       </div>
       {busy ? <p className="muted">{busy}</p> : null}
     </div>

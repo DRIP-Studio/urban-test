@@ -36,3 +36,5 @@ export * from './ops/plan-ops';
 export * from './analysis/drainage';
 export * from './analysis/alignment';
 export * from './ops/drainage-ops';
+export * from './analysis/water';
+export * from './ops/water-ops';

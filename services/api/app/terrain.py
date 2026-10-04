@@ -193,3 +193,121 @@ def resample_ascii(text: str, epsg: int, bbox: list[float]) -> dict:
     return {"west": w, "south": s, "east": e, "north": n, "nx": nx, "ny": ny, "z": [round(v, 2) for v in _fill(z, nx, ny)],
             "source": f"DTM da file (ESRI ASCII Grid, EPSG:{epsg}, cella {src['cell']:g})", "resolutionM": _resolution(bbox, nx, ny),
             "coverage": round(covered, 3), "fetchedAt": _now()}
+
+
+# ------------------------------------------------------------------ point clouds (LAS / XYZ)
+
+#: Point data record formats: byte offset of the classification and record base size.
+_LAS_CLASS_OFFSET = {0: 15, 1: 15, 2: 15, 3: 15, 4: 15, 5: 15, 6: 16, 7: 16, 8: 16, 9: 16, 10: 16}
+MAX_POINTS = 40_000_000
+
+
+def read_las(data: bytes) -> tuple[list[float], list[float], list[float], list[int]]:
+    """X, Y, Z and classification of a LAS 1.0–1.4 file (uncompressed). LAZ is refused."""
+    import struct
+    if len(data) < 227 or data[:4] != b"LASF":
+        raise ValueError("Non è un file LAS (firma LASF mancante)")
+    vmaj, vmin = data[24], data[25]
+    header_size, = struct.unpack_from("<H", data, 94)
+    offset, = struct.unpack_from("<I", data, 96)
+    fmt = data[104]
+    if fmt & 0x80 or fmt & 0x40:
+        raise ValueError("LAZ compresso non supportato: decomprimi in LAS")
+    fmt &= 0x3F
+    rec_len, = struct.unpack_from("<H", data, 105)
+    count, = struct.unpack_from("<I", data, 107)
+    if vmaj == 1 and vmin >= 4 and header_size >= 375:
+        c64, = struct.unpack_from("<Q", data, 247)
+        count = c64 or count
+    sx, sy, sz, ox, oy, oz = struct.unpack_from("<6d", data, 131)
+    if fmt not in _LAS_CLASS_OFFSET:
+        raise ValueError(f"Formato punti LAS {fmt} non supportato")
+    if count > MAX_POINTS:
+        raise ValueError(f"Nuvola di {count:,} punti: oltre {MAX_POINTS:,}, ritaglia l'area o riduci la densità".replace(",", "."))
+    count = min(count, (len(data) - offset) // rec_len)
+    co = _LAS_CLASS_OFFSET[fmt]
+    xs, ys, zs, cl = [], [], [], []
+    for k in range(count):
+        b = offset + k * rec_len
+        X, Y, Z = struct.unpack_from("<3i", data, b)
+        c = data[b + co]
+        xs.append(X * sx + ox); ys.append(Y * sy + oy); zs.append(Z * sz + oz)
+        cl.append(c & 0x1F if fmt < 6 else c)
+    return xs, ys, zs, cl
+
+
+def read_xyz(text: str) -> tuple[list[float], list[float], list[float], list[int]]:
+    """x y z [class] per line; separators space, tab, comma or semicolon; header lines skipped."""
+    import re
+    xs, ys, zs, cl = [], [], [], []
+    sep = re.compile(r"[\s,;]+")
+    for line in text.splitlines():
+        parts = [p for p in sep.split(line.strip()) if p]
+        if len(parts) < 3:
+            continue
+        try:
+            x, y, z = float(parts[0]), float(parts[1]), float(parts[2])
+        except ValueError:
+            continue
+        xs.append(x); ys.append(y); zs.append(z)
+        try:
+            cl.append(int(float(parts[3])) if len(parts) > 3 else 0)
+        except ValueError:
+            cl.append(0)
+        if len(xs) > MAX_POINTS:
+            raise ValueError("Troppi punti nel file XYZ")
+    if not xs:
+        raise ValueError("Nessun punto x y z leggibile nel file")
+    return xs, ys, zs, cl
+
+
+def grid_from_points(xs: list[float], ys: list[float], zs: list[float], cls: list[int], epsg: int, bbox: list[float],
+                     spacing_m: float = 2.0, ground_only: bool = True, label: str = "nuvola di punti") -> dict:
+    """DTM on the project lon/lat grid from points in EPSG 4326 or UTM: ground points (class 2) when
+    classified, lowest point per cell otherwise; empty cells filled from the neighbours."""
+    if epsg == 4326:
+        to_src = lambda lon, lat: (lon, lat)  # noqa: E731
+        cell = spacing_m / M_PER_DEG
+    elif epsg in UTM_EPSG:
+        zone = UTM_EPSG[epsg]
+        to_src = lambda lon, lat: to_utm(lon, lat, zone)  # noqa: E731
+        cell = spacing_m
+    else:
+        raise ValueError("Sistema di riferimento non supportato: usa EPSG 4326 o UTM (326xx, 25832–25834, 6707–6709)")
+    has_ground = ground_only and any(c == 2 for c in cls)
+    buckets: dict[tuple[int, int], list[float]] = {}
+    used = 0
+    for x, y, z, c in zip(xs, ys, zs, cls):
+        if has_ground and c != 2:
+            continue
+        if not has_ground and c in (7, 18):  # noise
+            continue
+        key = (int(x // cell), int(y // cell))
+        b = buckets.get(key)
+        if b is None:
+            buckets[key] = [z, z, 1]
+        else:
+            b[0] = min(b[0], z); b[1] += z; b[2] += 1
+        used += 1
+    if not buckets:
+        raise ValueError("Nessun punto di terreno nella nuvola")
+    w, s, e, n = bbox
+    nx, ny = grid_shape(bbox, max(spacing_m, 0.5))
+    z_out: list[float] = []
+    for j in range(ny):
+        for i in range(nx):
+            sx, sy = to_src(w + (e - w) * i / (nx - 1), s + (n - s) * j / (ny - 1))
+            ki, kj = int(sx // cell), int(sy // cell)
+            v = float("nan")
+            for r in (0, 1):
+                vals = [(b[1] / b[2]) if has_ground else b[0] for di in range(-r, r + 1) for dj in range(-r, r + 1) if (b := buckets.get((ki + di, kj + dj)))]
+                if vals:
+                    v = min(vals) if not has_ground else sum(vals) / len(vals)
+                    break
+            z_out.append(v)
+    covered = sum(1 for v in z_out if not math.isnan(v)) / len(z_out)
+    if covered == 0:
+        raise ValueError("La nuvola di punti non copre l'area del progetto (controlla il sistema di riferimento)")
+    return {"west": w, "south": s, "east": e, "north": n, "nx": nx, "ny": ny, "z": [round(v, 2) for v in _fill(z_out, nx, ny)],
+            "source": f"DTM da {label} (EPSG:{epsg}, {format(used, ',').replace(',', '.')} punti{' di terreno' if has_ground else ''}, cella {spacing_m:g} m)",
+            "resolutionM": _resolution(bbox, nx, ny), "coverage": round(covered, 3), "fetchedAt": _now()}

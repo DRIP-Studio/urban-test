@@ -95,3 +95,74 @@ def test_upload_route_saves_the_terrain_document(client):
     bad = client.post(f"/api/projects/{pid}/terrain/upload?epsg=3003", files={"file": ("dtm.asc", text.encode(), "text/plain")})
     assert bad.status_code == 400
     assert client.post(f"/api/projects/{pid}/terrain/fetch", json={"spacingM": 5}).status_code == 400
+
+
+def _las(points, fmt=1, ver=(1, 2)):
+    """Minimal LAS: header 227 bytes, scale 0.01, points (x, y, z, class)."""
+    import struct
+    rec = {0: 20, 1: 28}[fmt]
+    head = bytearray(227)
+    head[0:4] = b"LASF"
+    head[24], head[25] = ver
+    struct.pack_into("<H", head, 94, 227)
+    struct.pack_into("<I", head, 96, 227)
+    head[104] = fmt
+    struct.pack_into("<H", head, 105, rec)
+    struct.pack_into("<I", head, 107, len(points))
+    struct.pack_into("<6d", head, 131, 0.01, 0.01, 0.01, 0.0, 0.0, 0.0)
+    body = bytearray()
+    for x, y, z, c in points:
+        r = bytearray(rec)
+        struct.pack_into("<3i", r, 0, round(x / 0.01), round(y / 0.01), round(z / 0.01))
+        r[15] = c
+        body += r
+    return bytes(head + body)
+
+
+def _plane_points(bbox, step=8.0, zone=33):
+    from app.terrain import to_utm
+    w, s, e, n = bbox
+    xs = [to_utm(lon, lat, zone)[0] for lon in (w, e) for lat in (s, n)]
+    ys = [to_utm(lon, lat, zone)[1] for lon in (w, e) for lat in (s, n)]
+    x0, y0 = min(xs) - 30, min(ys) - 30
+    pts = []
+    y = y0
+    while y < max(ys) + 30:
+        x = x0
+        while x < max(xs) + 30:
+            z = 50 + 0.01 * (x - x0) + 0.02 * (y - y0)
+            pts.append((x, y, z, 2))
+            pts.append((x + 1, y + 1, z + 10, 6))  # roof points (class 6) must be ignored
+            x += step
+        y += step
+    return pts, (x0, y0)
+
+
+@pytest.mark.parametrize("fmt", [0, 1])
+def test_las_point_cloud_to_dtm_uses_ground_points(fmt):
+    from app.terrain import grid_from_points, read_las, to_utm
+    bbox = [14.27, 40.93, 14.275, 40.935]
+    pts, (x0, y0) = _plane_points(bbox)
+    g = grid_from_points(*read_las(_las(pts, fmt)), 32633, bbox, 8.0, label="LAS")
+    i, j = g["nx"] // 2, g["ny"] // 2
+    lon, lat = 14.27 + 0.005 * i / (g["nx"] - 1), 40.93 + 0.005 * j / (g["ny"] - 1)
+    x, y = to_utm(lon, lat, 33)
+    assert g["z"][j * g["nx"] + i] == pytest.approx(50 + 0.01 * (x - x0) + 0.02 * (y - y0), abs=0.35)
+    assert "LAS" in g["source"] and "terreno" in g["source"]
+
+
+def test_xyz_and_laz_and_upload_route(client):
+    from app.terrain import grid_from_points, read_xyz
+    bbox = [14.27, 40.93, 14.275, 40.935]
+    pts, _ = _plane_points(bbox, 10.0)
+    text = "x;y;z;class\n" + "\n".join(f"{x:.2f};{y:.2f};{z:.2f};{c}" for x, y, z, c in pts)
+    g = grid_from_points(*read_xyz(text), 32633, bbox, 10.0)
+    assert g["coverage"] > 0.9
+    pid = client.post("/api/projects", json={"template": "frattamaggiore", "name": "LAS"}).json()["id"]
+    pb = client.get(f"/api/projects/{pid}").json()["bbox"]
+    pts2, _ = _plane_points(pb, 40.0)
+    r = client.post(f"/api/projects/{pid}/terrain/upload?epsg=32633&spacing=40", files={"file": ("rilievo.las", _las(pts2), "application/octet-stream")})
+    assert r.status_code == 200, r.text
+    assert "LAS" in r.json()["source"]
+    bad = client.post(f"/api/projects/{pid}/terrain/upload?epsg=32633", files={"file": ("x.laz", b"LASF", "application/octet-stream")})
+    assert bad.status_code == 400 and "LAZ" in bad.text
