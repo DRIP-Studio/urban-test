@@ -102,6 +102,18 @@ export interface PlatformConfig {
   readonly authMode: 'open' | 'protected'; readonly sessionHours: number; readonly platformUrl: string; readonly fstUrl?: string; readonly identityProviders: readonly IdentityProviderCfg[];
   readonly roleMapping: Record<string, Role>; readonly defaultRole: Role; readonly localLogin: boolean; readonly updates: { autoCheck: boolean; channel: string };
   readonly licenseEnforcement: 'soft' | 'strict';
+  readonly wms: readonly WmsService[];
+}
+/** Official technical map (WMS) as configured by the administrator (platform config `wms`). */
+export interface WmsService {
+  readonly id: string; readonly label: string; readonly url: string; readonly layers: string;
+  readonly format: 'image/png' | 'image/jpeg'; readonly version: '1.3.0' | '1.1.1'; readonly crs: 'EPSG:3857' | 'EPSG:4326';
+  readonly transparent: boolean; readonly kind: 'basemap' | 'overlay'; readonly attribution: string; readonly minzoom?: number; readonly enabled: boolean;
+}
+/** What the map needs of an enabled WMS (GET /api/tiles/wms): no upstream URL. */
+export interface WmsPublic {
+  readonly id: string; readonly label: string; readonly kind: 'basemap' | 'overlay'; readonly attribution: string;
+  readonly transparent: boolean; readonly minzoom: number; readonly format: string;
 }
 export interface ApiKeyInfo { readonly id: string; readonly name: string; readonly role: Role; readonly prefix: string; readonly createdAt: string; readonly createdBy: string; readonly lastUsedAt: string | null; readonly key?: string }
 export interface WebhookInfo { readonly id: string; readonly url: string; readonly label: string; readonly events: string[]; readonly active: boolean; readonly secret?: string; readonly lastDelivery?: { ok: boolean; status: number | null; at: string; event: string; error?: string } }

@@ -200,5 +200,9 @@ h1, h2, h3 { text-wrap: balance; }
 .topbar::after, .hub-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--drip-gradient); opacity: 0.55; pointer-events: none; }
 [data-tip-side='left']:hover::after, [data-tip-side='left']:focus-visible::after { top: 50%; left: auto; right: calc(100% + 13px); transform: translateY(-50%); }
 .tb-opt { display: contents; }
+/* Live collaboration: colleagues in the project (hidden below 1280 px with the other .tb-opt items). */
+.presence { display: inline-flex; align-items: center; padding-left: 6px; margin-left: var(--s-1); }
+.presence-av { width: 24px; height: 24px; font-size: 10px; margin-left: -6px; box-shadow: 0 0 0 2px var(--ink-0); }
+.presence-more { background: var(--ink-4); color: var(--text-1); }
 @media (max-width: 1280px) { .tb-opt { display: none; } .topbar-actions { gap: 0; } .user-btn { margin-left: 0; } }
 @media (max-width: 1100px) { .mode { padding: 6px 9px; } .topbar-project { flex-shrink: 0; } }

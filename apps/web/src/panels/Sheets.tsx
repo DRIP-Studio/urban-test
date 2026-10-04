@@ -3,8 +3,9 @@ import { useSession } from '../state/session';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { AuditEntry, ProviderStatus, Snapshot } from '../api/types';
-import { BASEMAPS, thumbUrl } from '../map/basemaps';
-import { CATEGORY_LABEL, LAYERS } from '../map/layers';
+import { allBasemaps, basemapById, thumbUrl } from '../map/basemaps';
+import { CATEGORY_LABEL, allLayerDefs } from '../map/layers';
+import { useWms } from '../map/wms';
 import { getMap, setOpacity, toggleLayer, useMapUi } from '../map/mapStore';
 import { navigate, refreshProject, refreshUser, selectScenario, setDock, useApp } from '../state/store';
 import { toast } from '../state/toasts';
@@ -16,7 +17,7 @@ import { Icon } from '../ui/Icon';
 /** Real thumbnail: a raster tile of the project centre, or the project's own road axes for data-drawn basemaps. */
 function BasemapThumb({ id }: { id: string }) {
   const baseline = useApp((s) => s.baseline);
-  const b = BASEMAPS.find((x) => x.id === id)!;
+  const b = basemapById(id);
   const svg = useMemo(() => {
     if (b.tiles || !baseline) return null;
     const [cx, cy] = baseline.origin;
@@ -40,16 +41,18 @@ function BasemapThumb({ id }: { id: string }) {
 
 export function LayersSheet() {
   const { basemap, visible, opacity } = useMapUi();
+  const wms = useWms((s) => s.services);
+  const defs = useMemo(() => allLayerDefs(), [wms]); // eslint-disable-line react-hooks/exhaustive-deps
   const [q, setQ] = useState('');
   const [google, setGoogle] = useState(false);
   useEffect(() => { api.get<ProviderStatus[]>('/api/providers').then((p) => setGoogle(!!p.find((x) => x.id === 'google')?.configured)).catch(() => setGoogle(false)); }, []);
-  const cats = [...new Set(LAYERS.map((l) => l.category))];
-  const list = LAYERS.filter((l) => !q || l.label.toLowerCase().includes(q.toLowerCase()));
+  const cats = [...new Set(defs.map((l) => l.category))];
+  const list = defs.filter((l) => !q || l.label.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <Section title="Base cartografica">
         <div className="basemaps" role="radiogroup" aria-label="Base cartografica">
-          {BASEMAPS.filter((b) => !b.requires || (b.requires === 'google' && google)).map((b) => (
+          {allBasemaps().filter((b) => !b.requires || (b.requires === 'google' && google)).map((b) => (
             <button key={b.id} type="button" role="radio" aria-checked={basemap === b.id} className={`basemap ${basemap === b.id ? 'is-on' : ''}`} onClick={() => useMapUi.setState({ basemap: b.id })}>
               <BasemapThumb id={b.id} /><span>{b.label}</span>
             </button>
@@ -68,9 +71,9 @@ export function LayersSheet() {
                 <IconButton icon={visible[l.id] ? 'eye' : 'eyeOff'} label={visible[l.id] ? 'Nascondi' : 'Mostra'} onClick={() => toggleLayer(l.id)} active={visible[l.id]} size={16} />
                 <div className="layer-main">
                   <span className="layer-name">{l.label}</span>
-                  <span className="layer-src">{l.source}</span>
+                  <span className="layer-src">{l.source}{l.minzoom ? ` · visibile da zoom ${l.minzoom}` : ''}</span>
                   {l.legend ? <span className="legend">{l.legend.map((g) => <span key={g.label}><i style={{ background: g.color }} />{g.label}</span>)}</span> : null}
-                  {l.opacity && visible[l.id] ? <Slider label="Opacità" min={0.1} max={1} step={0.05} value={opacity[l.id] ?? 1} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setOpacity(l.id, v)} /> : null}
+                  {l.opacity && visible[l.id] ? <Slider label="Opacità" min={0.1} max={1} step={0.05} value={opacity[l.id] ?? l.defaultOpacity ?? 1} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setOpacity(l.id, v)} /> : null}
                 </div>
               </div>
             ))}

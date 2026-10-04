@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GeoJSONSource, Map as MLMap } from 'maplibre-gl';
-import { LAYERS, setLayerOpacity, setLayerVisible, type SourceId } from './layers';
+import { LAYERS, allLayerDefs, setLayerOpacity, setLayerVisible, type SourceId } from './layers';
 import type { Feature, FeatureCollection } from '../engine/geojson';
 import { fc } from '../engine/geojson';
 
@@ -73,7 +73,7 @@ export function updateSource(id: SourceId, diff: { add?: Feature[]; remove?: str
 }
 
 export function toggleLayer(id: string, visible?: boolean): void {
-  const def = LAYERS.find((l) => l.id === id);
+  const def = allLayerDefs().find((l) => l.id === id);
   if (!def) return;
   const v = visible ?? !useMapUi.getState().visible[id];
   useMapUi.setState((s) => ({ visible: { ...s.visible, [id]: v } }));
@@ -81,7 +81,7 @@ export function toggleLayer(id: string, visible?: boolean): void {
 }
 
 export function setOpacity(id: string, value: number): void {
-  const def = LAYERS.find((l) => l.id === id);
+  const def = allLayerDefs().find((l) => l.id === id);
   if (!def) return;
   useMapUi.setState((s) => ({ opacity: { ...s.opacity, [id]: value } }));
   if (map) setLayerOpacity(map, def, value);

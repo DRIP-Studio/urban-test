@@ -27,7 +27,8 @@ ADMIN = (
     re.compile(r"^/api/platform/"), re.compile(r"^/api/auth/users"), re.compile(r"^/api/update/(download|apply)$"),
     re.compile(r"^/api/license/(activate|deactivate)$"), re.compile(r"^/api/migration/"), re.compile(r"^/api/providers/"),
 )
-WRITE_EXEMPT = (re.compile(r"^/api/auth/"), re.compile(r"^/api/user$"), re.compile(r"^/api/elios/chat$"), re.compile(r"^/api/license/refresh$"), re.compile(r"^/api/update/check$"))
+WRITE_EXEMPT = (re.compile(r"^/api/auth/"), re.compile(r"^/api/user$"), re.compile(r"^/api/elios/chat$"), re.compile(r"^/api/license/refresh$"), re.compile(r"^/api/update/check$"),
+                re.compile(r"^/api/projects/[A-Za-z0-9_-]+/presence$"))
 
 
 def _match(patterns, path: str) -> bool:

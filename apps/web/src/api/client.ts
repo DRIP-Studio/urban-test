@@ -6,12 +6,17 @@ export class ApiError extends Error {
   }
 }
 
+/** Identifies this window to the server, so live-collaboration events of its own saves can be ignored. */
+export const CLIENT_ID: string = (() => {
+  try { return crypto.randomUUID().slice(0, 18); } catch { return `c-${Math.random().toString(36).slice(2, 14)}`; }
+})();
+
 async function request<T>(method: string, url: string, body?: unknown, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
       method,
-      headers: body !== undefined && !(body instanceof FormData) && !(body instanceof Blob) ? { 'Content-Type': 'application/json' } : undefined,
+      headers: body !== undefined && !(body instanceof FormData) && !(body instanceof Blob) ? { 'Content-Type': 'application/json', 'X-Drip-Client': CLIENT_ID } : { 'X-Drip-Client': CLIENT_ID },
       body: body === undefined ? undefined : body instanceof FormData || body instanceof Blob ? body : JSON.stringify(body),
       ...init,
     });

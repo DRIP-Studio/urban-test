@@ -11,13 +11,14 @@ import { toolById } from '../tools/registry';
 import type { ToolContext, ToolEvent } from '../tools/types';
 import { removeVertexAt } from '../tools/edit';
 import { useContextMenu } from '../shell/contextMenu';
-import { BASEMAPS } from './basemaps';
+import { basemapById } from './basemaps';
 import { installImageLoader } from './images';
 import { PX_PER_M } from './furnitureSprite';
-import { LAYERS, addProjectLayers, setLayerOpacity, setLayerVisible } from './layers';
+import { addProjectLayers, allLayerDefs, setLayerOpacity, setLayerVisible } from './layers';
 import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
 import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
 import { renderSignalHeads } from './signalsLive';
+import { loadWms, syncWmsOverlays, useWms } from './wms';
 
 let index: NetworkIndex | null = null;
 let indexVersion = -1;
@@ -30,16 +31,14 @@ export function getIndex(): NetworkIndex | null {
 }
 
 function applyBasemap(map: maplibregl.Map, id: string): void {
-  const b = BASEMAPS.find((x) => x.id === id) ?? BASEMAPS[0]!;
+  const b = basemapById(id);
   map.setPaintProperty('background', 'background-color', b.background);
-  for (const other of BASEMAPS) {
-    for (const suffix of ['', '-overlay']) {
-      const lid = `basemap-${other.id}${suffix}`;
-      if (map.getLayer(lid)) map.setLayoutProperty(lid, 'visibility', other.id === b.id ? 'visible' : 'none');
-    }
+  // By style layer, so that basemaps no longer configured (official WMS removed) are hidden too.
+  for (const l of map.getStyle().layers) {
+    if (l.id.startsWith('basemap-')) map.setLayoutProperty(l.id, 'visibility', l.id === `basemap-${b.id}` || l.id === `basemap-${b.id}-overlay` ? 'visible' : 'none');
   }
   if (b.tiles && !map.getSource(`basemap-${b.id}`)) {
-    const src: RasterSourceSpecification = { type: 'raster', tiles: [b.tiles], tileSize: 256, maxzoom: b.maxzoom, attribution: b.attribution };
+    const src: RasterSourceSpecification = { type: 'raster', tiles: [b.tiles], tileSize: 256, maxzoom: b.maxzoom, attribution: b.attribution, ...(b.minzoom ? { minzoom: b.minzoom } : {}) };
     map.addSource(`basemap-${b.id}`, src);
     map.addLayer({ id: `basemap-${b.id}`, type: 'raster', source: `basemap-${b.id}`, paint: { 'raster-fade-duration': 120 } }, 'context-fill');
     if (b.overlay) {
@@ -48,7 +47,7 @@ function applyBasemap(map: maplibregl.Map, id: string): void {
     }
   }
   // Over imagery the city context is hidden; the project's physical model stays.
-  const imagery = b.id === 'satellite' || b.id === 'hybrid' || b.id === 'google_satellite' || b.id === 'osm' || b.id === 'terrain';
+  const imagery = !!b.imagery;
   const visibleOpacity: Record<string, [string, number]> = { 'context-fill': ['fill-opacity', 0.9], 'buildings-fill': ['fill-opacity', 0.95], 'buildings-line': ['line-opacity', 1] };
   for (const [l, [prop, v]] of Object.entries(visibleOpacity)) if (map.getLayer(l)) map.setPaintProperty(l, prop as never, (imagery ? 0 : v) as never);
   if (map.getLayer('surfaces-fill')) map.setPaintProperty('surfaces-fill', 'fill-opacity', imagery ? ['case', ['in', ['get', 'kind'], ['literal', ['sidewalk', 'corner', 'footpath']]], 0.55, 0.92] : ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1]);
@@ -82,7 +81,7 @@ function applyCtr(map: maplibregl.Map, on: boolean): void {
   if (map.getLayer('buildings-hatch')) map.setLayoutProperty('buildings-hatch', 'visibility', on ? 'visible' : 'none');
 }
 
-function themeOf(id: string): 'light' | 'dark' { return (BASEMAPS.find((b) => b.id === id) ?? BASEMAPS[0]!).theme; }
+function themeOf(id: string): 'light' | 'dark' { return basemapById(id).theme; }
 
 export function MapView() {
   const el = useRef<HTMLDivElement>(null);
@@ -133,7 +132,8 @@ export function MapView() {
       void import('../state/sidewalks').then((m) => m.redrawSidewalks());
       applyBasemap(map, useMapUi.getState().basemap);
       const st = useMapUi.getState();
-      for (const def of LAYERS) { setLayerVisible(map, def, st.visible[def.id] ?? def.defaultVisible); if (st.opacity[def.id] !== undefined) setLayerOpacity(map, def, st.opacity[def.id]!); }
+      syncWmsOverlays(map, useWms.getState().services, st.visible, st.opacity);
+      for (const def of allLayerDefs()) { setLayerVisible(map, def, st.visible[def.id] ?? def.defaultVisible); if (st.opacity[def.id] !== undefined) setLayerOpacity(map, def, st.opacity[def.id]!); }
       // Furniture symbols are drawn at PX_PER_M px/m (pixelRatio 2): size them in metres at this latitude.
       const pxPerM19 = 2 ** 19 * 512 / (40_075_016.7 * Math.cos((baseline.origin[1] * Math.PI) / 180));
       const k = pxPerM19 / (PX_PER_M / 2);
@@ -179,10 +179,19 @@ export function MapView() {
         // Theme-dependent paints: rebuild project layers, sources (and data) stay.
         for (const l of [...map.getStyle().layers].reverse()) if (l.id !== 'background' && !l.id.startsWith('basemap-')) map.removeLayer(l.id);
         addProjectLayers(map, catalogs.materials.items, theme === 'dark');
-        for (const def of LAYERS) setLayerVisible(map, def, st.visible[def.id] ?? def.defaultVisible);
+        syncWmsOverlays(map, useWms.getState().services, st.visible, st.opacity);
+        for (const def of allLayerDefs()) setLayerVisible(map, def, st.visible[def.id] ?? def.defaultVisible);
       }
       applyBasemap(map, st.basemap);
     });
+    // Official WMS list (re)loaded: add/remove overlays, re-apply a WMS basemap chosen before the list arrived.
+    const offWms = useWms.subscribe((w, prev) => {
+      if (w.services === prev.services || !useMapUi.getState().ready) return;
+      const st = useMapUi.getState();
+      syncWmsOverlays(map, w.services, st.visible, st.opacity);
+      applyBasemap(map, st.basemap);
+    });
+    void loadWms();
 
     const ctx: ToolContext = { map, index: getIndex };
     const ev = (e: MapMouseEvent): ToolEvent => ({
@@ -222,7 +231,7 @@ export function MapView() {
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(el.current);
     return () => {
-      offPhys(); offApp(); offUi(); ro.disconnect(); window.clearInterval(ledTimer); offLive();
+      offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); window.clearInterval(ledTimer); offLive();
       canvas.removeEventListener('wheel', onWheel, { capture: true });
       useMapUi.setState({ ready: false });
       setMapInstance(null);

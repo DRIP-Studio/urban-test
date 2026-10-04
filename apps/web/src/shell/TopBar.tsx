@@ -12,7 +12,9 @@ import { MODES } from './commands';
 import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
 import { toggleTheme, useTheme } from '../ui/theme';
-import { UserMenu } from './UserMenu';
+import { UserMenu, initials } from './UserMenu';
+import { useCollab } from '../state/collab';
+import { avatarStack, presenceLabel } from '../state/collabLogic';
 
 const SAVE_LABEL: Record<string, string> = { saved: 'Salvato', dirty: 'Modifiche in corso', saving: 'Salvataggio…', offline: 'Offline · in coda', error: 'Errore di salvataggio', conflict: 'Conflitto' };
 
@@ -77,6 +79,28 @@ function ScenarioMenu() {
   );
 }
 
+/** Colleagues with this project open (live collaboration); hidden when alone. */
+function PresenceStack() {
+  const online = useCollab((s) => s.online);
+  const scenarios = useApp((s) => s.project?.scenarios);
+  if (!online.length) return null;
+  const names = Object.fromEntries((scenarios ?? []).map((s) => [s.id, s.name]));
+  const { shown, extra } = avatarStack(online);
+  const tip = online.map((u) => presenceLabel(u, names)).join(', ');
+  return (
+    <span className="presence" role="group" aria-label={`Nel progetto anche: ${tip}`} data-tip={`Nel progetto: ${tip}`}>
+      {shown.map((u) => <span key={u.username} className="avatar presence-av" style={{ background: `hsl(${hue(u.username)} 42% 68%)` }}>{initials(u.name)}</span>)}
+      {extra ? <span className="avatar presence-av presence-more">+{extra}</span> : null}
+    </span>
+  );
+}
+
+function hue(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
+
 /** Segmented mode control; the thumb slides to the active mode on a spring (CSS, interruptible). */
 function ModeSwitch({ mode }: { mode: string }) {
   const nav = useRef<HTMLElement>(null);
@@ -138,6 +162,7 @@ export function TopBar() {
         <span className="tb-opt"><IconButton icon="keyboard" label="Scorciatoie" shortcut="?" onClick={() => useShortcuts.getState().toggle()} /></span>
         <span className="tb-opt"><IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} /></span>
         <IconButton icon="settings" label="Impostazioni" onClick={() => setDock('settings')} />
+        <span className="tb-opt"><PresenceStack /></span>
         <UserMenu />
       </div>
     </header>

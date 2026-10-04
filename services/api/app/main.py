@@ -4,14 +4,14 @@ import time
 from typing import Any
 
 from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import civic, elios, jobs, providers, transit
+from app import civic, collab, elios, jobs, providers, transit, wms
 from app.city.legacy_city import convert_city
 from app.projects import service as ps
 from app.projects.migrate53 import legacy_summary, load_seed, migrate
-from app.platform import integrations, updates
+from app.platform import auth, integrations, updates
 from app.platform.middleware import AuthMiddleware
 from app.platform.routes import router as platform_router
 from app.settings import SETTINGS, VERSION
@@ -274,11 +274,50 @@ def scenario(pid: str, sid: str) -> dict:
 
 
 @app.put("/api/projects/{pid}/scenarios/{sid}")
-def save_scenario(pid: str, sid: str, body: dict = Body(...)) -> dict:
+def save_scenario(pid: str, sid: str, request: Request, body: dict = Body(...)) -> dict:
     try:
-        return ps.save_scenario(pid, sid, body.get("scenario") or {}, body.get("baseRevision"), _author())
+        res = ps.save_scenario(pid, sid, body.get("scenario") or {}, body.get("baseRevision"), _author())
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
+    # Live collaboration: other open windows pull the new revision (the saving window ignores its own client id).
+    me = _me()
+    collab.hub.publish(pid, "scenario.saved", {"scenarioId": sid, "revision": res["revision"], "author": me["name"],
+                                               "username": me["username"], "clientId": request.headers.get("x-drip-client", "")[:64]})
+    return res
+
+
+# ------------------------------------------------------------------ live collaboration
+
+def _me() -> dict:
+    ident = auth.current_user.get() or {}
+    return {"name": _author(), "username": str(ident.get("username") or ident.get("sub") or "local")}
+
+
+@app.get("/api/projects/{pid}/events")
+async def project_events(pid: str, client: str = "", scenario: str = "") -> StreamingResponse:
+    """Server-Sent Events: `scenario.saved` and `presence`. Authenticated by the session cookie like any /api call."""
+    try:
+        ps.get_meta(pid)
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+    me = _me()
+    sub = collab.hub.subscribe(pid, me["name"], me["username"], client, scenario or None)
+    return StreamingResponse(collab.stream(sub), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/projects/{pid}/presence")
+def presence(pid: str, body: dict = Body(...)) -> dict:
+    sid = body.get("scenarioId")
+    if sid is not None and not isinstance(sid, str):
+        raise HTTPException(400, "scenarioId non valido")
+    collab.hub.set_scenario(pid, _me()["username"], sid or None, str(body.get("clientId") or ""))
+    return {"users": collab.hub.presence(pid)}
+
+
+@app.get("/api/projects/{pid}/presence")
+def get_presence(pid: str) -> dict:
+    return {"users": collab.hub.presence(pid)}
 
 
 @app.post("/api/projects/{pid}/scenarios")
@@ -447,6 +486,30 @@ def google_tile(map_type: str, z: int, x: int, y: int) -> Response:
     t = providers.google_tile(map_type, z, x, y)
     if not t:
         raise HTTPException(404, "Google Map Tiles non configurato o non disponibile")
+    return Response(t[0], media_type=t[1], headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/api/tiles/wms")
+def wms_list() -> list[dict]:
+    """Enabled official map services (WMS) for the basemap picker and the layers panel."""
+    return wms.public_list()
+
+
+@app.get("/api/tiles/wms/{wms_id}/test")
+def wms_test(wms_id: str) -> dict:
+    return wms.test(wms_id)
+
+
+@app.get("/api/tiles/wms/{wms_id}/{z}/{x}/{y}.png")
+def wms_tile(wms_id: str, z: int, x: int, y: int) -> Response:
+    try:
+        t = wms.tile(wms_id, z, x, y)
+    except wms.WmsError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if t is None:
+        raise HTTPException(404, "Servizio WMS non configurato o disattivato")
     return Response(t[0], media_type=t[1], headers={"Cache-Control": "private, max-age=86400"})
 
 
