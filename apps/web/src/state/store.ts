@@ -9,7 +9,7 @@ import { engine } from '../engine/engine';
 import { toast } from './toasts';
 
 export type Mode = 'design' | 'analyze' | 'traffic' | 'transit' | 'twin' | 'present' | 'civic';
-export type SelectionKind = 'road' | 'node' | 'roundabout' | 'asset' | 'area' | 'zone' | 'feature' | 'marking';
+export type SelectionKind = 'road' | 'node' | 'roundabout' | 'asset' | 'area' | 'zone' | 'feature' | 'marking' | 'building';
 export interface Selection { readonly kind: SelectionKind; readonly ids: readonly string[] }
 export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'offline' | 'error' | 'conflict';
 export type Route = { view: 'hub' } | { view: 'workspace'; projectId: string } | { view: 'publication'; pubId: string };

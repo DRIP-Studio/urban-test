@@ -6,7 +6,7 @@ import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import type { ToolEvent, ToolHandler } from './types';
 
-const PICK_LAYERS = ['signals-icon', 'asset-pt-sign', 'asset-pt-dot', 'asset-fp-fill', 'markings-fill', 'surfaces-fill', 'structures-casing', 'zones-fill'];
+const PICK_LAYERS = ['signals-icon', 'asset-pt-sign', 'asset-pt-dot', 'asset-fp-fill', 'markings-fill', 'surfaces-fill', 'structures-casing', 'zones-fill', 'buildings-removed', 'buildings-fill'];
 
 export function pickAt(map: MLMap, point: { x: number; y: number }, tolerancePx = 5): Selection | null {
   const layers = PICK_LAYERS.filter((l) => map.getLayer(l) && map.getLayoutProperty(l, 'visibility') !== 'none');
@@ -36,6 +36,8 @@ export function selectionFromFeatures(feats: MapGeoJSONFeature[]): Selection | n
   if (deck?.properties.roadId) return { kind: 'road', ids: [String(deck.properties.roadId)] };
   const zone = by('zones-fill')[0];
   if (zone) return { kind: 'zone', ids: [String(zone.properties.id)] };
+  const bld = [...by('buildings-removed'), ...by('buildings-fill')][0];
+  if (bld) return { kind: 'building', ids: [String(bld.properties.id)] };
   return null;
 }
 
@@ -57,6 +59,8 @@ export function selectionFC(sel: Selection | null, net: Network | null) {
       const z = net.zones[id]!;
       out.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...z.polygon.map((p) => [p[0], p[1]]), [z.polygon[0]![0], z.polygon[0]![1]]]] }, properties: {} });
     }
+    const bl = sel.kind === 'building' ? useApp.getState().baseline?.buildings[id] : undefined;
+    if (bl) out.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...bl.footprint.map((p) => [p[0], p[1]]), [bl.footprint[0]![0], bl.footprint[0]![1]]]] }, properties: {} });
     if (sel.kind === 'marking' && net.markings?.[id]) {
       const g = net.markings[id]!.geometry.map((p) => [p[0], p[1]]);
       out.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: ['hatch', 'chevrons', 'box_junction', 'parking_bays'].includes(net.markings[id]!.kind) && g.length > 2 ? [...g, g[0]!] : g }, properties: {} });

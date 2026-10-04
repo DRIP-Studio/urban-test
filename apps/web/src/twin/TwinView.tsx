@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { partCenter, rotationMatrix } from '../models/parts';
 import { VEHICLE_CLASSES, paintIndex, vehicleGlbUrl } from '../models/vehicles';
+import { buildingLook } from '../models/buildings';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { SIM_STRIDE, pedestrianState, signalState, type Asset, type SignalHead, type SimFrame } from '@drip-urban/core';
@@ -55,14 +56,18 @@ function physicalPrimitives(p: PhysicalPayload, materials: Map<string, MaterialI
   ];
 }
 
-function buildingsPrimitive(buildings: { footprint: readonly (readonly [number, number])[]; heightM: number; minHeightM: number }[], translucent: boolean): Cesium.Primitive {
-  return new Cesium.Primitive({
-    geometryInstances: buildings.map((b) => new Cesium.GeometryInstance({
-      geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(b.footprint.flatMap((p) => [p[0], p[1]]))), height: b.minHeightM, extrudedHeight: b.heightM, vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }),
-      attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString('#d9d4ca').withAlpha(translucent ? 0.55 : 1)) },
-    })),
-    appearance: new Cesium.PerInstanceColorAppearance({ translucent }), asynchronous: true, releaseGeometryInstances: true,
-  });
+function buildingsPrimitive(buildings: { id: string; footprint: readonly (readonly [number, number])[]; heightM: number; minHeightM: number }[], translucent: boolean): Cesium.Primitive {
+  // Facade and roof colours shared with the 2D map (sources.ts): plaster tones, tiled roofs on low-rise blocks.
+  const inst: Cesium.GeometryInstance[] = [];
+  for (const b of buildings) {
+    const look = buildingLook(b.id, b.heightM);
+    const hier = new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(b.footprint.flatMap((p) => [p[0], p[1]])));
+    const vf = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
+    const col = (c: string) => Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(c).withAlpha(translucent ? 0.55 : 1));
+    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: b.minHeightM, extrudedHeight: b.heightM, vertexFormat: vf }), attributes: { color: col(look.facade) } }));
+    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: b.heightM, extrudedHeight: b.heightM + look.roofH, vertexFormat: vf }), attributes: { color: col(look.roof) } }));
+  }
+  return new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent }), asynchronous: true, releaseGeometryInstances: true });
 }
 
 /** Furniture from the catalogue's procedural parts — the same item ids the 2D map draws at real size. */
@@ -101,6 +106,7 @@ export function TwinView() {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const baseline = useApp((s) => s.baseline);
   const network = useApp((s) => s.network);
+  const removedBuildings = network?.removedBuildings;
   const catalogs = useApp((s) => s.catalogs);
   const selection = useApp((s) => s.selection);
   const [ready, setReady] = useState(false);
@@ -158,8 +164,8 @@ export function TwinView() {
     const viewer = viewerRef.current;
     if (!ready || !viewer || !baseline) return;
     if (layers.current.bld) viewer.scene.primitives.remove(layers.current.bld);
-    layers.current.bld = viewer.scene.primitives.add(buildingsPrimitive(Object.values(baseline.buildings), buildingsTranslucent)) as Cesium.Primitive;
-  }, [ready, baseline, buildingsTranslucent]);
+    layers.current.bld = viewer.scene.primitives.add(buildingsPrimitive(Object.values(baseline.buildings).filter((b) => !removedBuildings?.[b.id]), buildingsTranslucent)) as Cesium.Primitive;
+  }, [ready, baseline, buildingsTranslucent, removedBuildings]);
 
   // Assets: furniture primitives, sign plates on poles, signal heads
   useEffect(() => {

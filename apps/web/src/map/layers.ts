@@ -34,7 +34,7 @@ export const CATEGORY_LABEL: Record<LayerDef['category'], string> = {
 };
 
 export const LAYERS: readonly LayerDef[] = [
-  { id: 'buildings', label: 'Edifici', category: 'existing', mapLayers: ['buildings-fill', 'buildings-line'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['buildings-fill', 'fill-opacity']] },
+  { id: 'buildings', label: 'Edifici', category: 'existing', mapLayers: ['buildings-fill', 'buildings-line', 'buildings-removed', 'buildings-removed-line'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['buildings-fill', 'fill-opacity']] },
   { id: 'context', label: 'Verde, acque, aree', category: 'existing', mapLayers: ['context-fill'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['context-fill', 'fill-opacity']] },
   { id: 'surfaces', label: 'Superfici stradali e marciapiedi', category: 'existing', mapLayers: ['surfaces-fill', 'surfaces-outline'], defaultVisible: true, source: 'Modello fisico DRIP (da sezione e corsie)', opacity: [['surfaces-fill', 'fill-opacity']] },
   { id: 'structures', label: 'Ponti, viadotti, gallerie', category: 'existing', mapLayers: ['structures-shadow', 'structures-casing', 'structures-piers'], defaultVisible: true, source: 'Strutture stradali (OSM bridge/tunnel + progetto)' },
@@ -91,9 +91,11 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   const L = (spec: Parameters<MLMap['addLayer']>[0]) => { if (!map.getLayer(spec.id)) map.addLayer(spec); };
 
   L({ id: 'context-fill', type: 'fill', source: 'context', paint: { 'fill-color': ['match', ['get', 'kind'], 'water', dark ? '#24394a' : '#b9cfd9', 'green', dark ? '#22301f' : '#cdd8bf', 'leisure', dark ? '#22301f' : '#d3dcc4', 'parking', dark ? '#25272a' : '#dcd9d2', 'square', dark ? '#2a2b2d' : '#e2ddd3', dark ? '#202225' : '#dfdbd2'], 'fill-opacity': 0.9 } });
-  L({ id: 'buildings-fill', type: 'fill', source: 'buildings', paint: { 'fill-color': dark ? '#2b2e33' : '#d6d1c7', 'fill-opacity': 0.95 } });
-  L({ id: 'buildings-hatch', type: 'fill', source: 'buildings', layout: { visibility: 'none' }, paint: { 'fill-pattern': 'ctr-hatch' } });
-  L({ id: 'buildings-line', type: 'line', source: 'buildings', minzoom: 15, paint: { 'line-color': dark ? '#3a3e44' : '#b9b3a7', 'line-width': 0.6 } });
+  L({ id: 'buildings-fill', type: 'fill', source: 'buildings', filter: ['!', ['get', 'removed']], paint: { 'fill-color': dark ? '#2b2e33' : '#d6d1c7', 'fill-opacity': 0.95 } });
+  L({ id: 'buildings-removed', type: 'fill', source: 'buildings', filter: ['get', 'removed'], paint: { 'fill-color': '#d0614f', 'fill-opacity': 0.08 } });
+  L({ id: 'buildings-removed-line', type: 'line', source: 'buildings', filter: ['get', 'removed'], paint: { 'line-color': '#d0614f', 'line-width': 1.2, 'line-dasharray': [3, 2] } });
+  L({ id: 'buildings-hatch', type: 'fill', source: 'buildings', filter: ['!', ['get', 'removed']], layout: { visibility: 'none' }, paint: { 'fill-pattern': 'ctr-hatch' } });
+  L({ id: 'buildings-line', type: 'line', source: 'buildings', minzoom: 15, filter: ['!', ['get', 'removed']], paint: { 'line-color': dark ? '#3a3e44' : '#b9b3a7', 'line-width': 0.6 } });
   L({ id: 'structures-shadow', type: 'fill', source: 'structures', filter: ['all', ['!=', ['get', 'kind'], 'pier'], ['!=', ['get', 'kind'], 'tunnel']], paint: { 'fill-color': '#000000', 'fill-opacity': 0.22, 'fill-translate': [5, 5], 'fill-translate-anchor': 'viewport' } });
   L({ id: 'structures-casing', type: 'line', source: 'structures', filter: ['!=', ['get', 'kind'], 'pier'], paint: { 'line-color': dark ? '#8d949c' : '#5b5f64', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 20, 3], 'line-dasharray': ['case', ['==', ['get', 'kind'], 'tunnel'], ['literal', [2, 2]], ['literal', [1, 0]]] } });
   L({ id: 'surfaces-fill', type: 'fill', source: 'surfaces', layout: { 'fill-sort-key': ['get', 'z'] }, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1], 'fill-antialias': false } });
@@ -156,7 +158,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'asset-fp-extrude', type: 'fill-extrusion', source: 'asset-parts', minzoom: 15, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': mat, 'fill-extrusion-base': ['coalesce', ['get', 'b'], 0], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 1], 'fill-extrusion-opacity': 0.97 } });
   L({ id: 'surfaces-raised', type: 'fill-extrusion', source: 'surfaces', minzoom: 16, filter: ['==', ['get', 'kind'], 'raised'], layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': mat, 'fill-extrusion-height': ['*', 3, ['coalesce', ['get', 'heightM'], 0.1]], 'fill-extrusion-opacity': 0.95 } });
   L({ id: 'structures-piers', type: 'fill-extrusion', source: 'structures', minzoom: 15, filter: ['==', ['get', 'kind'], 'pier'], layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#7d828a' : '#b9b6ae', 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-opacity': 0.95 } });
-  L({ id: 'buildings-extrude', type: 'fill-extrusion', source: 'buildings', minzoom: 14, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#3a3e44' : '#ddd8ce', 'fill-extrusion-height': ['coalesce', ['get', 'h'], 9], 'fill-extrusion-base': ['coalesce', ['get', 'minH'], 0], 'fill-extrusion-opacity': 0.92 } });
+  L({ id: 'buildings-extrude', type: 'fill-extrusion', source: 'buildings', minzoom: 14, filter: ['!', ['get', 'removed']], layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#3a3e44' : ['get', 'c'], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 9], 'fill-extrusion-base': ['coalesce', ['get', 'minH'], 0], 'fill-extrusion-opacity': 0.96, 'fill-extrusion-vertical-gradient': true } });
+  L({ id: 'buildings-roof', type: 'fill-extrusion', source: 'buildings', minzoom: 15, filter: ['!', ['get', 'removed']], layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#4a4038' : ['get', 'r'], 'fill-extrusion-height': ['coalesce', ['get', 'rh'], 10], 'fill-extrusion-base': ['coalesce', ['get', 'h'], 9], 'fill-extrusion-opacity': 0.98 } });
   L({ id: 'asset-3d', type: 'symbol', source: 'asset-pt', minzoom: 16, filter: ['has', 'sprite'], layout: {
     'icon-image': ['get', 'sprite'], 'icon-size': 0.25, 'icon-rotate': ['get', 'rot'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map',
     'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.25, 1] } });

@@ -1,9 +1,9 @@
 import type { Marking, MarkingColor, MarkingKind, Road, RoadFeature, RoadFeatureKind, RoadStructure, TurnKind } from '@drip-urban/core';
-import { humpLimits } from '@drip-urban/core';
+import { LocalFrame, geom, humpLimits } from '@drip-urban/core';
 import { commit, useApp } from '../state/store';
 import { CALMING } from '../tools/streetscape';
 import { useTool } from '../tools/toolState';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, TextField } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, TextField } from '../ui/controls';
 
 /** Marking types with a small plan-view preview (white on asphalt). */
 const MARKINGS: { kind: MarkingKind; label: string; ref: string; draw: string }[] = [
@@ -188,5 +188,41 @@ export function StructureSection({ road }: { road: Road }) {
       {s && s.type !== 'tunnel' ? <p className="muted">Franco verticale sulle strade sottostanti ≥ 5,00 m <span className="mono">DM 5/11/2001 § 3.8</span>; barriere di sicurezza su impalcato <span className="mono">DM 21/6/2004</span>.</p> : null}
       {s?.type === 'tunnel' ? <p className="muted">Gallerie &gt; 500 m: requisiti di sicurezza <span className="mono">D.Lgs. 264/2006</span>; illuminazione <span className="mono">UNI 11095</span>.</p> : null}
     </Section>
+  );
+}
+
+/** Baseline building: size, floors, demolition / restore in the scenario (e.g. to place an imported model). */
+export function BuildingInspector({ id }: { id: string }) {
+  const b = useApp((s) => s.baseline?.buildings[id]);
+  const net = useApp((s) => s.network)!;
+  const origin = useApp((s) => s.baseline!.origin);
+  if (!b) return <Empty icon="info" title="Edificio non trovato" />;
+  const f = new LocalFrame(origin);
+  const ring = b.footprint.map((p) => f.toMetric(p) as geom.V);
+  const area = geom.ringArea(ring);
+  const h = b.heightM - b.minHeightM;
+  const floors = Math.max(1, Math.round(h / 3.2));
+  const removed = !!net.removedBuildings?.[id];
+  return (
+    <>
+      <Section title={b.name || 'Edificio'}>
+        {removed ? <p className="plan-chip is-hot">Demolito nello scenario</p> : null}
+        <div className="stats-row">
+          <Stat label="Superficie coperta" value={Math.round(area).toLocaleString('it-IT')} unit="m²" />
+          <Stat label="Altezza" value={b.heightM.toFixed(1).replace('.', ',')} unit="m" />
+          <Stat label="Piani (stima)" value={floors} />
+        </div>
+        <div className="stats-row">
+          <Stat label="Volume" value={Math.round(area * h).toLocaleString('it-IT')} unit="m³" />
+          <Stat label="SUL (stima)" value={Math.round(area * floors).toLocaleString('it-IT')} unit="m²" />
+        </div>
+        <p className="muted">Fonte: {b.provenance.source}{b.provenance.kind === 'estimated' ? ' · altezza stimata' : ''}. Piani stimati a 3,20 m di interpiano.</p>
+      </Section>
+      <div className="inspector-actions">
+        {removed
+          ? <Button icon="undo" onClick={() => commit('building.remove', { buildingIds: [id], restore: true })}>Ripristina edificio</Button>
+          : <Button icon="trash" variant="danger" onClick={() => commit('building.remove', { buildingIds: [id] })}>Demolisci nello scenario</Button>}
+      </div>
+    </>
   );
 }

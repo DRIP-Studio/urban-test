@@ -5,7 +5,7 @@ import { toast } from '../state/toasts';
 import { PavingLibrary } from './PavingLibrary';
 import { useMemo, useRef, useState } from 'react';
 import { ROAD_TEMPLATES, type AreaKind, type ZoneKind } from '@drip-urban/core';
-import { useApp } from '../state/store';
+import { commit, select, useApp } from '../state/store';
 import { useTool } from '../tools/toolState';
 import { toolById } from '../tools/registry';
 import { Button, Empty, Field, NumberField, Section, Select, TextField, Toggle } from '../ui/controls';
@@ -44,6 +44,9 @@ function ModelLibrary() {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [scale, setScale] = useState(1);
+  const modelClear = useTool((s) => s.modelClear);
+  const baseline = useApp((s) => s.baseline);
+  const removed = Object.keys(useApp((s) => s.network?.removedBuildings) ?? {});
   if (!project) return null;
   const upload = async (f: File) => {
     setBusy(true);
@@ -75,7 +78,20 @@ function ModelLibrary() {
           <button type="button" className="link" onClick={(e) => { e.stopPropagation(); void api.del(`/api/projects/${encodeURIComponent(project.id)}/models/${m.id}`).then(loadModels); }}>elimina</button>
         </div>
       ))}
-      <p className="muted">Da SketchUp: esporta in glTF/GLB (estensione o SketchUp 2024+). I modelli si posano come l'arredo, compaiono in pianta con il loro ingombro e nel Twin 3D con la loro geometria.</p>
+      <Toggle label="Libera l'area: demolisci gli edifici e rimuovi gli arredi sotto il modello" checked={modelClear} onChange={(v) => useTool.setState({ modelClear: v })} />
+      <p className="muted">Da SketchUp: esporta in glTF/GLB (estensione o SketchUp 2024+). I modelli si posano come l'arredo (Q/E o Maiusc+rotella per ruotare), compaiono in pianta con il loro ingombro e nel Twin 3D con la loro geometria. Un edificio esistente si demolisce anche selezionandolo sulla mappa.</p>
+      {removed.length ? (
+        <div className="lib-group">
+          <div className="lib-group-title">Edifici demoliti nello scenario ({removed.length})</div>
+          {removed.slice(0, 30).map((id) => (
+            <div key={id} className="lib-row" role="button" tabIndex={0} onClick={() => select({ kind: 'building', ids: [id] })}>
+              <Icon name="trash" size={14} /><span>{baseline?.buildings[id]?.name || `Edificio ${id.replace(/^\D+/, '')}`}</span><span className="hint">h {baseline?.buildings[id]?.heightM.toFixed(0) ?? '?'} m</span>
+              <button type="button" className="link" onClick={(e) => { e.stopPropagation(); commit('building.remove', { buildingIds: [id], restore: true }); }}>ripristina</button>
+            </div>
+          ))}
+          <Button size="sm" icon="undo" onClick={() => commit('building.remove', { buildingIds: removed, restore: true })}>Ripristina tutti</Button>
+        </div>
+      ) : null}
     </Section>
   );
 }

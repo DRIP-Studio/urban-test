@@ -85,6 +85,18 @@ function makePlaceTool(kind: 'furniture' | 'sign'): ToolHandler {
         id: newId('a'), type, at, rotationDeg: rotation(), state: 'project', properties: props,
         provenance: { kind: 'project', source: 'DRIP Urban scenario' },
       };
+      if (type.startsWith('model:') && t.modelClear) {
+        const { w, d } = dims();
+        const idx = ctx.index();
+        const clear = idx ? clearUnder(idx, at, w, d, rotation()) : null;
+        if (clear?.buildings.length) extraOps.push({ type: 'building.remove', payload: { buildingIds: clear.buildings } });
+        if (clear?.assets.length) extraOps.push({ type: 'asset.remove', payload: { assetIds: clear.assets } });
+        if (clear && (clear.buildings.length || clear.assets.length)) {
+          const ok = commit('batch', { label: 'Posa modello 3D e libera l\'area', ops: [...extraOps, { type: 'asset.add', payload: { assets: [{ id: newId('a'), type, at, rotationDeg: rotation(), state: 'project', properties: props, provenance: { kind: 'project', source: 'DRIP Urban scenario' } }] } }] }).ok;
+          if (ok) toast.success('Modello posato', `${clear.buildings.length} edifici demoliti e ${clear.assets.length} elementi rimossi sotto il modello (ripristinabili dall'Inspector)`);
+          return;
+        }
+      }
       const ok = extraOps.length
         ? commit('batch', { label: 'Aggiungi pannello al palo', ops: [...extraOps, { type: 'asset.add', payload: { assets: [asset] } }] }).ok
         : commit('asset.add', { assets: [asset] }).ok;
@@ -113,4 +125,27 @@ function signOnPole(net: Network, id: string): string | null {
   const plates = Object.values(net.assets).filter((a) => a.type.startsWith('it.sign.') && a.state !== 'removed' && ((a.properties.poleId as string | undefined) ?? a.id) === pole);
   plates.sort((a, b) => Number(b.properties.stackOrder ?? 0) - Number(a.properties.stackOrder ?? 0));
   return plates[0]?.id ?? null;
+}
+
+/** Baseline buildings (overlap ≥ 25 %) and network assets inside the footprint of a model being placed. */
+function clearUnder(idx: NetworkIndex, at: LngLat, w: number, d: number, rot: number): { buildings: string[]; assets: string[] } {
+  const { baseline, network } = useApp.getState();
+  if (!baseline || !network) return { buildings: [], assets: [] };
+  const c = idx.frame.toMetric(at) as geom.V;
+  const a = (-rot * Math.PI) / 180;
+  const rect: geom.V[] = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, y]) => [c[0] + x! * Math.cos(a) - y! * Math.sin(a), c[1] + x! * Math.sin(a) + y! * Math.cos(a)]);
+  const reach = Math.hypot(w, d) / 2;
+  const buildings: string[] = [];
+  for (const b of Object.values(baseline.buildings)) {
+    if (network.removedBuildings?.[b.id]) continue;
+    const ring = b.footprint.map((p) => idx.frame.toMetric(p) as geom.V);
+    if (ring.every((p) => Math.hypot(p[0] - c[0], p[1] - c[1]) > reach + 60)) continue;
+    const ab = Math.abs(geom.ringArea(ring));
+    const inter = geom.polygonIntersectionArea(ring, rect);
+    if (inter > 0.25 * Math.min(ab, w * d)) buildings.push(b.id);
+  }
+  const assets = Object.values(network.assets)
+    .filter((x) => x.state !== 'removed' && !x.type.startsWith('model:') && geom.pointInRing(idx.frame.toMetric(x.at) as geom.V, rect))
+    .map((x) => x.id);
+  return { buildings, assets };
 }

@@ -3,6 +3,7 @@ import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
 import { partPrints } from '../models/parts';
 import { PX_PER_M } from './furnitureSprite';
+import { buildingLook } from '../models/buildings';
 import { VEHICLE_CLASSES, colorOfPart, paintIndex, paintsOf, vehiclePrints } from '../models/vehicles';
 import { fc, type Feature, type LineString, type Point, type Polygon } from '../engine/geojson';
 
@@ -18,10 +19,15 @@ function minSpriteScale(item: FurnitureItem): number {
 
 const close = (r: readonly LngLat[]) => [...r.map((p) => [p[0], p[1]]), [r[0]![0], r[0]![1]]];
 
+/** Baseline buildings; those demolished in the scenario stay as dashed ghosts (selectable, to restore them). */
 export function buildingsFC(b: CityBaseline, removed?: Readonly<Record<string, true>>) {
-  return fc(Object.values(b.buildings).filter((x) => !removed?.[x.id]).map((x): Feature<Polygon> => ({
-    type: 'Feature', id: x.id, geometry: { type: 'Polygon', coordinates: [close(x.footprint)] }, properties: { id: x.id, h: x.heightM, minH: x.minHeightM, name: x.name ?? null },
-  })));
+  return fc(Object.values(b.buildings).map((x): Feature<Polygon> => {
+    const look = buildingLook(x.id, x.heightM);
+    return {
+      type: 'Feature', id: x.id, geometry: { type: 'Polygon', coordinates: [close(x.footprint)] },
+      properties: { id: x.id, h: x.heightM, minH: x.minHeightM, name: x.name ?? null, c: look.facade, r: look.roof, rh: x.heightM + look.roofH, removed: !!removed?.[x.id] },
+    };
+  }));
 }
 
 const CONTEXT_KIND: Record<string, string> = { green: 'green', natural: 'green', leisure: 'leisure', parking: 'parking', square: 'square' };

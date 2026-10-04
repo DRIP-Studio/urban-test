@@ -1,5 +1,5 @@
 import { LocalFrame, dmCategory, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
-import { FeatureInspector, MarkingInspector, PreselectionSection, StructureSection } from './StreetscapePanels';
+import { BuildingInspector, FeatureInspector, MarkingInspector, PreselectionSection, StructureSection } from './StreetscapePanels';
 import { ztlZones } from '../ztl/link';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
 import { commit, openDock, select, setDock, setTool, useApp } from '../state/store';
@@ -293,5 +293,6 @@ export function Inspector() {
   if (sel.kind === 'node') return <NodeInspector nodeId={id} />;
   if (sel.kind === 'feature') return <FeatureInspector id={id} />;
   if (sel.kind === 'marking') return <MarkingInspector id={id} />;
+  if (sel.kind === 'building') return <BuildingInspector id={id} />;
   return <Empty icon="info" title="Elemento non più presente" >È stato modificato o rimosso da un'operazione successiva.</Empty>;
 }
