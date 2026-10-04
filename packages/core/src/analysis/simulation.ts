@@ -17,6 +17,8 @@ export const VEHICLE_SPECS: Record<VehicleClass, { length: number; width: number
   emergency: { length: 6.0, width: 2.1, accel: 2.4, decel: 3.5, share: 0.01, label: 'Emergenza' },
 };
 const CLASSES = Object.keys(VEHICLE_SPECS) as VehicleClass[];
+/** Floats per vehicle in SimFrame.data: lon, lat, heading°, class index, km/h, vehicle id. */
+export const SIM_STRIDE = 6;
 
 interface Vehicle {
   id: number;
@@ -44,7 +46,7 @@ export interface SimMetrics {
 }
 
 export interface SimFrame {
-  /** lon, lat, bearing°, class index, speed km/h — 5 floats per vehicle. */
+  /** lon, lat, bearing°, class index, speed km/h, vehicle id — SIM_STRIDE floats per vehicle. */
   readonly data: Float32Array;
   readonly signals: readonly { at: LngLat; state: 'green' | 'yellow' | 'red'; bearing: number }[];
   readonly metrics: SimMetrics;
@@ -284,7 +286,7 @@ export class FlowSimulation {
   }
 
   frameData(): SimFrame {
-    const data = new Float32Array(this.vehicles.length * 5);
+    const data = new Float32Array(this.vehicles.length * SIM_STRIDE);
     this.vehicles.forEach((veh, i) => {
       let p: V, t: V;
       if (veh.inJunction) {
@@ -305,10 +307,12 @@ export class FlowSimulation {
         t = s.t;
       }
       const ll = this.frame.toLngLat(p);
-      data[i * 5] = ll[0]; data[i * 5 + 1] = ll[1];
-      data[i * 5 + 2] = (Math.atan2(t[0], t[1]) * 180) / Math.PI;
-      data[i * 5 + 3] = CLASSES.indexOf(veh.cls);
-      data[i * 5 + 4] = veh.v * 3.6;
+      const o = i * SIM_STRIDE;
+      data[o] = ll[0]; data[o + 1] = ll[1];
+      data[o + 2] = (Math.atan2(t[0], t[1]) * 180) / Math.PI;
+      data[o + 3] = CLASSES.indexOf(veh.cls);
+      data[o + 4] = veh.v * 3.6;
+      data[o + 5] = veh.id;
     });
     const signals: SimFrame['signals'][number][] = [];
     for (const plan of Object.values(this.net.signalPlans)) {

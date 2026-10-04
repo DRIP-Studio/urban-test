@@ -6,6 +6,7 @@ import {
   FlowSimulation, LocalFrame, OperationRejected, ScenarioHistory, analyzeJunction, analyzeNetwork, auditScenario,
   SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan, planIssues, signalHeads, coordinateCorridor, detectCorridors, designPlant, optimizeNetworkSignals, rescalePlan, type SignalPlan, type SignalPhase,
   type CityBaseline, type Network, type Scenario,
+  SIM_STRIDE,
 } from '../src/index';
 
 const SEED = fileURLToPath(new URL('../../../services/api/seed/frattamaggiore.baseline.json.gz', import.meta.url));
@@ -249,8 +250,8 @@ describe('traffic, simulation, safety, network, accessibility', () => {
     const f = sim.frameData();
     expect(f.metrics.vehicles).toBeGreaterThan(5);
     expect(f.signals.length).toBe(a.groups.length);
-    expect(f.data.length).toBe(f.metrics.vehicles * 5);
-    for (let i = 0; i < f.data.length; i += 5) {
+    expect(f.data.length).toBe(f.metrics.vehicles * SIM_STRIDE);
+    for (let i = 0; i < f.data.length; i += SIM_STRIDE) {
       expect(Math.abs(f.data[i]! - at[0])).toBeLessThan(0.05);
     }
     expect(f.metrics.completed).toBeGreaterThan(0);

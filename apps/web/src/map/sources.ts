@@ -1,8 +1,9 @@
-import { LocalFrame, geom, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
+import { LocalFrame, geom, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, SIM_STRIDE } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
 import { partPrints } from '../models/parts';
 import { PX_PER_M } from './furnitureSprite';
+import { VEHICLE_CLASSES, colorOfPart, paintIndex, paintsOf, vehiclePrints } from '../models/vehicles';
 import { fc, type Feature, type LineString, type Point, type Polygon } from '../engine/geojson';
 
 /** Sign stacks: plan view in icon pixels (96 px plates), 3D in metres (lower edge 2.20 m, art. 81 Reg. CdS). */
@@ -157,15 +158,26 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
   return { fp: fc(fp), pt: fc(pt), signals: fc(sig), parts: fc(parts), poles: fc(poleFeatures), signs3d: fc(signs3d) };
 }
 
-const CLS = ['car', 'van', 'truck', 'bus', 'emergency'] as const;
+const CLS = VEHICLE_CLASSES;
+/**
+ * Simulated vehicles as their real top view: one polygon per part (body, glass, roof, lights, wheels…)
+ * with its colour and height range, so the tilted map extrudes them like small 3D models.
+ */
 export function vehiclesFC(frame: SimFrame, origin: LngLat) {
   const f = new LocalFrame(origin);
   const out: Feature<Polygon>[] = [];
   const d = frame.data;
-  for (let i = 0; i < d.length; i += 5) {
+  for (let i = 0, n = 0; i < d.length; i += SIM_STRIDE, n++) {
     const cls = CLS[d[i + 3]!] ?? 'car';
-    const spec = VEHICLE_SPECS[cls];
-    out.push({ type: 'Feature', id: i / 5, geometry: { type: 'Polygon', coordinates: [rect(f, [d[i]!, d[i + 1]!], spec.width, spec.length, d[i + 2]!)] }, properties: { cls: d[i + 3]!, v: d[i + 4]! } });
+    const id = d[i + 5]!;
+    const paint = paintsOf(cls)[paintIndex(cls, id)]!;
+    const c = f.toMetric([d[i]!, d[i + 1]!]);
+    const a = (-d[i + 2]! * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+    vehiclePrints(cls).forEach((p, k) => {
+      const ring = p.ring.map(([x, y]) => { const ll = f.toLngLat([c[0] + x * ca - y * sa, c[1] + x * sa + y * ca]); return [ll[0], ll[1]]; });
+      ring.push(ring[0]!);
+      out.push({ type: 'Feature', id: n * 64 + k, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { cls: d[i + 3]!, v: d[i + 4]!, c: colorOfPart(p.mat, paint), b: p.base, h: p.top } });
+    });
   }
   return fc(out);
 }

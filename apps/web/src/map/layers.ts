@@ -52,7 +52,7 @@ export const LAYERS: readonly LayerDef[] = [
     legend: [{ color: '#3fae6b', label: 'Scorrevole' }, { color: '#e2b13c', label: 'Rallentato' }, { color: '#e1703a', label: 'Intenso' }, { color: '#b9312a', label: 'Congestionato' }] },
   { id: 'incidents', label: 'Incidenti, cantieri e chiusure', category: 'traffic', mapLayers: ['incidents-line', 'incidents-circle', 'incidents-label'], defaultVisible: true, source: 'HERE Traffic v7 (live)',
     legend: [{ color: '#b9312a', label: 'Strada chiusa / incidente' }, { color: '#e1703a', label: 'Lavori, corsia chiusa' }, { color: '#d9a441', label: 'Altro evento' }] },
-  { id: 'vehicles', label: 'Veicoli simulati', category: 'traffic', mapLayers: ['vehicles-fill'], defaultVisible: true, source: 'DRIP Flow (simulazione)' },
+  { id: 'vehicles', label: 'Veicoli simulati', category: 'traffic', mapLayers: ['vehicles-fill', 'vehicles-extrude'], defaultVisible: true, source: 'DRIP Flow (simulazione)' },
   { id: 'route', label: 'Percorso', category: 'mobility', mapLayers: ['route-line', 'route-casing', 'compare-line'], defaultVisible: true, source: 'Navigatore DRIP sullo scenario' },
   { id: 'iso', label: 'Accessibilità / isocrone', category: 'analysis', mapLayers: ['iso-line'], defaultVisible: true, source: 'Analisi DRIP',
     legend: [{ color: '#2f7d5b', label: '≤ 5 min' }, { color: '#79a84d', label: '≤ 7 min' }, { color: '#d6a63b', label: '≤ 10 min' }, { color: '#c4643a', label: '≤ 15 min' }] },
@@ -183,7 +183,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'compare-line', type: 'line', source: 'compare', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#9aa3ab', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 18, 8], 'line-dasharray': [1.5, 1.2], 'line-opacity': 0.9 } });
   L({ id: 'route-casing', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#0d0d0d', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 6, 18, 13], 'line-opacity': 0.55 } });
   L({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['coalesce', ['get', 'color'], '#83b4d1'], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3.5, 18, 8] } });
-  L({ id: 'vehicles-fill', type: 'fill', source: 'vehicles', paint: { 'fill-color': ['match', ['get', 'cls'], 0, '#f4f3ef', 1, '#d9d4c8', 2, '#e8772e', 3, '#5587a2', 4, '#d0614f', '#ffffff'], 'fill-outline-color': '#1c1d1f' } });
+  L({ id: 'vehicles-fill', type: 'fill', source: 'vehicles', paint: { 'fill-color': ['get', 'c'], 'fill-antialias': true } });
+  L({ id: 'vehicles-extrude', type: 'fill-extrusion', source: 'vehicles', minzoom: 16, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': ['get', 'c'], 'fill-extrusion-base': ['get', 'b'], 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-opacity': 1 } });
   L({ id: 'labels-text', type: 'symbol', source: 'labels', minzoom: 15, layout: {
     'symbol-placement': 'line', 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 15, 10, 19, 13],
     'text-max-angle': 30, 'symbol-spacing': 320, 'text-padding': 4 }, paint: { 'text-color': dark ? '#d8d6d0' : '#3b3934', 'text-halo-color': dark ? '#16181b' : '#f4f2ec', 'text-halo-width': 1.4 } });

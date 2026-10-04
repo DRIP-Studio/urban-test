@@ -164,8 +164,9 @@ export function MapView() {
     // Tilted map: furniture and buildings become real extrusions; flat map: plan symbols with volume.
     const applyPitchMode = () => {
       const tilted = map.getPitch() > 12;
-      for (const id of ['asset-fp-extrude', 'buildings-extrude', 'surfaces-raised', 'structures-piers']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'visible' : 'none');
+      for (const id of ['asset-fp-extrude', 'buildings-extrude', 'surfaces-raised', 'structures-piers', 'vehicles-extrude']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'visible' : 'none');
       if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'visibility', tilted ? 'none' : 'visible');
+      if (map.getLayer('vehicles-fill') && map.getLayoutProperty('vehicles-fill', 'visibility') !== 'none' === tilted) map.setLayoutProperty('vehicles-fill', 'visibility', tilted ? 'none' : 'visible');
       for (const id of ['asset-pt-sign', 'sign-poles-icon']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'none' : 'visible');
       if (map.getLayer('signs-3d')) map.setLayoutProperty('signs-3d', 'visibility', tilted ? 'visible' : 'none');
       updateSigns3d();

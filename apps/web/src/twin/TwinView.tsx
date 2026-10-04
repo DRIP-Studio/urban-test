@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { partCenter, rotationMatrix } from '../models/parts';
+import { VEHICLE_CLASSES, paintIndex, vehicleGlbUrl } from '../models/vehicles';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { VEHICLE_SPECS, pedestrianState, signalState, type Asset, type SignalHead, type SimFrame } from '@drip-urban/core';
+import { SIM_STRIDE, pedestrianState, signalState, type Asset, type SignalHead, type SimFrame } from '@drip-urban/core';
 import type { FurnitureItem, MaterialItem } from '../api/types';
 import { engine } from '../engine/engine';
 import type { PhysicalPayload } from '../engine/protocol';
@@ -241,31 +242,33 @@ export function TwinView() {
     return () => { alive = false; };
   }, [ready, network, catalogs]);
 
-  // Simulated vehicles: pooled entities updated from the simulation frames.
+  // Simulated vehicles: detailed glTF models (built in memory per class and paint), one per vehicle id.
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!ready || !viewer) return;
-    const pool: Cesium.Entity[] = [];
-    const classes = ['car', 'van', 'truck', 'bus', 'emergency'] as const;
-    const colors = ['#f4f3ef', '#d9d4c8', '#e8772e', '#5587a2', '#d0614f'].map((c) => Cesium.Color.fromCssColorString(c));
+    const live = new Map<number, { model: Cesium.Model | null; seen: number }>();
+    let tick = 0;
+    const place = (lon: number, lat: number, heading: number) => enuMatrix(lon, lat, 0.02, heading);
     const off = engine.onSim((f) => {
       sim.current = f;
-      const n = f ? f.data.length / 5 : 0;
-      while (pool.length < n) pool.push(viewer.entities.add({ box: { dimensions: new Cesium.Cartesian3(1.8, 4.5, 1.5), material: colors[0]! } }));
-      pool.forEach((e, i) => {
-        e.show = i < n;
-        if (i >= n || !f) return;
-        const d = f.data;
-        const cls = classes[d[i * 5 + 3]!] ?? 'car';
-        const spec = VEHICLE_SPECS[cls];
-        const pos = Cesium.Cartesian3.fromDegrees(d[i * 5]!, d[i * 5 + 1]!, cls === 'bus' || cls === 'truck' ? 1.6 : 0.8);
-        e.position = new Cesium.ConstantPositionProperty(pos);
-        e.orientation = new Cesium.ConstantProperty(Cesium.Transforms.headingPitchRollQuaternion(pos, new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(d[i * 5 + 2]! - 90), 0, 0)));
-        e.box!.dimensions = new Cesium.ConstantProperty(new Cesium.Cartesian3(spec.length, spec.width, cls === 'bus' || cls === 'truck' ? 3.2 : 1.5));
-        e.box!.material = new Cesium.ColorMaterialProperty(colors[d[i * 5 + 3]!] ?? colors[0]!);
-      });
+      tick++;
+      if (!f) { for (const v of live.values()) if (v.model) viewer.scene.primitives.remove(v.model); live.clear(); return; }
+      const d = f.data;
+      for (let i = 0; i < d.length; i += SIM_STRIDE) {
+        const id = d[i + 5]!, cls = VEHICLE_CLASSES[d[i + 3]!] ?? 'car';
+        const m = place(d[i]!, d[i + 1]!, d[i + 2]!);
+        const cur = live.get(id);
+        if (cur) { cur.seen = tick; if (cur.model) cur.model.modelMatrix = m; continue; }
+        const entry: { model: Cesium.Model | null; seen: number } = { model: null, seen: tick };
+        live.set(id, entry);
+        void Cesium.Model.fromGltfAsync({ url: vehicleGlbUrl(cls, paintIndex(cls, id)), modelMatrix: m, upAxis: Cesium.Axis.Z, forwardAxis: Cesium.Axis.X } as never).then((model) => {
+          if (viewer.isDestroyed() || live.get(id) !== entry) { model.destroy(); return; }
+          entry.model = viewer.scene.primitives.add(model) as Cesium.Model;
+        }).catch(() => undefined);
+      }
+      for (const [id, v] of live) if (v.seen !== tick) { if (v.model) viewer.scene.primitives.remove(v.model); live.delete(id); }
     });
-    return () => { off(); for (const e of pool) viewer.entities.remove(e); };
+    return () => { off(); if (!viewer.isDestroyed()) for (const v of live.values()) if (v.model) viewer.scene.primitives.remove(v.model); live.clear(); };
   }, [ready]);
 
   const preset = (p: Preset) => {
