@@ -72,7 +72,7 @@ export function roadSummary(f: LocalFrame, r: Road) {
 }
 
 /** Roads whose name matches (accent- and prefix-insensitive), or the selected roads. */
-function resolveRoads(args: Record<string, unknown>): Road[] {
+export function resolveRoads(args: Record<string, unknown>): Road[] {
   const { network, selection } = state();
   const ids = (args.roadIds as string[] | undefined)?.filter((id) => network.roads[id]);
   if (ids?.length) return ids.map((id) => network.roads[id]!);

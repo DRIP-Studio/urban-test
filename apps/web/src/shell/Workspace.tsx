@@ -12,6 +12,7 @@ import { Inspector } from '../panels/Inspector';
 import { JunctionLab } from '../panels/JunctionLab';
 import { SectionEditor } from '../panels/SectionEditor';
 import { HistorySheet, LayersSheet, QASheet, SettingsSheet } from '../panels/Sheets';
+import { ProfileStudio } from '../panels/ProfileStudio';
 import { SignalStudio } from '../panels/SignalStudio';
 import { TrafficStudio } from '../panels/TrafficStudio';
 import { ConnectSheet } from '../panels/NetworkTools';
@@ -34,6 +35,7 @@ const BOTTOM: Record<string, { title: string; icon: string; render: () => ReactE
   section: { title: 'Sezione stradale', icon: 'section', render: () => <SectionEditor /> },
   junction: { title: 'Junction Lab', icon: 'junction', render: () => <JunctionLab /> },
   signals: { title: 'Signal Studio', icon: 'signal', render: () => <SignalStudio /> },
+  profile: { title: 'Profilo longitudinale e movimenti terra', icon: 'profile', render: () => <ProfileStudio /> },
 };
 const SHEETS: Record<string, { title: string; render: () => ReactElement }> = {
   layers: { title: 'Livelli', render: () => <LayersSheet /> },

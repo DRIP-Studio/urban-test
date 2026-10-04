@@ -7,7 +7,7 @@ from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import civic, collab, elios, jobs, providers, transit, wms
+from app import civic, collab, elios, jobs, providers, terrain, transit, wms
 from app.city.legacy_city import convert_city
 from app.projects import service as ps
 from app.projects.migrate53 import legacy_summary, load_seed, migrate
@@ -550,6 +550,47 @@ _MODEL_EXT = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json"}
 def list_models(pid: str) -> list[dict]:
     try:
         return ps.get_doc(pid, "models") or []
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+
+
+# ------------------------------------------------------------------ terrain (DTM)
+
+@app.post("/api/projects/{pid}/terrain/fetch")
+def terrain_fetch(pid: str, body: dict = Body(default={})) -> dict:
+    """Copernicus GLO-90 over the project area, as a background job; saved as the `terrain` document."""
+    try:
+        meta = ps.get_meta(pid)
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+    spacing = float(body.get("spacingM") or 60)
+    if not 20 <= spacing <= 500:
+        raise HTTPException(400, "Passo della griglia 20–500 m")
+    bbox = [float(x) for x in meta["bbox"]]
+    author = _author()
+
+    def run(report):
+        report(0.02, "Richiesta quote Copernicus GLO-90")
+        grid = terrain.fetch_open_meteo(bbox, spacing, report)
+        ps.put_doc(pid, "terrain", {"grid": grid}, author)
+        return {"nx": grid["nx"], "ny": grid["ny"], "resolutionM": grid["resolutionM"], "min": min(grid["z"]), "max": max(grid["z"])}
+
+    return {"job": jobs.start("terrain", "Modello del terreno (DTM)", run)}
+
+
+@app.post("/api/projects/{pid}/terrain/upload")
+async def terrain_upload(pid: str, epsg: int = 32633, file: UploadFile = File(...)) -> dict:
+    """ESRI ASCII Grid DTM (e.g. regional LiDAR) resampled over the project area."""
+    try:
+        meta = ps.get_meta(pid)
+        raw = await file.read(200 * 1024 * 1024 + 1)
+        if len(raw) > 200 * 1024 * 1024:
+            raise ValueError("File DTM oltre 200 MB: ritaglia l'area del progetto")
+        if not (file.filename or "").lower().endswith((".asc", ".txt")):
+            raise ValueError("Formato non supportato: carica un ESRI ASCII Grid (.asc)")
+        grid = terrain.resample_ascii(raw.decode("utf-8", errors="replace"), epsg, [float(x) for x in meta["bbox"]])
+        ps.put_doc(pid, "terrain", {"grid": grid}, _author())
+        return {"nx": grid["nx"], "ny": grid["ny"], "resolutionM": grid["resolutionM"], "coverage": grid["coverage"], "min": min(grid["z"]), "max": max(grid["z"])}
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
 

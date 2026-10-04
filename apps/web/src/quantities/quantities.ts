@@ -7,7 +7,7 @@
 export type Unit = 'm²' | 'm' | 'cad' | 'm³';
 
 export const CHAPTERS = [
-  'Pavimentazioni', 'Demolizioni e rimozioni', 'Cordoli', 'Segnaletica orizzontale',
+  'Movimenti terra', 'Pavimentazioni', 'Demolizioni e rimozioni', 'Cordoli', 'Segnaletica orizzontale',
   'Segnaletica verticale', 'Arredo e verde', 'Impianti semaforici',
 ] as const;
 export type Chapter = (typeof CHAPTERS)[number];
@@ -148,6 +148,8 @@ export interface QuantityInput {
   readonly signalPlanIds: readonly string[];
   readonly baselineSignalPlanIds: readonly string[];
   readonly labels?: { readonly materials?: Readonly<Record<string, string>>; readonly assets?: Readonly<Record<string, string>> };
+  /** Earthworks of roads with a vertical profile (sections on the project DTM). */
+  readonly earthworks?: readonly { readonly roadName: string; readonly cutM3: number; readonly fillM3: number }[];
 }
 
 type Draft = Omit<QtyItem, 'code'>;
@@ -244,6 +246,14 @@ export function computeQuantities(input: QuantityInput): QtyItem[] {
   const newPlans = input.signalPlanIds.filter((id) => !base.has(id)).length;
   if (newPlans) add({ chapter: 'Impianti semaforici', key: 'plan', kind: 'signal_plan', unit: 'cad', quantity: newPlans, description: 'Impianto semaforico nuovo (regolatore, quadro, cavidotti e cablaggi)', source: 'Piani semaforici aggiunti rispetto allo stato attuale' });
 
+  // Movimenti terra: cut and fill from the vertical profiles; the surplus goes to a licensed site.
+  const ew = input.earthworks ?? [];
+  const cut = ew.reduce((t, e) => t + e.cutM3, 0), fill = ew.reduce((t, e) => t + e.fillM3, 0);
+  const src = `Profili longitudinali su DTM: ${ew.length} strade (sezioni ogni 10 m, aree medie)`;
+  if (cut > 0) add({ chapter: 'Movimenti terra', key: 'ew|cut', kind: 'scavo', unit: 'm³', quantity: cut, description: 'Scavo di sbancamento e a sezione aperta (anche in presenza d\'acqua)', source: src });
+  if (fill > 0) add({ chapter: 'Movimenti terra', key: 'ew|fill', kind: 'rilevato', unit: 'm³', quantity: fill, description: 'Formazione di rilevato con materiali idonei, compattato', source: src });
+  if (cut - fill > 0) add({ chapter: 'Movimenti terra', key: 'ew|surplus', kind: 'conferimento', unit: 'm³', quantity: cut - fill, description: 'Trasporto e conferimento a impianto autorizzato del materiale in esubero', source: 'Bilancio sterri − riporti' });
+
   const out: QtyItem[] = [];
   CHAPTERS.forEach((ch, ci) => {
     const rows = [...acc.values()].filter((d) => d.chapter === ch).sort((x, y) => x.description.localeCompare(y.description, 'it'));
@@ -279,6 +289,9 @@ const PAV: Chapter = 'Pavimentazioni', ARR: Chapter = 'Arredo e verde', SEM: Cha
 
 /** Reference prices (orders of magnitude, Italy 2026). Never official: see DEFAULT_PRICES_NOTE. */
 export const DEFAULT_PRICES: readonly PriceItem[] = [
+  D('DRIP.MT.01', 'Scavo di sbancamento', 'm³', 9, { chapter: 'Movimenti terra', kind: 'scavo' }),
+  D('DRIP.MT.02', 'Rilevato con materiali idonei', 'm³', 18, { chapter: 'Movimenti terra', kind: 'rilevato' }),
+  D('DRIP.MT.03', 'Trasporto e conferimento a impianto autorizzato', 'm³', 22, { chapter: 'Movimenti terra', kind: 'conferimento' }),
   D('DRIP.PAV.00', 'Pavimentazione (voce generica)', 'm²', 45, { chapter: PAV }),
   D('DRIP.PAV.01', 'Conglomerato bituminoso: binder + usura su fondazione esistente', 'm²', 25, { chapter: PAV, material: 'asphalt' }),
   D('DRIP.PAV.02', 'Conglomerato bituminoso drenante', 'm²', 32, { chapter: PAV, material: 'porous_asphalt' }),

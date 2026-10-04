@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { NetworkReplayer, type CityBaseline } from '@drip-urban/core';
+import { NetworkReplayer, earthworks, type CityBaseline } from '@drip-urban/core';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
 import type { FeatureCollection, Polygon } from '../engine/geojson';
@@ -8,6 +8,7 @@ import {
   overrideFor, priceItems, withOverride, withoutOverride, type CsvImport, type PriceList, type QtyItem,
 } from '../quantities/quantities';
 import { useApp } from '../state/store';
+import { loadTerrain, useTerrain } from '../state/terrain';
 import { toast } from '../state/toasts';
 import { Button, Empty, Field, NumberField, Section, Skeleton, Stat, TextField, Toggle } from '../ui/controls';
 import { Icon } from '../ui/Icon';
@@ -70,6 +71,9 @@ export function QuantitiesSheet() {
     api.get<PriceList | null>(docUrl).then((d) => setList(d && Array.isArray(d.items) ? { ...EMPTY_PRICELIST, ...d } : EMPTY_PRICELIST)).catch(() => setList(EMPTY_PRICELIST));
   }, [docUrl]);
 
+  const grid = useTerrain((s) => s.grid);
+  const terrainLoaded = useTerrain((s) => s.loaded);
+  useEffect(() => { if (!terrainLoaded) void loadTerrain(); }, [terrainLoaded]);
   const basePlans = useMemo(() => (baseline ? Object.keys(new NetworkReplayer().derive(baseline, []).net.signalPlans) : []), [baseline]);
   const labels = useMemo(() => ({
     materials: Object.fromEntries((catalogs?.materials.items ?? []).map((m) => [m.id, m.label])),
@@ -81,8 +85,9 @@ export function QuantitiesSheet() {
     return computeQuantities({
       surfaces: p.surfaces.features, markings: p.markings.features, lines: p.lines.features, baselineSurfaces: base.features,
       assets: Object.values(net.assets), signalPlanIds: Object.keys(net.signalPlans), baselineSignalPlanIds: basePlans, labels,
+      earthworks: grid && baseline ? Object.values(net.roads).filter((r) => r.vertical).map((r) => { const e = earthworks(r, r.vertical!, grid, baseline.origin, 10); return { roadName: r.name || r.id, cutM3: e.cutM3, fillM3: e.fillM3 }; }) : [],
     });
-  }, [physVersion, netVersion, base, net, basePlans, labels]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [physVersion, netVersion, base, net, basePlans, labels, grid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!project || !scenario || !net) return null;
   if (!raw || !list) return <Skeleton lines={5} />;

@@ -97,6 +97,8 @@ const P: Record<string, string> = {
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11',
   download: 'M12 3v12M7 10l5 5 5-5M4 19h16',
+  upload: 'M12 15V3M7 8l5-5 5 5M4 19h16',
+  profile: 'M3 17l5-6 4 3 4-6 5 4M3 21h18M3 3v18',
   api: 'M8 6l-5 6 5 6M16 6l5 6-5 6M14 4l-4 16',
   lane: 'M6 3v18M18 3v18M12 4v3M12 10.5v3M12 17v3',
   sidewalk: 'M3 20h18M3 16h18M6 16v4M12 16v4M18 16v4M9 13a1.4 1.4 0 1 1-.01 0M9 4a1.4 1.4 0 1 1-.01 0M9 6v4l-2 3M9 10l2 3',

@@ -409,3 +409,29 @@
 .qty-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .qty-meta .qty-code { width: 104px; height: 22px; padding: 0 6px; font-size: 11px; }
 .qty-foot { padding: var(--s-3); }
+/* Profile studio */
+.profile-studio { display: grid; gap: 8px; }
+.ps-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.ps-title { display: grid; gap: 2px; min-width: 0; }
+.ps-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.profile-chart { width: 100%; height: 230px; background: var(--ink-0, var(--ink-1)); border: 1px solid var(--line-1); border-radius: var(--r-2); cursor: crosshair; user-select: none; }
+.pc-grid { stroke: var(--line-1); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pc-tick { fill: var(--text-3); font-size: 11px; font-family: var(--font-mono, monospace); }
+.pc-ground { fill: none; stroke: #9b7a52; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.pc-design { fill: none; stroke: var(--drip-orange); stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+.pc-cut { fill: rgba(185, 49, 42, 0.22); }
+.pc-fill { fill: rgba(47, 125, 91, 0.22); }
+.pc-curve { fill: rgba(131, 180, 209, 0.10); }
+.pc-pvi { fill: var(--ink-1); stroke: var(--drip-orange); stroke-width: 2.5; cursor: ns-resize; vector-effect: non-scaling-stroke; }
+.pc-grade { fill: var(--text-2); font-size: 12px; font-weight: 600; }
+.pc-grade.is-bad { fill: var(--err); }
+.pc-cursor { stroke: var(--drip-accent); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.pc-axis { stroke: var(--text-3); stroke-dasharray: 3 3; }
+.ps-hint { margin: 0; }
+.ps-body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1280px) { .ps-body { grid-template-columns: 1fr; } }
+.ps-table td .num-field, .ps-table td input { max-width: 120px; }
+.cross-section svg { width: 100%; height: 150px; background: var(--ink-0, var(--ink-1)); border: 1px solid var(--line-1); border-radius: var(--r-2); }
+.profile-setup { display: grid; gap: 10px; justify-items: center; }
+.profile-setup-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.issue-list li.err { color: var(--err); }

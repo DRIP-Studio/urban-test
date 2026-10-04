@@ -75,7 +75,7 @@ describe('computeQuantities', () => {
     expect(by('rem|furniture.bin')!.chapter).toBe('Demolizioni e rimozioni');
     expect(by('head|signal.vehicle')!.quantity).toBe(1);
     expect(by('plan')!.quantity).toBe(1);
-    expect(q[0]!.code).toBe('01.001');
+    expect(q[0]!.code).toBe('02.001'); // chapter numbers are fixed (01 = Movimenti terra)
   });
 
   it('prices every row with the default list', () => {
@@ -162,5 +162,21 @@ describe('totals and export', () => {
     expect(s).toContain('Prezzi indicativi DRIP — sostituire con il prezziario regionale vigente');
     expect(s).toContain('Pavimentazioni;01.001;A;m²;100,00;25,00;2500,00');
     expect(s).toContain(';;Totale complessivo;;;;3399,00');
+  });
+});
+
+describe('movimenti terra', () => {
+  it('turns profile earthworks into cut, fill and surplus rows priced per m³', () => {
+    const q = computeQuantities({
+      surfaces: [], markings: [], lines: [], baselineSurfaces: [], assets: [], signalPlanIds: [], baselineSignalPlanIds: [],
+      earthworks: [{ roadName: 'Via A', cutM3: 1200, fillM3: 300 }, { roadName: 'Via B', cutM3: 100, fillM3: 200 }],
+    });
+    const by = (k: string) => q.find((r) => r.key === k)!;
+    expect(by('ew|cut').quantity).toBe(1300);
+    expect(by('ew|fill').quantity).toBe(500);
+    expect(by('ew|surplus').quantity).toBe(800);
+    expect(q.every((r) => r.chapter === 'Movimenti terra' && r.code.startsWith('01.'))).toBe(true);
+    const priced = priceItems(q, { name: '', source: '', items: [], useDefaults: true });
+    expect(priced.find((r) => r.key === 'ew|cut')!.unitPrice).toBeGreaterThan(0);
   });
 });

@@ -1,6 +1,6 @@
 import { LocalFrame, geom, layoutSection, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
-import { commit, select, setDock, setTool, useApp } from '../state/store';
+import { commit, openDock, select, setDock, setTool, useApp } from '../state/store';
 import { deleteSelection, duplicateSelection, movePlate, plateOnPoleOps, polePlates } from '../state/actions';
 import { useMemo, useState } from 'react';
 import { flyTo } from '../map/mapStore';
@@ -56,6 +56,7 @@ function RoadInspector({ road }: { road: Road }) {
         {road.tags && Object.keys(road.tags).length ? <details className="tags"><summary>Tag OSM</summary>{Object.entries(road.tags).map(([k, v]) => <div key={k} className="mono">{k}={v}</div>)}</details> : null}
       </Section>
       <div className="inspector-actions">
+        <Button icon="profile" onClick={() => openDock('profile')}>Profilo</Button>
         <Button icon="node" onClick={() => setTool('nodes')}>Vertici</Button>
         <Button icon="cut" onClick={() => setTool('cut')}>Taglia</Button>
         <Button icon="trash" variant="danger" onClick={deleteSelection}>Elimina</Button>
