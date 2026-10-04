@@ -5,6 +5,8 @@ export * from './ops/registry';
 export * from './ops/replay';
 export * from './ops/builtin';
 export * from './ops/network-ops';
+export * from './ops/streetscape-ops';
+export { roadText, roadSymbol, bays, MARKING_MATERIAL } from './physical/streetscape';
 export * from './ops/road-factory';
 export * from './history/scenario-history';
 export * from './physical/section';

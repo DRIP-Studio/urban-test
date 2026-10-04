@@ -1,4 +1,4 @@
-import { LocalFrame, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
+import { LocalFrame, geom, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, VEHICLE_SPECS } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
 import { partPrints } from '../models/parts';
@@ -17,8 +17,8 @@ function minSpriteScale(item: FurnitureItem): number {
 
 const close = (r: readonly LngLat[]) => [...r.map((p) => [p[0], p[1]]), [r[0]![0], r[0]![1]]];
 
-export function buildingsFC(b: CityBaseline) {
-  return fc(Object.values(b.buildings).map((x): Feature<Polygon> => ({
+export function buildingsFC(b: CityBaseline, removed?: Readonly<Record<string, true>>) {
+  return fc(Object.values(b.buildings).filter((x) => !removed?.[x.id]).map((x): Feature<Polygon> => ({
     type: 'Feature', id: x.id, geometry: { type: 'Polygon', coordinates: [close(x.footprint)] }, properties: { id: x.id, h: x.heightM, minH: x.minHeightM, name: x.name ?? null },
   })));
 }
@@ -197,6 +197,29 @@ export function preferentialLanesFC(net: Network) {
       const centre = (e.left + e.right) / 2;
       out.push({ type: 'Feature', id: lane.id, geometry: { type: 'LineString', coordinates: r.axis.map((p) => [p[0], p[1]]) },
         properties: { id: lane.id, kind: lane.restriction === 'bike_only' ? 'bike' : 'bus', offM: -centre, widthM: Math.abs(e.left - e.right) * 0.8 } });
+    }
+  }
+  return fc(out);
+}
+
+/** Bridges and viaducts: deck band (casing + shadow) and piers, from Road.structure. */
+export function structuresFC(net: Network, origin: LngLat) {
+  const f = new LocalFrame(origin);
+  const out: Feature[] = [];
+  for (const r of Object.values(net.roads)) {
+    const st = r.structure;
+    if (!st || st.type === 'covered') continue;
+    const axis = r.axis.map((p) => f.toMetric(p));
+    const w = Math.max(3, r.section.elements.reduce((a, e) => a + e.widthM, 0));
+    const ring = geom.band(axis, w / 2 + 0.4, w / 2 + 0.4).map((p) => f.toLngLat(p));
+    out.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [close(ring)] }, properties: { id: `st:${r.id}`, roadId: r.id, kind: st.type, h: st.heightM, layer: st.layer } });
+    if (st.type === 'tunnel') continue;
+    const len = geom.lengthOf(axis), step = st.piersEveryM ?? 25;
+    for (let d = Math.min(step / 2, len / 2), k = 0; d < len; d += step, k++) {
+      const { p, t } = geom.sampleAt(axis, d);
+      const n: [number, number] = [-t[1], t[0]], hw = Math.min(w / 2 - 0.6, 3);
+      const pier = [[-0.6, -hw], [0.6, -hw], [0.6, hw], [-0.6, hw]].map(([a, b]) => f.toLngLat([p[0] + t[0] * a! + n[0] * b!, p[1] + t[1] * a! + n[1] * b!]));
+      out.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [close(pier)] }, properties: { id: `sp:${r.id}:${k}`, roadId: r.id, kind: 'pier', h: Math.max(0.5, st.heightM - 1.2) } });
     }
   }
   return fc(out);

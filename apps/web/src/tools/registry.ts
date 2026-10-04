@@ -8,6 +8,7 @@ import { pavingTool } from './paving';
 import { roundaboutTool } from './roundabout';
 import { furnitureTool, signTool } from './place';
 import { selectTool } from './select';
+import { calmingTool, markingTool } from './streetscape';
 import { useTool } from './toolState';
 import { usePicks } from './picks';
 import type { ToolDef } from './types';
@@ -86,6 +87,8 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'signals', label: 'Semafori', icon: 'signal', shortcut: 'T', group: 'civil', modes: ['design', 'traffic'], hint: 'Clic su un incrocio: Signal Studio con fasi e ciclo', handler: makeJunctionPicker('signals') },
   { id: 'signs', label: 'Cartelli', icon: 'sign', shortcut: 'G', group: 'street', modes: ['design'], hint: 'Scegli il segnale e clic per posarlo · Alt+clic su un cartello aggiunge un pannello allo stesso palo · Q/E ruota', cursor: 'crosshair', handler: signTool },
   { id: 'crossing', label: 'Attraversamento', icon: 'crossing', shortcut: 'K', group: 'street', modes: ['design'], hint: 'Due clic da un bordo all\'altro della carreggiata', cursor: 'crosshair', handler: crossingDraw },
+  { id: 'marking', label: 'Segnaletica orizzontale', icon: 'marking', shortcut: 'W', group: 'street', modes: ['design'], hint: 'Linee e aree: clic sui vertici, Invio per finire · scritte, simboli e frecce: un clic sulla corsia (orientati sul senso di marcia)', cursor: 'crosshair', handler: markingTool },
+  { id: 'calming', label: 'Moderazione traffico', icon: 'calming', shortcut: 'D', group: 'street', modes: ['design'], hint: 'Clic sulla carreggiata: dossi, piattaforme e attraversamenti rialzati, cuscini berlinesi, bande rumorose · clic su un incrocio per rialzarlo', cursor: 'crosshair', handler: calmingTool },
   { id: 'furniture', label: 'Arredo', icon: 'furniture', shortcut: 'F', group: 'space', modes: ['design'], hint: 'Scegli l\'elemento · si allinea alla strada più vicina (Alt per libero) · Q/E o Shift+rotella ruota', cursor: 'crosshair', handler: furnitureTool },
   { id: 'array', label: 'Distribuisci', icon: 'array', shortcut: 'Y', group: 'space', modes: ['design'], hint: 'Disegna un percorso: oggetti ogni N metri (alberi, lampioni, dissuasori)', cursor: 'crosshair', handler: arrayDraw },
   { id: 'paving', label: 'Pavimentazione', icon: 'material', shortcut: 'M', group: 'space', modes: ['design'], hint: 'Clic: pavimenta la superficie · Shift+clic: tutti i marciapiedi della strada · Alt+clic: preleva il materiale', cursor: 'crosshair', handler: pavingTool },

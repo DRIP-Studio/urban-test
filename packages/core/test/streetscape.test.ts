@@ -1,0 +1,80 @@
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { OperationRejected, ScenarioHistory, buildPhysicalModel, layoutSection, osmStructure, roadText, type CityBaseline, type Road, type Scenario } from '../src/index';
+
+const SEED = fileURLToPath(new URL('../../../services/api/seed/frattamaggiore.baseline.json.gz', import.meta.url));
+let baseline: CityBaseline;
+beforeAll(() => { baseline = JSON.parse(gunzipSync(readFileSync(SEED)).toString('utf8')) as CityBaseline; });
+const scenario = (): Scenario => ({ id: 's', name: 'T', isBaseline: false, locked: false, archived: false, createdAt: '2026-10-04T00:00:00Z', operations: [] });
+let seq = 0;
+const ids = () => `x${++seq}`;
+const P = { kind: 'project' as const, source: 'test' };
+const car = (r: Road) => r.lanes.some((l) => l.modes.includes('car')) && !layoutSection(r).pedestrianOnly;
+
+describe('streetscape: traffic calming, markings, structures', () => {
+  it('refuses humps above 50 km/h and builds raised crossings with ramps and markings', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const road = Object.values(h.network.roads).find((r) => car(r) && r.speedKmh <= 50 && r.axis.length >= 2)!;
+    const fast = { ...road, speedKmh: 70 };
+    h.commit({ type: 'road.update', payload: { roadId: road.id, changes: { speedKmh: 70 } } });
+    expect(() => h.commit({ type: 'feature.set', payload: { feature: { id: 'f1', kind: 'speed_hump', roadId: road.id, station: 10, lengthM: 0.3, rampM: 0.3, heightM: 0.03, state: 'project', properties: {}, provenance: P } } })).toThrow(OperationRejected);
+    void fast;
+    h.commit({ type: 'road.update', payload: { roadId: road.id, changes: { speedKmh: 30 } } });
+    h.commit({ type: 'feature.set', payload: { feature: { id: 'f2', kind: 'raised_crossing', roadId: road.id, station: 12, lengthM: 4, rampM: 1.2, heightM: 0.1, state: 'project', properties: {}, provenance: P } } });
+    h.commit({ type: 'marking.set', payload: { marking: { id: 'm1', kind: 'text', geometry: [road.axis[0]!, road.axis[1]!], color: 'white', text: 'STOP', state: 'project', provenance: P } } });
+    h.commit({ type: 'marking.set', payload: { marking: { id: 'm2', kind: 'symbol', symbol: 'bike', geometry: [road.axis[0]!, road.axis[1]!], color: 'white', state: 'project', provenance: P } } });
+    const m = buildPhysicalModel(h.network, { origin: baseline.origin });
+    expect(m.surfaces.filter((s) => s.kind === 'raised').length).toBe(3);
+    expect(m.surfaces.filter((s) => s.kind === 'raised').every((s) => s.heightM > 0)).toBe(true);
+    expect(m.markings.filter((x) => x.id.startsWith('fm:f2')).length).toBeGreaterThan(5);
+    expect(m.markings.filter((x) => x.id.startsWith('cm:m1')).length).toBeGreaterThanOrEqual(8); // S T O P strokes
+    expect(m.markings.filter((x) => x.id.startsWith('cm:m2')).length).toBeGreaterThan(5);
+    h.commit({ type: 'feature.remove', payload: { featureIds: ['f2'] } });
+    expect(buildPhysicalModel(h.network, { origin: baseline.origin }).surfaces.some((s) => s.kind === 'raised')).toBe(false);
+  });
+
+  it('draws road text across the lane with letters elongated along travel', () => {
+    const r = roadText('BUS', [0, 0], [0, 1], 3, 1.6);
+    const ys = r.flat().map((p) => p[1]), xs = r.flat().map((p) => p[0]);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(1.5);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(3.1);
+  });
+
+  it('adds parking bays to parking strips and preselection arrows before junctions', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const before = buildPhysicalModel(h.network, { origin: baseline.origin });
+    const withParking = Object.values(h.network.roads).filter((r) => r.section.elements.some((e) => e.kind === 'parking'));
+    if (withParking.length) expect(before.markings.some((x) => x.kind === 'parking_bay')).toBe(true);
+    // A two-lane one-way approach into a junction gets turn arrows.
+    const deg = new Map<string, number>();
+    for (const r of Object.values(h.network.roads)) if (car(r)) for (const n of [r.from, r.to]) deg.set(n, (deg.get(n) ?? 0) + 1);
+    const road = Object.values(h.network.roads).find((r) => car(r) && (deg.get(r.to) ?? 0) >= 3 && r.lanes.filter((l) => l.direction !== 'backward').length >= 2);
+    if (road) {
+      const m = buildPhysicalModel(h.network, { origin: baseline.origin });
+      expect(m.markings.some((x) => x.id.startsWith(`pa:${road.id}:`))).toBe(true);
+    }
+  });
+
+  it('marks bridges and removes/restores baseline buildings', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const road = Object.values(h.network.roads).find(car)!;
+    h.commit({ type: 'road.setStructure', payload: { roadIds: [road.id], structure: { type: 'viaduct', heightM: 6.5, layer: 1, piersEveryM: 30 } } });
+    expect(h.network.roads[road.id]!.structure?.type).toBe('viaduct');
+    const b = Object.keys(baseline.buildings)[0]!;
+    h.commit({ type: 'building.remove', payload: { buildingIds: [b] } });
+    expect(h.network.removedBuildings?.[b]).toBe(true);
+    h.commit({ type: 'building.remove', payload: { buildingIds: [b], restore: true } });
+    expect(h.network.removedBuildings?.[b]).toBeUndefined();
+  });
+});
+
+describe('OSM structures', () => {
+  it('maps bridge/tunnel/layer tags to Road.structure', () => {
+    expect(osmStructure({ bridge: 'viaduct', layer: '2' })).toMatchObject({ type: 'viaduct', layer: 2, heightM: 11 });
+    expect(osmStructure({ bridge: 'yes' })).toMatchObject({ type: 'bridge', layer: 1 });
+    expect(osmStructure({ tunnel: 'yes', layer: '-1' })).toMatchObject({ type: 'tunnel', layer: -1 });
+    expect(osmStructure({ highway: 'primary' })).toBeUndefined();
+  });
+});

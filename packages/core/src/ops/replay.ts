@@ -1,8 +1,28 @@
-import type { CityBaseline, Network, Operation } from '../model/types';
+import type { CityBaseline, Network, Operation, Road, RoadStructure } from '../model/types';
 import { applyOperation, type Issue } from './registry';
 
 export function baselineNetwork(baseline: CityBaseline): Network {
-  return { nodes: baseline.nodes, roads: baseline.roads, assets: baseline.assets, junctions: {}, roundabouts: {}, signalPlans: {}, zones: {}, areas: {} };
+  return { nodes: baseline.nodes, roads: withOsmStructures(baseline.roads), assets: baseline.assets, junctions: {}, roundabouts: {}, signalPlans: {}, zones: {}, areas: {} };
+}
+
+/** OSM bridge / tunnel / layer tags → Road.structure (only where the road has none). */
+export function osmStructure(tags: Readonly<Record<string, string>> | undefined): RoadStructure | undefined {
+  if (!tags) return undefined;
+  const layer = Math.max(-5, Math.min(5, Math.round(Number(tags.layer ?? 0)) || 0));
+  if (tags.bridge && tags.bridge !== 'no') return { type: tags.bridge === 'viaduct' ? 'viaduct' : 'bridge', heightM: Math.max(5.5, 5.5 * Math.max(1, layer)), layer: Math.max(1, layer), piersEveryM: tags.bridge === 'viaduct' ? 30 : 40 };
+  if (tags.tunnel && tags.tunnel !== 'no') return { type: tags.tunnel === 'building_passage' ? 'covered' : 'tunnel', heightM: 8, layer: Math.min(-1, layer) };
+  if (tags.covered === 'yes') return { type: 'covered', heightM: 0, layer: 0 };
+  return undefined;
+}
+
+function withOsmStructures(roads: Network['roads']): Network['roads'] {
+  let out: Record<string, Road> | null = null;
+  for (const r of Object.values(roads)) {
+    if (r.structure) continue;
+    const st = osmStructure(r.tags);
+    if (st) (out ??= { ...roads })[r.id] = { ...r, structure: st };
+  }
+  return out ?? roads;
 }
 
 export interface ReplayResult {

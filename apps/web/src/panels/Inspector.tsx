@@ -1,4 +1,5 @@
 import { LocalFrame, dmCategory, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { FeatureInspector, MarkingInspector, PreselectionSection, StructureSection } from './StreetscapePanels';
 import { ztlZones } from '../ztl/link';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
 import { commit, openDock, select, setDock, setTool, useApp } from '../state/store';
@@ -51,6 +52,8 @@ function RoadInspector({ road }: { road: Road }) {
       </Section>
       <SidewalkSection road={road} />
       <LanesSection road={road} />
+      <PreselectionSection road={road} />
+      <StructureSection road={road} />
       <RestrictionsSection roads={[road]} />
       <Section title="Provenienza dei dati" defaultOpen={false}>
         <ul className="prov-list">
@@ -288,5 +291,7 @@ export function Inspector() {
   if (sel.kind === 'zone' && net.zones[id]) return <ZoneInspector zone={net.zones[id]!} />;
   if (sel.kind === 'roundabout' && net.roundabouts[id]) return <RoundaboutInspector rb={net.roundabouts[id]!} />;
   if (sel.kind === 'node') return <NodeInspector nodeId={id} />;
+  if (sel.kind === 'feature') return <FeatureInspector id={id} />;
+  if (sel.kind === 'marking') return <MarkingInspector id={id} />;
   return <Empty icon="info" title="Elemento non più presente" >È stato modificato o rimosso da un'operazione successiva.</Empty>;
 }

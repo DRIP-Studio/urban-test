@@ -5,14 +5,15 @@ import { armKey, buildJunction, type JunctionGeometry } from './junction';
 import { arrowRing, arrowStations, dashFor, dashes, hasEdgeLines, MARKING, solid, zebra } from './markings';
 import { buildRoundabouts } from './roundabout';
 import { layoutSection } from './section';
+import { addStreetscape, addStreetscapeRoads } from './streetscape';
 import { MetricCache, vehicularArms } from './topology';
 
 export type SurfaceKind =
   | 'carriageway' | 'bus' | 'median' | 'cycle' | 'parking' | 'sidewalk' | 'furniture' | 'green' | 'shoulder' | 'curb'
   | 'junction' | 'corner' | 'footpath'
-  | 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter' | 'area';
+  | 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter' | 'area' | 'raised';
 
-export type MarkKind = 'lane_line' | 'edge_line' | 'center_line' | 'stop_line' | 'give_way' | 'zebra' | 'arrow' | 'ring_line';
+export type MarkKind = 'lane_line' | 'edge_line' | 'center_line' | 'stop_line' | 'give_way' | 'zebra' | 'arrow' | 'ring_line' | 'calming' | 'custom' | 'parking_bay' | 'bus_stop' | 'text';
 
 export type PhysState = 'existing' | 'project';
 
@@ -98,10 +99,11 @@ export class PhysicalCache {
   junctions = new Map<string, JunctionEntry>();
   roads = new Map<string, RoadEntry>();
   crossings = new Map<string, { deps: readonly unknown[]; out: PhysPolygon[] }>();
+  streets = new Map<string, { deps: readonly unknown[]; out: PhysPolygon[] }>();
   grid: RoadGrid | null = null;
   reset(origin: LngLat, frame: LocalFrame): void {
     this.origin = origin; this.metric = new MetricCache(frame);
-    this.junctions.clear(); this.roads.clear(); this.crossings.clear(); this.grid = null;
+    this.junctions.clear(); this.roads.clear(); this.crossings.clear(); this.streets.clear(); this.grid = null;
   }
 }
 /** Uniform grid over road axes for nearest-road queries, updated only for roads that changed. */
@@ -221,6 +223,28 @@ export function buildPhysicalModel(net: Network, opts: BuildOptions): PhysicalMo
 
   // 5. Pedestrian crossings: existing OSM crossings + authored junction crossings.
   addCrossings(net, opts.features ?? {}, metric, setbacks, markings, toLL, cache);
+
+  // 5b. Streetscape: traffic calming, custom and automatic markings (bays, preselection arrows, bus stops).
+  const vehicularDegree = (nodeId: string) => (roadsAtNode.get(nodeId) ?? []).filter((r) => !layoutSection(r).pedestrianOnly).length;
+  const autoOut: PhysPolygon[] = [];
+  for (const road of Object.values(net.roads)) {
+    if (rb.ringRoadIds.has(road.id) || layoutSection(road).pedestrianOnly) continue;
+    const s0 = setbacks.get(`${road.id}|s`) ?? 0, s1 = setbacks.get(`${road.id}|e`) ?? 0;
+    const ends: [boolean, boolean] = [vehicularDegree(road.from) >= 3, vehicularDegree(road.to) >= 3];
+    const deps = [road, s0, s1, ends[0], ends[1]];
+    const hit = cache?.streets.get(road.id);
+    if (hit && sameDeps(hit.deps, deps)) { autoOut.push(...hit.out); continue; }
+    const axis = metric.axis(road);
+    const L = lengthOf(axis);
+    if (L - s0 - s1 < 1) continue;
+    const one = new Map([[road.id, { axis: slice(axis, s0, L - s1), state: roadState(road), ends }]]);
+    const tmp = { surfaces: [] as PhysPolygon[], markings: [] as PhysPolygon[] };
+    addStreetscapeRoads(net, one, toLL, tmp);
+    cache?.streets.set(road.id, { deps, out: tmp.markings });
+    autoOut.push(...tmp.markings);
+  }
+  markings.push(...autoOut);
+  addStreetscape(net, metric, toLL, { surfaces, markings });
 
   // 6. Authored areas: public space, green infrastructure, parking bays, painted crossings.
   for (const area of Object.values(net.areas)) {

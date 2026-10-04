@@ -1,4 +1,4 @@
-import { LocalFrame, type LngLat, type Network } from '@drip-urban/core';
+import { LocalFrame, geom, type LngLat, type Network } from '@drip-urban/core';
 import type { Map as MLMap, MapGeoJSONFeature } from 'maplibre-gl';
 import { moveAssets } from '../state/actions';
 import { select, useApp, type Selection } from '../state/store';
@@ -6,7 +6,7 @@ import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import type { ToolEvent, ToolHandler } from './types';
 
-const PICK_LAYERS = ['signals-icon', 'asset-pt-sign', 'asset-pt-dot', 'asset-fp-fill', 'surfaces-fill', 'zones-fill'];
+const PICK_LAYERS = ['signals-icon', 'asset-pt-sign', 'asset-pt-dot', 'asset-fp-fill', 'markings-fill', 'surfaces-fill', 'structures-casing', 'zones-fill'];
 
 export function pickAt(map: MLMap, point: { x: number; y: number }, tolerancePx = 5): Selection | null {
   const layers = PICK_LAYERS.filter((l) => map.getLayer(l) && map.getLayoutProperty(l, 'visibility') !== 'none');
@@ -18,6 +18,11 @@ export function selectionFromFeatures(feats: MapGeoJSONFeature[]): Selection | n
   const by = (l: string) => feats.filter((f) => f.layer.id === l);
   const asset = [...by('signals-icon'), ...by('asset-pt-sign'), ...by('asset-pt-dot'), ...by('asset-fp-fill')][0];
   if (asset) return { kind: 'asset', ids: [String(asset.properties.id)] };
+  const ownId = (l: string, pre: string) => by(l).map((f) => String(f.properties.id)).find((id) => id.startsWith(pre))?.split(':')[1];
+  const marking = ownId('markings-fill', 'cm:');
+  if (marking) return { kind: 'marking', ids: [marking] };
+  const feature = ownId('markings-fill', 'fm:') ?? ownId('surfaces-fill', 'f:');
+  if (feature) return { kind: 'feature', ids: [feature] };
   const surfaces = by('surfaces-fill');
   const area = surfaces.find((f) => f.properties.areaId);
   if (area) return { kind: 'area', ids: [String(area.properties.areaId)] };
@@ -27,6 +32,8 @@ export function selectionFromFeatures(feats: MapGeoJSONFeature[]): Selection | n
   if (junction && junction.properties.nodeId) return { kind: 'node', ids: [String(junction.properties.nodeId)] };
   const road = surfaces.find((f) => f.properties.roadId);
   if (road) return { kind: 'road', ids: [String(road.properties.roadId)] };
+  const deck = by('structures-casing')[0];
+  if (deck?.properties.roadId) return { kind: 'road', ids: [String(deck.properties.roadId)] };
   const zone = by('zones-fill')[0];
   if (zone) return { kind: 'zone', ids: [String(zone.properties.id)] };
   return null;
@@ -50,11 +57,26 @@ export function selectionFC(sel: Selection | null, net: Network | null) {
       const z = net.zones[id]!;
       out.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...z.polygon.map((p) => [p[0], p[1]]), [z.polygon[0]![0], z.polygon[0]![1]]]] }, properties: {} });
     }
+    if (sel.kind === 'marking' && net.markings?.[id]) {
+      const g = net.markings[id]!.geometry.map((p) => [p[0], p[1]]);
+      out.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: ['hatch', 'chevrons', 'box_junction', 'parking_bays'].includes(net.markings[id]!.kind) && g.length > 2 ? [...g, g[0]!] : g }, properties: {} });
+    }
+    if (sel.kind === 'feature' && net.features?.[id]) {
+      const ft = net.features[id]!, road = ft.roadId ? net.roads[ft.roadId] : undefined;
+      const at = road ? pointAlong(road.axis, ft.station ?? 0) : ft.nodeId ? net.nodes[ft.nodeId]?.at : undefined;
+      if (at) out.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [at[0], at[1]] }, properties: {} });
+    }
     if (sel.kind === 'roundabout' && net.roundabouts[id]) {
       for (const r of Object.values(net.roads)) if (r.tags?.roundabout === id) out.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.axis.map((p) => [p[0], p[1]]) }, properties: {} });
     }
   }
   return fc(out);
+}
+
+function pointAlong(axis: readonly LngLat[], d: number): LngLat {
+  const f = new LocalFrame(axis[0]!);
+  const { p } = geom.sampleAt(axis.map((q) => f.toMetric(q)), d);
+  return f.toLngLat(p);
 }
 
 interface Drag { kind: 'move'; ids: string[]; start: LngLat; last: LngLat }

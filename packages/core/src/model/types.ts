@@ -65,6 +65,10 @@ export interface CrossSectionElement {
   /** For 'lane' elements: the lane id in Road.lanes. */
   readonly laneId?: string;
   readonly material?: string;
+  /** For 'parking' elements: bay colour (white free, blue paid, yellow reserved, pink) and layout. */
+  readonly parking?: { readonly color: 'white' | 'blue' | 'yellow' | 'pink'; readonly layout: 'parallel' | 'perpendicular' | 'angled' };
+  /** For 'median' elements: raised (kerbed island) or painted (zebratura). */
+  readonly raised?: boolean;
 }
 
 /** Ordered left → right looking along the axis direction. */
@@ -122,6 +126,8 @@ export interface Road {
   readonly restrictions?: RoadRestrictions;
   /** Vertical alignment (profilo longitudinale); when absent the road follows the terrain. */
   readonly vertical?: VerticalProfile;
+  /** Bridge / viaduct / tunnel. */
+  readonly structure?: RoadStructure;
   /** Provenance per attribute name; `geometry` and `width` are always present. */
   readonly provenance: Readonly<Record<string, Provenance>>;
   readonly tags?: Readonly<Record<string, string>>;
@@ -414,6 +420,62 @@ export interface Area {
   readonly provenance: Provenance;
 }
 
+/**
+ * Traffic calming and raised elements placed along a road (DPR 495/1992 art. 179; DM 5/11/2001):
+ * dossi, piattaforme rialzate, attraversamenti pedonali rialzati, cuscini berlinesi, bande rumorose.
+ */
+export type RoadFeatureKind = 'speed_hump' | 'speed_table' | 'raised_crossing' | 'speed_cushion' | 'rumble_strips' | 'raised_junction';
+
+export interface RoadFeature {
+  readonly id: string;
+  readonly kind: RoadFeatureKind;
+  /** Road it sits on (not for raised_junction, which uses nodeId). */
+  readonly roadId?: string;
+  readonly nodeId?: string;
+  /** Chainage of the centre from the road start (m). */
+  readonly station?: number;
+  /** Plateau length along the road (m) and ramp length each side (m). */
+  readonly lengthM: number;
+  readonly rampM: number;
+  readonly heightM: number;
+  readonly state: AssetState;
+  readonly properties: Readonly<Record<string, unknown>>;
+  readonly provenance: Provenance;
+}
+
+/** Custom horizontal marking (segnaletica orizzontale, artt. 137–155 Reg.). */
+export type MarkingKind =
+  | 'line_solid' | 'line_dashed' | 'line_double' | 'line_mixed' | 'line_yellow' | 'zigzag'
+  | 'stop_line' | 'give_way_line' | 'give_way_triangle'
+  | 'arrow' | 'text' | 'symbol' | 'hatch' | 'chevrons' | 'parking_bays' | 'box_junction';
+export type MarkingColor = 'white' | 'yellow' | 'blue' | 'red' | 'pink' | 'green';
+
+export interface Marking {
+  readonly id: string;
+  readonly kind: MarkingKind;
+  /** Line kinds: polyline; hatch/chevrons/box_junction/parking_bays: polygon or polyline (bays along it); text/symbol/arrow/triangle: [anchor, direction point]. */
+  readonly geometry: readonly LngLat[];
+  readonly color: MarkingColor;
+  readonly widthM?: number;
+  readonly text?: string;
+  /** symbol: 'bike' | 'wheelchair' | 'bus' | 'pedestrian' | 'school' | 'speed30'; arrow: TurnKind list joined by '+'. */
+  readonly symbol?: string;
+  /** parking_bays: layout and bay size. */
+  readonly bays?: { readonly layout: 'parallel' | 'perpendicular' | 'angled'; readonly lengthM: number; readonly widthM: number; readonly side: 'left' | 'right' };
+  readonly state: AssetState;
+  readonly provenance: Provenance;
+}
+
+/** Bridge, viaduct, tunnel: the road runs above/below the ground (OSM bridge/tunnel/layer). */
+export interface RoadStructure {
+  readonly type: 'bridge' | 'viaduct' | 'tunnel' | 'covered';
+  /** Deck height above ground at mid-span (m) for bridges/viaducts; depth for tunnels. */
+  readonly heightM: number;
+  /** Ordering with crossing roads (OSM layer). */
+  readonly layer: number;
+  readonly piersEveryM?: number;
+}
+
 /** The editable, derived state of one scenario: baseline + operations replayed. */
 export interface Network {
   readonly nodes: Readonly<Record<string, RoadNode>>;
@@ -424,4 +486,10 @@ export interface Network {
   readonly signalPlans: Readonly<Record<string, SignalPlan>>;
   readonly zones: Readonly<Record<string, Zone>>;
   readonly areas: Readonly<Record<string, Area>>;
+  /** Traffic calming and raised elements (absent in older scenarios). */
+  readonly features?: Readonly<Record<string, RoadFeature>>;
+  /** Custom horizontal markings (absent in older scenarios). */
+  readonly markings?: Readonly<Record<string, Marking>>;
+  /** Baseline buildings removed in the scenario (e.g. replaced by an imported model). */
+  readonly removedBuildings?: Readonly<Record<string, true>>;
 }

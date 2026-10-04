@@ -8,7 +8,7 @@ import { useWms, wmsLayerDefs } from './wms';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'sign-poles', 'signs3d', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -37,6 +37,7 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'buildings', label: 'Edifici', category: 'existing', mapLayers: ['buildings-fill', 'buildings-line'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['buildings-fill', 'fill-opacity']] },
   { id: 'context', label: 'Verde, acque, aree', category: 'existing', mapLayers: ['context-fill'], defaultVisible: true, source: 'OpenStreetMap', opacity: [['context-fill', 'fill-opacity']] },
   { id: 'surfaces', label: 'Superfici stradali e marciapiedi', category: 'existing', mapLayers: ['surfaces-fill', 'surfaces-outline'], defaultVisible: true, source: 'Modello fisico DRIP (da sezione e corsie)', opacity: [['surfaces-fill', 'fill-opacity']] },
+  { id: 'structures', label: 'Ponti, viadotti, gallerie', category: 'existing', mapLayers: ['structures-shadow', 'structures-casing', 'structures-piers'], defaultVisible: true, source: 'Strutture stradali (OSM bridge/tunnel + progetto)' },
   { id: 'markings', label: 'Segnaletica orizzontale', category: 'existing', mapLayers: ['markings-fill'], defaultVisible: true, source: 'Generata dal modello corsie (CdS)' },
   { id: 'kerbs', label: 'Cordoli', category: 'existing', mapLayers: ['kerbs-line'], defaultVisible: true, source: 'Modello fisico DRIP' },
   { id: 'labels', label: 'Nomi delle strade', category: 'base', mapLayers: ['labels-text'], defaultVisible: true, source: 'OpenStreetMap' },
@@ -93,6 +94,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'buildings-fill', type: 'fill', source: 'buildings', paint: { 'fill-color': dark ? '#2b2e33' : '#d6d1c7', 'fill-opacity': 0.95 } });
   L({ id: 'buildings-hatch', type: 'fill', source: 'buildings', layout: { visibility: 'none' }, paint: { 'fill-pattern': 'ctr-hatch' } });
   L({ id: 'buildings-line', type: 'line', source: 'buildings', minzoom: 15, paint: { 'line-color': dark ? '#3a3e44' : '#b9b3a7', 'line-width': 0.6 } });
+  L({ id: 'structures-shadow', type: 'fill', source: 'structures', filter: ['all', ['!=', ['get', 'kind'], 'pier'], ['!=', ['get', 'kind'], 'tunnel']], paint: { 'fill-color': '#000000', 'fill-opacity': 0.22, 'fill-translate': [5, 5], 'fill-translate-anchor': 'viewport' } });
+  L({ id: 'structures-casing', type: 'line', source: 'structures', filter: ['!=', ['get', 'kind'], 'pier'], paint: { 'line-color': dark ? '#8d949c' : '#5b5f64', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 20, 3], 'line-dasharray': ['case', ['==', ['get', 'kind'], 'tunnel'], ['literal', [2, 2]], ['literal', [1, 0]]] } });
   L({ id: 'surfaces-fill', type: 'fill', source: 'surfaces', layout: { 'fill-sort-key': ['get', 'z'] }, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1], 'fill-antialias': false } });
   // Real-scale paving textures over the flat colour (one image per zoom step; see patterns.ts).
   const patterned = materials.filter((m) => PATTERNS.has(m.pattern)).map((m) => m.id);
@@ -101,7 +104,7 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
     layout: { 'fill-sort-key': ['get', 'z'] },
     paint: { 'fill-pattern': ['step', ['zoom'], pat(18), 18.5, pat(19), 19.5, pat(20), 20.5, pat(21), 21.5, pat(22)], 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 17.5, 0, 18.2, 1] } });
   L({ id: 'surfaces-outline', type: 'line', source: 'surfaces', minzoom: 17, filter: ['in', ['get', 'kind'], ['literal', ['area', 'roundabout_island', 'splitter', 'median', 'green']]], paint: { 'line-color': dark ? '#4a4f55' : '#8f8a80', 'line-width': 0.6 } });
-  L({ id: 'markings-fill', type: 'fill', source: 'markings', minzoom: 15.5, paint: { 'fill-color': ['case', ['==', ['get', 'material'], 'road_marking_yellow'], '#f2c230', '#f4f3ef'], 'fill-antialias': true } });
+  L({ id: 'markings-fill', type: 'fill', source: 'markings', minzoom: 15.5, paint: { 'fill-color': ['match', ['get', 'material'], 'road_marking_white', '#f4f3ef', mat], 'fill-antialias': true } });
   L({ id: 'kerbs-line', type: 'line', source: 'lines', minzoom: 16, filter: ['==', ['get', 'kind'], 'kerb'], paint: { 'line-color': dark ? '#6c7178' : '#77746d', 'line-width': ['interpolate', ['linear'], ['zoom'], 16, 0.4, 20, 1.4] } });
   // Proposed changes are outlined along their kerbs (and roundabout outer edge), not on every internal surface seam.
   L({ id: 'project-outline', type: 'line', source: 'lines', filter: ['all', ['==', ['get', 'state'], 'project'], ['==', ['get', 'kind'], 'kerb']], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2], 'line-opacity': 0.95 } });
@@ -151,6 +154,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   // Catalogue furniture is drawn by the volume symbol (asset-3d); the footprint only shows removed items.
   L({ id: 'asset-fp-fill', type: 'fill', source: 'asset-fp', minzoom: 15, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.15, ['boolean', ['get', 'sprite'], false], 0, ['==', ['get', 'category'], 'vegetation'], 0.78, 0.95] } });
   L({ id: 'asset-fp-extrude', type: 'fill-extrusion', source: 'asset-parts', minzoom: 15, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': mat, 'fill-extrusion-base': ['coalesce', ['get', 'b'], 0], 'fill-extrusion-height': ['coalesce', ['get', 'h'], 1], 'fill-extrusion-opacity': 0.97 } });
+  L({ id: 'surfaces-raised', type: 'fill-extrusion', source: 'surfaces', minzoom: 16, filter: ['==', ['get', 'kind'], 'raised'], layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': mat, 'fill-extrusion-height': ['*', 3, ['coalesce', ['get', 'heightM'], 0.1]], 'fill-extrusion-opacity': 0.95 } });
+  L({ id: 'structures-piers', type: 'fill-extrusion', source: 'structures', minzoom: 15, filter: ['==', ['get', 'kind'], 'pier'], layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#7d828a' : '#b9b6ae', 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-opacity': 0.95 } });
   L({ id: 'buildings-extrude', type: 'fill-extrusion', source: 'buildings', minzoom: 14, layout: { visibility: 'none' }, paint: { 'fill-extrusion-color': dark ? '#3a3e44' : '#ddd8ce', 'fill-extrusion-height': ['coalesce', ['get', 'h'], 9], 'fill-extrusion-base': ['coalesce', ['get', 'minH'], 0], 'fill-extrusion-opacity': 0.92 } });
   L({ id: 'asset-3d', type: 'symbol', source: 'asset-pt', minzoom: 16, filter: ['has', 'sprite'], layout: {
     'icon-image': ['get', 'sprite'], 'icon-size': 0.25, 'icon-rotate': ['get', 'rot'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map',

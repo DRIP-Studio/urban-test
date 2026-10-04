@@ -312,6 +312,26 @@
    "permeable": false
   },
   {
+   "id": "road_marking_pink",
+   "label": "Vernice rosa (sosta gestanti/genitori)",
+   "category": "marking",
+   "color": "#e58fb3",
+   "pattern": "none",
+   "scaleM": 1,
+   "roughness": 0.6,
+   "permeable": false
+  },
+  {
+   "id": "road_marking_black",
+   "label": "Vernice nera (contrasto dossi)",
+   "category": "marking",
+   "color": "#1d1e20",
+   "pattern": "none",
+   "scaleM": 1,
+   "roughness": 0.6,
+   "permeable": false
+  },
+  {
    "id": "plastic_red",
    "label": "Polimero rosso",
    "category": "object",

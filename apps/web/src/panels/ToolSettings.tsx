@@ -12,6 +12,7 @@ import { Button, Empty, Field, NumberField, Section, Select, TextField, Toggle }
 import { Icon } from '../ui/Icon';
 import { RoundaboutPlacePanel } from './RoundaboutPanel';
 import { ProjectSummary } from './ProjectSummary';
+import { CalmingPalette, MarkingPalette } from './StreetscapePanels';
 
 function RoadTemplates() {
   const t = useTool();
@@ -192,6 +193,8 @@ export function ToolSettings() {
       </Section>
     );
     case 'roundabout': return <RoundaboutPlacePanel />;
+    case 'marking': return <MarkingPalette />;
+    case 'calming': return <CalmingPalette />;
     case 'paving': return <PavingLibrary />;
     case 'select': return <ProjectSummary />;
     default: return (

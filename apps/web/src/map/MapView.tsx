@@ -17,7 +17,7 @@ import { PX_PER_M } from './furnitureSprite';
 import { SIGN_PLATE_M } from './sources';
 import { addProjectLayers, allLayerDefs, setLayerOpacity, setLayerVisible } from './layers';
 import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
-import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
+import { assetsFC, buildingsFC, structuresFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
 import { renderSignalHeads } from './signalsLive';
 import { loadWms, syncWmsOverlays, useWms } from './wms';
 
@@ -109,6 +109,7 @@ export function MapView() {
     let furnitureById = new Map(furnCat.items.map((i) => [i.id, i]));
     let theme = themeOf(basemap);
     // Tilted map: plate offsets follow the pitch (a vertical metre is ~ ground metre × sin(pitch) on screen).
+    let removedRef: Readonly<Record<string, true>> | undefined;
     let signs3dBase: ReturnType<typeof assetsFC>['signs3d'] | null = null;
     let signsRaf = 0;
     const updateSigns3d = () => {
@@ -129,12 +130,14 @@ export function MapView() {
       const a = assetsFC(network, baseline.origin, furnitureById);
       syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals); syncSource('asset-parts', a.parts);
       syncSource('sign-poles', a.poles);
+      syncSource('structures', structuresFC(network, baseline.origin));
+      if (network.removedBuildings !== removedRef) { removedRef = network.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef)); }
       signs3dBase = a.signs3d; updateSigns3d();
       setSource('selection', selectionFC(selection, network));
     };
     const init = () => {
       addProjectLayers(map, catalogs.materials.items, theme === 'dark');
-      setSource('buildings', buildingsFC(baseline));
+      removedRef = useApp.getState().network?.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef));
       setSource('context', contextFC(baseline));
       if (engine.lastPhysical) {
         setSource('surfaces', engine.lastPhysical.surfaces); setSource('markings', engine.lastPhysical.markings); setSource('lines', engine.lastPhysical.lines);
@@ -161,7 +164,7 @@ export function MapView() {
     // Tilted map: furniture and buildings become real extrusions; flat map: plan symbols with volume.
     const applyPitchMode = () => {
       const tilted = map.getPitch() > 12;
-      for (const id of ['asset-fp-extrude', 'buildings-extrude']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'visible' : 'none');
+      for (const id of ['asset-fp-extrude', 'buildings-extrude', 'surfaces-raised', 'structures-piers']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'visible' : 'none');
       if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'visibility', tilted ? 'none' : 'visible');
       for (const id of ['asset-pt-sign', 'sign-poles-icon']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'none' : 'visible');
       if (map.getLayer('signs-3d')) map.setLayoutProperty('signs-3d', 'visibility', tilted ? 'visible' : 'none');
