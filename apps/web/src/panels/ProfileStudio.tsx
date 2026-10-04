@@ -8,6 +8,7 @@ import { fetchTerrain, loadTerrain, uploadTerrain, useTerrain } from '../state/t
 import { toast } from '../state/toasts';
 import { Button, Empty, Field, NumberField, Select, Stat } from '../ui/controls';
 import { Icon } from '../ui/Icon';
+import { NormRef } from '../ui/NormRef';
 
 const EPSG = [
   { value: '32633', label: 'WGS84 / UTM 33N (EPSG:32633)' }, { value: '32632', label: 'WGS84 / UTM 32N (EPSG:32632)' }, { value: '32634', label: 'WGS84 / UTM 34N (EPSG:32634)' },
@@ -150,7 +151,7 @@ export function ProfileStudio() {
   return (
     <div className="profile-studio">
       <div className="ps-head">
-        <div className="ps-title"><strong>{road.name || 'Strada senza nome'}</strong><span className="muted">{rules.category} · {fmt(length, 1)} m · V progetto {rules.designSpeedKmh} km/h · pendenza max {rules.maxGradePct}% · Rv min {rules.rvConvexMinM} m convesso / {rules.rvConcaveMinM} m concavo</span></div>
+        <div className="ps-title"><strong>{road.name || 'Strada senza nome'}</strong><span className="muted">{rules.category} · {fmt(length, 1)} m · V progetto {rules.designSpeedKmh} km/h · pendenza max {rules.maxGradePct}% · Rv min {rules.rvConvexMinM} m convesso / {rules.rvConcaveMinM} m concavo · {road.roadClass === 'cycleway' ? <NormRef id="dm-557-1999" article="art. 8" /> : <NormRef id="dm-2001" article="cap. 5" />}</span></div>
         <div className="ps-actions">
           <Button size="sm" variant="ghost" icon="sparkle" onClick={propose}>Proponi livellette</Button>
           {draft ? <Button size="sm" variant="ghost" onClick={() => setDraft({ pvis: sizeCurves(road, draft.pvis) })}>Raccordi automatici</Button> : null}

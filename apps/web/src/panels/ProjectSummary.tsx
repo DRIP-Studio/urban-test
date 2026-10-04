@@ -60,6 +60,7 @@ export function ProjectSummary() {
           <button type="button" onClick={() => void importExistingSidewalks()}><Icon name="ped" /><span>Importa marciapiedi esistenti</span></button>
           <button type="button" onClick={() => setDock('connect')}><Icon name="connect" /><span>Aggancia strade non collegate</span></button>
           <button type="button" onClick={() => setDock('quantities')}><Icon name="calculator" /><span>Computo metrico</span></button>
+          <button type="button" onClick={() => setDock('norms')}><Icon name="law" /><span>Normativa e verifiche</span></button>
         </div>
       </Section>
     </>

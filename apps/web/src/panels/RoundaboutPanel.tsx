@@ -5,6 +5,7 @@ import { createRoundabout, drawPreview, roundaboutFrom } from '../tools/roundabo
 import { deleteSelection } from '../state/actions';
 import { useTool } from '../tools/toolState';
 import { Button, Empty, Field, NumberField, Section, Segmented, Select, Toggle } from '../ui/controls';
+import { NormRef } from '../ui/NormRef';
 
 const TYPES: { value: RoundaboutType; label: string; range: [number, number]; hint: string }[] = [
   { value: 'mini', label: 'Mini', range: [14, 25], hint: 'isola sormontabile' },
@@ -74,6 +75,7 @@ export function RoundaboutInspector({ rb }: { rb: Roundabout }) {
         </div>
         <Field label="Regolazione"><Segmented<Roundabout['control']> label="Regolazione" value={rb.control} onChange={(v) => update({ control: v })}
           options={[{ value: 'yield', label: 'Precedenza' }, { value: 'signalized', label: 'Semaforica' }, { value: 'metered', label: 'A dosaggio' }, { value: 'part_time', label: 'Fasce orarie' }]} /></Field>
+        <p className="muted">Diametri e corona giratoria: <NormRef id="dm-2006" article="Allegato, § 4.5" /> (mini 14–25 m, compatte 25–40 m, convenzionali 40–50 m).</p>
       </Section>
       <Section title="Bracci" count={rb.arms.length}>
         {rb.arms.map((a, i) => (

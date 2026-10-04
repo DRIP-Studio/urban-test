@@ -105,6 +105,7 @@ const P: Record<string, string> = {
   sidewalk: 'M3 20h18M3 16h18M6 16v4M12 16v4M18 16v4M9 13a1.4 1.4 0 1 1-.01 0M9 4a1.4 1.4 0 1 1-.01 0M9 6v4l-2 3M9 10l2 3',
   wave: 'M2 12c2.5-4 5-4 7.5 0s5 4 7.5 0 3.5-3 5-2',
   credit: 'M3 6h18v12H3zM3 10h18M7 15h4',
+  law: 'M12 3v17M8 20h8M5 6h14M5 6l-3 6a3 3 0 0 0 6 0zM19 6l-3 6a3 3 0 0 0 6 0z',
 };
 
 export type IconName = keyof typeof P;

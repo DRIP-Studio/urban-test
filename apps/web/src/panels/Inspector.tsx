@@ -1,4 +1,4 @@
-import { LocalFrame, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { LocalFrame, dmCategory, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
 import { ztlZones } from '../ztl/link';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
 import { commit, openDock, select, setDock, setTool, useApp } from '../state/store';
@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { flyTo } from '../map/mapStore';
 import { Button, Empty, Field, IconButton, NumberField, ProvBadge, Section, Segmented, Select, Stat, TextField, Toggle } from '../ui/controls';
 import { Icon } from '../ui/Icon';
+import { NormRef } from '../ui/NormRef';
 import { ToolSettings } from './ToolSettings';
 import { RoundaboutInspector } from './RoundaboutPanel';
 import { LanesSection, RestrictionsSection, SidewalkSection, ZoneInspector } from './RulesPanels';
@@ -41,6 +42,7 @@ function RoadInspector({ road }: { road: Road }) {
           <Stat label="Sezione" value={width.toFixed(2).replace('.', ',')} unit="m" prov={prov('width')} />
           <Stat label="Corsie" value={road.lanes.length} />
         </div>
+        {dmCategory(road) ? <p className="muted">Categoria {dmCategory(road)!.label} · corsie ≥ {dmCategory(road)!.laneMinM.toFixed(2).replace('.', ',')} m <NormRef id="dm-2001" article="Tab. 3.4.a" /> · marciapiedi ≥ 1,50 m <NormRef id="dm-2001" article="cap. 3" /></p> : null}
       </Section>
       <Section title="Sezione e corsie" actions={<Button size="sm" icon="section" onClick={() => setDock('section')}>Editor</Button>}>
         <div className="mini-section" aria-label="Sezione trasversale">
@@ -98,7 +100,7 @@ function PoleSection({ assetId }: { assetId: string }) {
           );
         })}
       </ol>
-      {signs.length > 2 ? <p className="warn-line"><Icon name="warning" size={14} />Art. 81 Reg. CdS: di norma non più di due segnali per sostegno (più i pannelli integrativi).</p> : null}
+      {signs.length > 2 ? <p className="warn-line"><Icon name="warning" size={14} /><span><NormRef id="reg-cds" article="art. 81" />: di norma non più di due segnali per sostegno (più i pannelli integrativi).</span></p> : null}
       <input className="text-field search" placeholder="Aggiungi un pannello sotto: cerca (es. «rimozione forzata», «eccetto»)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca pannello da aggiungere" />
       {results.length ? (
         <div className="sign-grid">{results.map((x) => (
