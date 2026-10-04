@@ -324,6 +324,32 @@ export function danglingLinks(net: Network, tolM = 12, nodePreferM = 6): Danglin
   return out.sort((a, b) => a.distM - b.distM);
 }
 
+/**
+ * Connection that leaves every existing geometry untouched: the target road is split exactly on its
+ * own axis (no vertex moves) and a short connector road («raccordo», same section as the dangling
+ * road) joins the free end to it. Gaps under 30 cm are merged instead (no visible change).
+ */
+export function connectorOps(net: Network, link: DanglingLink, ids: { node: string; roads: [string, string]; connector: string }): { type: string; payload: unknown }[] {
+  if (link.distM < 0.3) return linkOps(link, ids);
+  const src = net.roads[link.roadId]!;
+  const ops: { type: string; payload: unknown }[] = [];
+  let target = link.targetNodeId;
+  if (link.kind === 'edge') {
+    ops.push({ type: 'road.split', payload: { roadId: link.targetRoadId, at: link.at, nodeId: ids.node, newRoadIds: ids.roads } });
+    target = ids.node;
+  }
+  const remap = <T>(v: T): T => JSON.parse(JSON.stringify(v).split(src.id).join(ids.connector)) as T;
+  const from = net.nodes[link.nodeId]!.at;
+  const connector: Road = {
+    ...src, id: ids.connector, from: link.nodeId, to: target!, axis: [from, link.at],
+    lanes: remap(src.lanes), section: remap(src.section), vertical: undefined, structure: undefined,
+    tags: { ...(src.tags ?? {}), connector: 'yes' },
+    provenance: { geometry: { kind: 'project', source: 'Raccordo DRIP (geometrie esistenti invariate)' }, width: { kind: 'project', source: 'Raccordo DRIP' } },
+  };
+  ops.push({ type: 'road.add', payload: { road: connector, nodes: [] } });
+  return ops;
+}
+
 /** Operations that connect a dangling end: split the target road if needed, then merge the nodes. */
 export function linkOps(link: DanglingLink, ids: { node: string; roads: [string, string] }): { type: string; payload: unknown }[] {
   if (link.kind === 'node') return [{ type: 'node.merge', payload: { sourceId: link.nodeId, targetId: link.targetNodeId } }];

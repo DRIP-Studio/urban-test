@@ -1,7 +1,8 @@
 import { ROAD_TEMPLATES, geom, layoutSection, roadFromTemplate, type LngLat } from '@drip-urban/core';
 import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
-import { commit, select } from '../state/store';
+import { commit, select, useApp } from '../state/store';
+import { roadGuide } from './roadGuide';
 import { toast } from '../state/toasts';
 import { planRoad } from './roadOps';
 import { snap, type NetworkIndex, type SnapResult } from './snap';
@@ -75,6 +76,12 @@ function render(idx: NetworkIndex, cursor: SnapResult | null): void {
       feats.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]!]] }, properties: { fill: PREVIEW_FILL[pe.el.kind] ?? '#45484d', opacity: 0.82, kind: 'road-preview' } });
     }
     feats.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: ll.map((p) => [...p]) }, properties: { kind: 'road-axis' } });
+    const origin = useApp.getState().baseline?.origin;
+    if (origin) {
+      const g = roadGuide(idx, axis, { ...road, speedKmh: road.speedKmh }, origin);
+      feats.push(...g.feats);
+      useTool.setState({ roadHints: g.hints });
+    }
   }
   // Handles of curved vertices.
   for (const v of verts) {
@@ -102,6 +109,7 @@ function render(idx: NetworkIndex, cursor: SnapResult | null): void {
 
 function reset(): void {
   verts = []; drag = null; lastCursor = null;
+  useTool.setState({ roadHints: [] });
   setSource('draft', null);
 }
 

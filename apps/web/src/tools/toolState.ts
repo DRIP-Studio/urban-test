@@ -40,6 +40,8 @@ export interface ToolState {
   calmingHeightCm: number;
   /** Placing an imported model demolishes the buildings and removes the furniture under it. */
   modelClear: boolean;
+  /** Live advice of the road pen (curves, crossings): shown, never applied. */
+  roadHints: { level: 'ok' | 'warn' | 'info'; text: string }[];
   drainKind: 'inlet' | 'manhole' | 'outfall';
   drainDepthM: number;
   drainDn: number;
@@ -56,7 +58,7 @@ export const useTool = create<ToolState>(() => ({
   arraySpacingM: 8, pavingMaterial: saved.pavingMaterial ?? 'porphyry', arrayItem: 'vegetation.tree', rb: null, measure: null,
   routePick: { from: null, to: null, target: 'from' },
   markingKind: 'line_solid', markingColor: 'white', markingText: 'STOP', markingSymbol: 'bike', markingArrow: 'through', bayLayout: 'parallel',
-  calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true, drainKind: 'inlet', drainDepthM: 1.5, drainDn: 315, drainMaterial: 'pvc',
+  calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true, roadHints: [], drainKind: 'inlet', drainDepthM: 1.5, drainDn: 315, drainMaterial: 'pvc',
 }));
 
 useTool.subscribe((s) => {

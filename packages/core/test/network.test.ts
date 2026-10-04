@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LocalFrame, NetworkReplayer, ROAD_TEMPLATES, ScenarioHistory, buildPhysicalModel, danglingLinks, geom, linkOps, roadFromTemplate, route,
+  LocalFrame, NetworkReplayer, ROAD_TEMPLATES, ScenarioHistory, buildPhysicalModel, connectorOps, danglingLinks, geom, linkOps, roadFromTemplate, route,
   type CityBaseline, type Operation, type Scenario,
 } from '../src';
 
@@ -73,5 +73,23 @@ describe('connecting roads drawn without snapping', () => {
     h.commit({ type: 'batch', payload: { label: 'Aggancia', ops: linkOps(link, { node: 'unused', roads: ['u1', 'u2'] }) } });
     expect(h.network.roads.rC!.to).toBe('n1');
     expect(h.network.roads.rC!.axis[h.network.roads.rC!.axis.length - 1]).toEqual(h.network.nodes.n1!.at);
+  });
+
+  it('connects with a connector road: no existing vertex moves', () => {
+    const h = new ScenarioHistory(straightCity(), scenario(), 't', ids);
+    const near = LL(80, 6), far = LL(80, 120);
+    h.commit({ type: 'road.add', payload: { road: roadFromTemplate(tpl, 'rB', 'nb0', 'nb1', [far, near], 'B'), nodes: [{ id: 'nb0', at: far }, { id: 'nb1', at: near }] } });
+    const axisB = h.network.roads.rB!.axis, axisA = h.network.roads.rA!.axis;
+    const link = danglingLinks(h.network, 10).find((l) => l.nodeId === 'nb1')!;
+    h.commit({ type: 'batch', payload: { label: 'Raccordo', ops: connectorOps(h.network, link, { node: 'nj', roads: ['rA1', 'rA2'], connector: 'rK' }) } });
+    expect(h.network.roads.rB!.axis).toEqual(axisB);
+    expect(h.network.nodes.nb1).toBeDefined();
+    const k = h.network.roads.rK!;
+    expect(k.from).toBe('nb1');
+    expect(k.to).toBe('nj');
+    expect(k.tags?.connector).toBe('yes');
+    expect(h.network.roads.rA1!.axis[0]).toEqual(axisA[0]);
+    const after = route(h.network, origin, LL(5, -1), LL(80, 110), { mode: 'car', day: 1, minutes: 600 });
+    expect(after.found).toBe(true);
   });
 });

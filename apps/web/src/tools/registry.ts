@@ -10,6 +10,7 @@ import { furnitureTool, signTool } from './place';
 import { selectTool } from './select';
 import { calmingTool, markingTool } from './streetscape';
 import { drainageTool } from './drainage';
+import { connectTool } from './connect';
 import { useTool } from './toolState';
 import { usePicks } from './picks';
 import type { ToolDef } from './types';
@@ -81,6 +82,7 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'select', label: 'Seleziona', icon: 'select', shortcut: 'V', group: 'draw', modes: ['design', 'analyze', 'traffic', 'transit'], hint: 'Clic per selezionare · Shift+clic aggiunge · Shift+trascina per riquadro · trascina un oggetto selezionato per spostarlo', handler: selectTool },
   { id: 'road', label: 'Strada', icon: 'road', shortcut: 'R', group: 'draw', modes: ['design'], hint: 'Clic: vertice · clic e trascina: curva · Shift: 15° · Backspace: togli punto · Invio o doppio clic: crea · Alt: niente snap', cursor: 'crosshair', handler: roadPen },
   { id: 'nodes', label: 'Nodi', icon: 'node', shortcut: 'N', group: 'draw', modes: ['design'], hint: 'Seleziona una strada · trascina estremi e vertici (Shift: raccordo morbido) · rilascia un estremo su un incrocio o una strada per agganciarlo · i punti chiari inseriscono un vertice · clic destro elimina', handler: nodeTool },
+  { id: 'connect', label: 'Aggancia', icon: 'connect', shortcut: 'E', group: 'draw', modes: ['design'], hint: 'Clic sull\'estremo di una strada, poi sulla strada o l\'incrocio da raggiungere: si crea un raccordo senza spostare nessuna geometria · Alt+clic sposta invece l\'estremo', cursor: 'crosshair', handler: connectTool },
   { id: 'cut', label: 'Taglia', icon: 'cut', shortcut: 'X', group: 'draw', modes: ['design'], hint: 'Clic sull\'asse per dividere la strada', cursor: 'crosshair', handler: cutTool },
   { id: 'section', label: 'Sezione', icon: 'section', shortcut: 'S', group: 'civil', modes: ['design'], hint: 'Clic su una strada per modificare corsie, marciapiedi, sosta, ciclabili', handler: sectionTool },
   { id: 'junction', label: 'Junction Lab', icon: 'junction', shortcut: 'J', group: 'civil', modes: ['design', 'analyze'], hint: 'Clic su un incrocio: corsie, svolte, conflitti, regolazione', handler: makeJunctionPicker('junction') },

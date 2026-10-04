@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { danglingLinks, linkOps, type DanglingLink } from '@drip-urban/core';
+import { connectorOps, danglingLinks, linkOps, type DanglingLink } from '@drip-urban/core';
 import { fc, type Feature } from '../engine/geojson';
 import { flyTo, setSource } from '../map/mapStore';
 import { commit, newId, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, Section } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented } from '../ui/controls';
 
 function drawLinks(links: readonly DanglingLink[], net: NonNullable<ReturnType<typeof useApp.getState>['network']>): void {
   const feats: Feature[] = [];
@@ -21,6 +21,7 @@ function drawLinks(links: readonly DanglingLink[], net: NonNullable<ReturnType<t
 export function ConnectSheet() {
   const net = useApp((s) => s.network);
   const [tol, setTol] = useState(10);
+  const [mode, setMode] = useState<'connector' | 'move'>('connector');
   const links = useMemo(() => (net ? danglingLinks(net, tol) : []), [net, tol]);
   useEffect(() => { if (net) drawLinks(links, net); return () => setSource('draft', null); }, [links, net]);
   if (!net) return null;
@@ -30,7 +31,7 @@ export function ConnectSheet() {
     for (const l of list) {
       const current = danglingLinks(useApp.getState().network!, tol).find((x) => x.nodeId === l.nodeId);
       if (!current) continue;
-      const res = commit('batch', { label: 'Aggancia strada', ops: linkOps(current, { node: newId('n'), roads: [newId('r'), newId('r')] }) }, { silent: true });
+      const res = commit('batch', { label: 'Aggancia strada', ops: mode === 'connector' ? connectorOps(useApp.getState().network!, current, { node: newId('n'), roads: [newId('r'), newId('r')], connector: newId('r') }) : linkOps(current, { node: newId('n'), roads: [newId('r'), newId('r')] }) }, { silent: true });
       if (res.ok) ok++;
     }
     if (ok) toast.success('Strade agganciate', `${ok} estremi collegati alla rete: il navigatore ora le percorre.`);
@@ -39,8 +40,9 @@ export function ConnectSheet() {
   return (
     <>
       <Section title="Aggancia strade non collegate">
-        <p className="muted">Estremi di strada a meno di {tol} m dalla rete ma non collegati: per il navigatore sono interrotti. L'aggancio sposta solo l'estremo libero (di pochi metri) e divide la strada di arrivo nel punto esatto, senza cambiare il resto della geometria.</p>
-        <Field label="Distanza massima"><NumberField value={tol} unit="m" min={1} max={30} step={1} decimals={0} ariaLabel="Distanza massima" onCommit={setTol} /></Field>
+        <p className="muted">Estremi di strada a meno di {tol} m dalla rete ma non collegati: per il navigatore sono interrotti. Con il raccordo nessuna geometria esistente cambia: la strada di arrivo si divide esattamente sul suo asse e un breve tratto collega l'estremo libero. In alternativa si sposta solo l'estremo libero. Per collegare due strade a mano usa lo strumento Aggancia (E).</p>
+        <Field label="Modalità"><Segmented<'connector' | 'move'> label="Modalità" size="sm" value={mode} onChange={setMode} options={[{ value: 'connector', label: 'Raccordo (geometrie invariate)' }, { value: 'move', label: 'Sposta l\'estremo' }]} /></Field>
+        <Field label="Distanza massima"><NumberField value={tol} unit="m" min={1} max={60} step={1} decimals={0} ariaLabel="Distanza massima" onCommit={setTol} /></Field>
         {links.length ? <Button variant="project" icon="connect" onClick={() => connect(links)}>Aggancia tutte ({links.length})</Button> : null}
       </Section>
       {!links.length ? <Empty icon="check" title="Rete collegata">Nessun estremo libero vicino ad altre strade entro {tol} m.</Empty> : (

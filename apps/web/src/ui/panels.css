@@ -420,3 +420,6 @@
 .table tr.is-err td { color: var(--err); }
 .corridor { margin-top: var(--s-3); display: grid; gap: var(--s-2); }
 .section-body .inspector-actions { padding: 0; }
+.row-list li .wrap { flex: 1; min-width: 0; line-height: 1.35; }
+.row-list li.hint-warn { box-shadow: inset 3px 0 0 var(--warn, #d9a441); }
+.row-list li.hint-ok { box-shadow: inset 3px 0 0 var(--ok); }

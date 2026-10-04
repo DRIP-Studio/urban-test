@@ -181,7 +181,7 @@ export function ToolSettings() {
   const t = useTool();
   const def = toolById(tool);
   switch (tool) {
-    case 'road': return <RoadTemplates />;
+    case 'road': return <><RoadHints /><RoadTemplates /></>;
     case 'furniture': return (
       <>
         <Section title="Posizionamento"><Field label="Rotazione aggiuntiva"><NumberField value={t.rotationDeg} unit="°" step={15} decimals={0} ariaLabel="Rotazione" onCommit={(v) => useTool.setState({ rotationDeg: v })} /></Field></Section>
@@ -221,4 +221,18 @@ export function ToolSettings() {
       </Section>
     );
   }
+}
+
+/** Live advice while drawing a road: curve radii, new junctions and their angle (never applied automatically). */
+function RoadHints() {
+  const hints = useTool((s) => s.roadHints);
+  if (!hints.length) return null;
+  return (
+    <Section title="Consigli di tracciamento" count={hints.filter((h) => h.level === 'warn').length}>
+      <ul className="row-list">{hints.slice(0, 10).map((h, i) => (
+        <li key={i} className={`hint-${h.level}`}><Icon name={h.level === 'warn' ? 'warning' : h.level === 'ok' ? 'check' : 'info'} size={14} /><span className="wrap">{h.text}</span></li>
+      ))}</ul>
+      <p className="muted">Solo consigli: niente viene modificato in automatico. Dopo la creazione, «Prossimi passi» propone regolazione degli incroci e segnaletica.</p>
+    </Section>
+  );
 }
