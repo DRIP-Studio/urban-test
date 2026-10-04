@@ -59,6 +59,7 @@ export function ProjectSummary() {
           <button type="button" onClick={() => setTool('furniture')}><Icon name="tree" /><span>Arredo e verde</span><kbd className="kbd">F</kbd></button>
           <button type="button" onClick={() => void importExistingSidewalks()}><Icon name="ped" /><span>Importa marciapiedi esistenti</span></button>
           <button type="button" onClick={() => setDock('connect')}><Icon name="connect" /><span>Aggancia strade non collegate</span></button>
+          <button type="button" onClick={() => setDock('quantities')}><Icon name="calculator" /><span>Computo metrico</span></button>
         </div>
       </Section>
     </>
