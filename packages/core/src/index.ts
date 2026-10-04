@@ -34,4 +34,5 @@ export * from './analysis/urbanplan';
 export * from './analysis/trafficplan';
 export * from './ops/plan-ops';
 export * from './analysis/drainage';
+export * from './analysis/alignment';
 export * from './ops/drainage-ops';

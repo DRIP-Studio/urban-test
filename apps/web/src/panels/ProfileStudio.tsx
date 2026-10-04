@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  horizontalAlignment,
   checkVertical, crossSection, designElevation, earthworks, groundProfile, proposeVertical, sizeCurves, stationing, verticalRules,
   type Road, type TerrainGrid, type VerticalPVI, type VerticalProfile,
 } from '@drip-urban/core';
 import { commit, useApp } from '../state/store';
 import { fetchTerrain, loadTerrain, uploadTerrain, useTerrain } from '../state/terrain';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, Select, Stat } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Segmented, Select, Stat } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { NormRef } from '../ui/NormRef';
 
@@ -124,7 +125,56 @@ function CrossSectionView({ road, v, grid, station }: { road: Road; v: VerticalP
   );
 }
 
+/** Andamento planimetrico (Civil 3D alignment report): tangents, curves, curvature diagram, DM 2001 checks. */
+function AlignmentView({ road }: { road: Road }) {
+  const baseline = useApp((s) => s.baseline)!;
+  const al = useMemo(() => horizontalAlignment(road, baseline.origin), [road, baseline]);
+  const W = 760, H = 110, kMax = Math.max(1 / al.rMinM, ...al.curvature.map((c) => Math.abs(c.k))) * 1.15;
+  const x = (s: number) => (s / Math.max(1, al.lengthM)) * W, y = (k: number) => H / 2 - (k / kMax) * (H / 2 - 6);
+  return (
+    <div className="ps-body">
+      <div className="ps-col">
+        <svg viewBox={`0 0 ${W} ${H}`} className="curv-chart" role="img" aria-label="Diagramma delle curvature">
+          <line x1={0} x2={W} y1={H / 2} y2={H / 2} className="axis" />
+          {[1, -1].map((sg) => <line key={sg} x1={0} x2={W} y1={y(sg / al.rMinM)} y2={y(sg / al.rMinM)} className="limit" />)}
+          {al.elements.filter((e) => e.kind === 'curve').map((e, i) => <rect key={i} x={x(e.s0)} width={Math.max(1, x(e.s1) - x(e.s0))} y={0} height={H} className="curve-band" />)}
+          <polyline points={al.curvature.map((c) => `${x(c.s).toFixed(1)},${y(c.k).toFixed(1)}`).join(' ')} className="curv" />
+        </svg>
+        <p className="muted">Diagramma delle curvature 1/R (sinistra in alto). Tratteggio: 1/R minimo per {al.designSpeedKmh} km/h.</p>
+        <table className="table ps-table">
+          <thead><tr><th>Elemento</th><th>Da</th><th>A</th><th>Sviluppo</th><th>R</th><th>Deviazione</th><th>q</th></tr></thead>
+          <tbody>{al.elements.map((e, i) => (
+            <tr key={i}>
+              <td>{e.kind === 'tangent' ? 'Rettifilo' : `Curva ${e.direction === 'left' ? 'sx' : 'dx'}`}</td><td>{fmt(e.s0, 1)}</td><td>{fmt(e.s1, 1)}</td><td>{fmt(e.lengthM, 1)} m</td>
+              <td className={e.radiusM && e.radiusM < al.rMinM ? 'bad' : ''}>{e.radiusM ? `${fmt(e.radiusM, 0)} m` : '∞'}</td><td>{e.deflectionDeg ? `${fmt(e.deflectionDeg, 1)}°` : ''}</td><td>{e.superelevationPct ? `${fmt(e.superelevationPct, 1)}%` : ''}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div className="ps-col">
+        <div className="stats-row"><Stat label="R minimo" value={fmt(al.rMinM, 0)} unit="m" /><Stat label="V progetto" value={al.designSpeedKmh} unit="km/h" /><Stat label="Arresto" value={al.stoppingDistanceM} unit="m" /></div>
+        {al.issues.length ? <ul className="issue-list">{al.issues.map((x, i) => <li key={i} className={x.severity === 'error' ? 'err' : 'warn'}><Icon name="warning" size={14} /><span>{fmt(x.station, 0)} m · {x.message}</span></li>)}</ul>
+          : <p className="ok"><Icon name="check" size={14} /> Andamento planimetrico conforme (verifica semplificata).</p>}
+        <p className="muted">{al.category} · q max {fmt(al.qMaxPct, 0)}% · <NormRef id="dm-2001" article="§ 5.2" /> · {al.method}</p>
+      </div>
+    </div>
+  );
+}
+
 export function ProfileStudio() {
+  const [view, setView] = useState<'profile' | 'plan'>('profile');
+  const sel = useApp((s) => s.selection);
+  const net = useApp((s) => s.network);
+  const road = sel?.kind === 'road' && net ? net.roads[sel.ids[0]!] : undefined;
+  return (
+    <>
+      {road ? <div className="ps-switch"><Segmented<'profile' | 'plan'> label="Vista" size="sm" value={view} onChange={setView} options={[{ value: 'profile', label: 'Profilo e sezioni' }, { value: 'plan', label: 'Andamento planimetrico' }]} /></div> : null}
+      {view === 'plan' && road ? <AlignmentView road={road} /> : <VerticalStudio />}
+    </>
+  );
+}
+
+function VerticalStudio() {
   const sel = useApp((s) => s.selection);
   const net = useApp((s) => s.network);
   const baseline = useApp((s) => s.baseline);

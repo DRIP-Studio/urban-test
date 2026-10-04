@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { OperationRejected, ScenarioHistory, buildPhysicalModel, layoutSection, osmStructure, roadText, type CityBaseline, type Road, type Scenario } from '../src/index';
+import { LocalFrame, OperationRejected, ScenarioHistory, buildPhysicalModel, horizontalAlignment, layoutSection, minTangent, osmStructure, roadText, type CityBaseline, type Road, type Scenario } from '../src/index';
 
 const SEED = fileURLToPath(new URL('../../../services/api/seed/frattamaggiore.baseline.json.gz', import.meta.url));
 let baseline: CityBaseline;
@@ -76,5 +76,28 @@ describe('OSM structures', () => {
     expect(osmStructure({ bridge: 'yes' })).toMatchObject({ type: 'bridge', layer: 1 });
     expect(osmStructure({ tunnel: 'yes', layer: '-1' })).toMatchObject({ type: 'tunnel', layer: -1 });
     expect(osmStructure({ highway: 'primary' })).toBeUndefined();
+  });
+});
+
+describe('horizontal alignment (DM 5/11/2001 § 5.2)', () => {
+  it('splits an axis into tangents and a curve with the right radius and flags a tight one', () => {
+    const o: [number, number] = [14.27, 40.94];
+    const f = new LocalFrame(o);
+    // 100 m tangent, 90° curve of R = 60 m, 100 m tangent.
+    const pts: [number, number][] = [];
+    for (let x = 0; x <= 100; x += 5) pts.push([x, 0]);
+    for (let a = 2; a <= 90; a += 2) { const t = (a * Math.PI) / 180; pts.push([100 + 60 * Math.sin(t), 60 - 60 * Math.cos(t)]); }
+    for (let y = 65; y <= 160; y += 5) pts.push([160, y]);
+    const road = { ...Object.values(baseline.roads).find((r) => r.roadClass === 'secondary')!, axis: pts.map((p) => f.toLngLat(p)), speedKmh: 70 } as Road;
+    const al = horizontalAlignment(road, o);
+    const curves = al.elements.filter((e) => e.kind === 'curve');
+    expect(curves).toHaveLength(1);
+    expect(curves[0]!.radiusM!).toBeGreaterThan(50);
+    expect(curves[0]!.radiusM!).toBeLessThan(72);
+    expect(curves[0]!.deflectionDeg!).toBeGreaterThan(80);
+    expect(curves[0]!.direction).toBe('left');
+    expect(al.rMinM).toBeGreaterThan(150); // V 80 km/h
+    expect(al.issues.some((i) => /sotto il minimo/.test(i.message))).toBe(true);
+    expect(minTangent(50)).toBe(40);
   });
 });
