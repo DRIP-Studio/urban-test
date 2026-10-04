@@ -8,6 +8,7 @@ import { dismiss, useToasts } from '../state/toasts';
 import { GROUP_LABEL, TOOLS } from '../tools/registry';
 import { pickAt } from '../tools/select';
 import { usePicks } from '../tools/picks';
+import { toggleElios, useElios } from '../elios/Elios';
 import { useTool } from '../tools/toolState';
 import { DEFAULT_RB } from '../tools/roundabout';
 import { Icon } from '../ui/Icon';
@@ -15,25 +16,42 @@ import { COMMANDS } from './commands';
 import { useContextMenu } from './contextMenu';
 import { usePalette } from './palette';
 
+const RAIL_KEY = 'drip.rail.expanded';
+const readRail = () => { try { return localStorage.getItem(RAIL_KEY) === '1'; } catch { return false; } };
+
 export function ToolRail() {
   const mode = useApp((s) => s.mode);
   const tool = useApp((s) => s.tool);
+  const eliosOpen = useElios((s) => s.open);
+  const [expanded, setExpanded] = useState(readRail);
+  const toggle = () => { setExpanded((v) => { try { localStorage.setItem(RAIL_KEY, v ? '0' : '1'); } catch { /* private mode */ } return !v; }); };
   const tools = TOOLS.filter((t) => t.modes.includes(mode));
   const groups = [...new Set(tools.map((t) => t.group))];
-  if (!tools.length) return null;
+  const tip = (label: string) => (expanded ? undefined : label);
   return (
-    <nav className="rail" aria-label="Strumenti">
+    <nav className={`rail ${expanded ? 'is-expanded' : ''}`} aria-label="Strumenti">
+      <button type="button" className="rail-btn rail-toggle" onClick={toggle} aria-expanded={expanded} data-tip={tip('Mostra i nomi')} data-tip-side="right">
+        <Icon name={expanded ? 'chevronLeft' : 'menu'} size={18} />
+        <span>{expanded ? 'Riduci' : 'Espandi'}</span>
+      </button>
       {groups.map((g) => (
         <div key={g} className="rail-group" role="group" aria-label={GROUP_LABEL[g]}>
           <span className="rail-label">{GROUP_LABEL[g]}</span>
           {tools.filter((t) => t.group === g).map((t) => (
-            <button key={t.id} type="button" className={`rail-btn ${tool === t.id ? 'is-on' : ''}`} onClick={() => setTool(t.id)} aria-pressed={tool === t.id} data-tip={`${t.label}${t.shortcut ? ` · ${t.shortcut}` : ''}`} data-tip-side="right">
+            <button key={t.id} type="button" className={`rail-btn ${tool === t.id ? 'is-on' : ''}`} onClick={() => setTool(t.id)} aria-pressed={tool === t.id} data-tip={tip(`${t.label}${t.shortcut ? ` · ${t.shortcut}` : ''}`)} data-tip-side="right">
               <Icon name={t.icon} size={20} />
-              <span>{t.label}</span>
+              <span>{t.label}{t.shortcut ? <kbd>{t.shortcut}</kbd> : null}</span>
             </button>
           ))}
         </div>
       ))}
+      <div className="rail-group rail-end" role="group" aria-label="Assistente">
+        <span className="rail-label">Assistente</span>
+        <button type="button" className={`rail-btn ${eliosOpen ? 'is-on' : ''}`} onClick={toggleElios} aria-pressed={eliosOpen} data-tip={tip('Elios · assistente AI')} data-tip-side="right">
+          <Icon name="sparkle" size={20} />
+          <span>Elios</span>
+        </button>
+      </div>
     </nav>
   );
 }

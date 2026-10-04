@@ -114,6 +114,8 @@ def bench():
               box(x, 0.1, 0.62, 0.07, 0.42, 0.04, "cast_iron")]
     for i in range(4):  # seat slats
         m.append(box(0, 0.2 - i * 0.12, 0.45, 1.8, 0.09, 0.035, "wood"))
+    for x in (-0.78, 0.78):  # armrests (DM 236/1989: help to stand up)
+        m += [box(x, 0.0, 0.62, 0.06, 0.5, 0.04, "cast_iron"), box(x, 0.2, 0.45, 0.05, 0.05, 0.18, "cast_iron")]
     for i in range(3):  # backrest slats, slightly reclined
         z = 0.56 + i * 0.1
         m.append(box(0, -0.25 - (z - 0.5) * 0.12, z, 1.8, 0.035, 0.08, "wood", rot=[-12, 0, 0]))
@@ -153,10 +155,11 @@ def light_pole():
     return [
         box(0, 0, 0, 0.36, 0.36, 0.08, "concrete"),
         cyl(0, 0, 0.08, 0.11, 0.9, "steel_dark", r2=0.09),
+        box(0, 0.1, 0.45, 0.08, 0.02, 0.25, "steel"),  # inspection door
         cyl(0, 0, 0.98, 0.09, 6.9, "steel", r2=0.06),
         bar((0, 0, 7.75), (0, 1.1, 7.95), 0.035, "steel"),
         box(0, 1.25, 7.92, 0.3, 0.62, 0.08, "steel_dark", rot=[4, 0, 0]),
-        box(0, 1.25, 7.87, 0.24, 0.5, 0.02, "glass", rot=[4, 0, 0]),
+        box(0, 1.25, 7.87, 0.24, 0.5, 0.02, "led_warm", rot=[4, 0, 0]),
     ]
 
 
@@ -188,7 +191,7 @@ def smart_pole():
 # ------------------------------------------------------------------ safety
 
 def bollard():
-    return [cyl(0, 0, 0, 0.1, 0.82, "cast_iron", r2=0.085), cyl(0, 0, 0.62, 0.092, 0.06, "steel"),
+    return [cyl(0, 0, 0, 0.1, 0.82, "cast_iron", r2=0.085), cyl(0, 0, 0.62, 0.092, 0.06, "reflective_white"), cyl(0, 0, 0.5, 0.094, 0.04, "reflective_white"),
             cyl(0, 0, 0.82, 0.07, 0.04, "cast_iron"), sph(0, 0, 0.86, 0.06, "cast_iron")]
 
 
@@ -236,6 +239,9 @@ def bus_shelter(green=False):
         box(-0.6, -0.5, 0.45, 1.6, 0.3, 0.05, "wood"),  # bench
         box(-1.2, -0.5, 0, 0.06, 0.25, 0.45, "steel_dark"), box(0, -0.5, 0, 0.06, 0.25, 0.45, "steel_dark"),
         box(0.9, 0.62, 2.0, 0.6, 0.04, 0.3, "sign_blue"),  # stop name board
+        box(0.95, -0.66, 0.3, 0.9, 0.02, 1.7, "slab_light"),  # lit timetable / city map panel
+        cyl(2.3, 0.5, 0, 0.05, 0.9, "steel_dark"), cyl(2.3, 0.5, 0.4, 0.2, 0.55, "steel_dark", r2=0.21),  # bin
+        box(0, -0.1, 2.57, 4.04, 1.64, 0.02, "steel"),  # roof edge
     ]
     if green:
         m += [ell(-1.0, -0.1, 2.62, 0.9, 0.7, 0.12, "foliage_dark"), ell(0.9, -0.1, 2.62, 0.95, 0.7, 0.13, "foliage")]
@@ -344,9 +350,11 @@ def signal(heads=3, h=3.4, ped=False):
     m = [cyl(0, 0, 0, 0.08, 0.15, "steel_dark", r2=0.06), cyl(0, 0, 0.15, 0.055, h - 0.15, "steel")]
     top = h - 0.05
     m.append(box(0, 0.08, top - 0.32 * heads - 0.1, 0.3 if not ped else 0.28, 0.2, 0.32 * heads + 0.1, "signal_housing"))
+    lenses = ["lens_red", "lens_amber", "lens_green"] if heads == 3 else ["lens_red", "lens_green"]
     for i in range(heads):
         z = top - 0.2 - i * 0.32
-        m += [cyl(0, 0.19, z - 0.11, 0.1, 0.04, "display", rot=[90, 0, 0]), box(0, 0.24, z + 0.02, 0.24, 0.1, 0.02, "signal_housing", rot=[20, 0, 0])]
+        m += [cyl(0, 0.19, z - 0.11, 0.1, 0.04, lenses[i], rot=[90, 0, 0]), box(0, 0.24, z + 0.02, 0.24, 0.1, 0.02, "signal_housing", rot=[20, 0, 0])]
+    m.append(box(0, 0.09, 1.0, 0.12, 0.1, 0.16, "sign_blue"))  # pedestrian push-button box
     m.append(box(0, 0.04, top - 0.32 * heads - 0.12, 0.42, 0.02, 0.32 * heads + 0.14, "signal_housing"))  # backplate
     return m
 
@@ -376,7 +384,64 @@ def vms():
             box(0, 0.22, 5.05, 2.45, 0.36, 0.08, "steel_dark")]
 
 
+def ztl_portal():
+    """Gantry (bandiera) over the lane: LED panel «ZTL attiva» + two plate-reading cameras (DPR 250/1999)."""
+    return [box(0, 0, 0, 0.6, 0.6, 0.12, "concrete"), cyl(0, 0, 0.12, 0.14, 5.6, "steel_dark", r2=0.11),
+            beam((0, 0, 5.4), (0, 4.2, 5.4), 0.16, 0.16, "steel_dark"),
+            box(0, 2.6, 4.5, 0.2, 1.8, 0.8, "steel_dark"), box(0.11, 2.6, 4.55, 0.01, 1.66, 0.66, "display"),
+            box(0, 3.9, 5.05, 0.34, 0.2, 0.18, "steel", rot=[0, -10, 0]), cyl(0.2, 3.9, 5.02, 0.05, 0.06, "glass", rot=[0, 80, 0]),
+            box(0, 1.4, 5.05, 0.34, 0.2, 0.18, "steel", rot=[0, -10, 0]), cyl(0.2, 1.4, 5.02, 0.05, 0.06, "glass", rot=[0, 80, 0]),
+            box(0.1, 0, 2.2, 0.03, 0.6, 0.6, "sign_blue")]
+
+
+def ztl_totem():
+    """Information totem at the ZTL entrance: timetable, permits and live state."""
+    return [box(0, 0, 0, 0.7, 0.4, 0.1, "concrete"), box(0, 0, 0.1, 0.6, 0.25, 2.3, "steel_dark"),
+            box(0, 0.13, 1.6, 0.5, 0.01, 0.55, "display"), box(0, 0.13, 0.5, 0.5, 0.01, 0.95, "slab_light"),
+            box(0, 0.13, 2.25, 0.5, 0.01, 0.1, "led_amber")]
+
+
+def crossing_beacon():
+    """Illuminated pedestrian-crossing sign with flashing amber lights (art. 135 Reg. CdS fig. II.303)."""
+    return [box(0, 0, 0, 0.4, 0.4, 0.08, "concrete"), cyl(0, 0, 0.08, 0.06, 3.4, "steel"),
+            box(0, 0.06, 2.6, 0.7, 0.08, 0.7, "sign_blue"), box(0, 0.105, 2.65, 0.5, 0.01, 0.5, "slab_light"),
+            sph(-0.3, 0.1, 3.45, 0.09, "lens_amber"), sph(0.3, 0.1, 3.45, 0.09, "lens_amber"), box(0, 0.06, 3.38, 0.75, 0.06, 0.04, "steel_dark"),
+            box(0, 0, 3.48, 0.08, 0.08, 0.04, "steel")]
+
+
+def speed_display():
+    """Radar speed display («Rallenta / velocità rilevata»), informative only."""
+    return [box(0, 0, 0, 0.36, 0.36, 0.06, "concrete"), cyl(0, 0, 0.06, 0.05, 2.9, "steel"),
+            box(0, 0.08, 2.1, 0.6, 0.12, 0.75, "steel_dark"), box(0, 0.145, 2.25, 0.46, 0.01, 0.4, "led_amber"),
+            box(0, 0.145, 2.68, 0.5, 0.01, 0.1, "slab_light")]
+
+
+def manhole():
+    m = [cyl(0, 0, -0.02, 0.4, 0.03, "cast_iron")]
+    for i in range(5):
+        m.append(box(0, -0.28 + i * 0.14, 0.008, 0.6, 0.04, 0.008, "steel_dark"))
+    return m
+
+
+def street_name():
+    """Street name plate on a post (toponomastica)."""
+    return [cyl(0, 0, 0, 0.04, 2.8, "steel"), box(0.42, 0.0, 2.45, 0.8, 0.03, 0.25, "slab_light"),
+            box(0.42, 0.016, 2.45, 0.74, 0.002, 0.19, "sign_blue")]
+
+
+NEW_ITEMS = {
+    "ztl.portal": {"label": "Portale a bandiera ZTL (pannello LED + telecamere)", "category": "ztl", "material": "steel_dark", "led": {"kind": "ztl"}},
+    "ztl.totem": {"label": "Totem informativo ZTL (orari, permessi, stato)", "category": "ztl", "material": "steel_dark", "led": {"kind": "ztl"}},
+    "traffic.crossing_beacon": {"label": "Segnale luminoso attraversamento pedonale con lampeggianti", "category": "ztl", "material": "steel"},
+    "traffic.speed_display": {"label": "Display rilevatore di velocità (informativo)", "category": "ztl", "material": "steel_dark"},
+    "furniture.manhole": {"label": "Chiusino in ghisa D400 (pozzetto)", "category": "utility", "material": "cast_iron"},
+    "furniture.street_name": {"label": "Targa toponomastica su palo", "category": "public_space", "material": "steel"},
+}
+
+
 MODELS = {
+    "ztl.portal": ztl_portal(), "ztl.totem": ztl_totem(), "traffic.crossing_beacon": crossing_beacon(), "traffic.speed_display": speed_display(),
+    "furniture.manhole": manhole(), "furniture.street_name": street_name(),
     "vegetation.tree": tree(9, 3.0, 0.18), "vegetation.tree_small": tree(5, 1.6, 0.1),
     "vegetation.citrus": [cyl(0, 0, 0, 0.1, 1.4, "bark", r2=0.08), ell(0, 0, 2.6, 1.6, 1.6, 1.5, "foliage_dark"), ell(0.5, 0.2, 2.9, 0.8, 0.8, 0.7, "foliage"),
                           *[sph(math.cos(a) * 1.3, math.sin(a) * 1.3, 2.3 + (i % 2) * 0.6, 0.07, "plastic_red") for i, a in enumerate([0.3, 1.4, 2.5, 3.6, 4.7, 5.6])],
@@ -427,6 +492,11 @@ def bounds(parts):
 
 def main():
     cat = json.loads(CATALOG.read_text(encoding="utf-8"))
+    have = {i["id"] for i in cat["items"]}
+    for iid, meta in NEW_ITEMS.items():
+        if iid not in have:
+            cat["items"].append({"id": iid, **meta, "dims": {"w": 1, "d": 1, "h": 1}, "model": []})
+    cat["categories"]["ztl"] = "ZTL, PMV e dispositivi elettronici"
     missing = [i["id"] for i in cat["items"] if i["id"] not in MODELS]
     if missing:
         raise SystemExit(f"Modelli mancanti: {missing}")

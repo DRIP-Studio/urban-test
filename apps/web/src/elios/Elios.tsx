@@ -114,15 +114,8 @@ function Rich({ text }: { text: string }) {
 
 type Recognition = { lang: string; interimResults: boolean; onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onend: () => void; start(): void; stop(): void };
 
-export function EliosButton() {
-  const open = useElios((s) => s.open);
-  return (
-    <button type="button" className={`elios-orb ${open ? 'is-open' : ''}`} onClick={() => useElios.setState({ open: !open })} aria-label="Elios, assistente AI" data-tip="Elios · assistente AI" data-tip-side="left" aria-expanded={open}>
-      <span className="elios-orb-core" aria-hidden />
-      <Icon name={open ? 'close' : 'sparkle'} size={18} />
-    </button>
-  );
-}
+/** Rail entry: Elios opens as a panel beside the tool rail. */
+export function toggleElios(): void { useElios.setState((s) => ({ open: !s.open })); }
 
 export function EliosPanel() {
   const { open, busy, messages, configured } = useElios();
@@ -154,7 +147,6 @@ export function EliosPanel() {
   return (
     <section className="elios" aria-label="Elios">
       <header className="elios-head">
-        <span className="elios-glow" aria-hidden />
         <span className="elios-mark"><Icon name="sparkle" size={16} /></span>
         <div><strong>Elios</strong><span>Assistente AI di DRIP Urban</span></div>
         <span className="spacer" />

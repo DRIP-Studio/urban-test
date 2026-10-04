@@ -138,7 +138,7 @@ export function Hub() {
   return (
     <div className="hub">
       <header className="hub-head">
-        <TechnicalLockup size="lg" />
+        <TechnicalLockup />
         <div className="hub-actions">
           <IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} />
           <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPkg(f); e.target.value = ''; }} />

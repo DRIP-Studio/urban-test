@@ -6,7 +6,7 @@ import { useWms, wmsLayerDefs } from './wms';
 
 /** Every GeoJSON source of the workstation. One owner each (see sources.ts). */
 export const SOURCES = [
-  'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'signals',
+  'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'sign-poles', 'signs3d', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
   'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents',
 ] as const;
@@ -41,7 +41,7 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'kerbs', label: 'Cordoli', category: 'existing', mapLayers: ['kerbs-line'], defaultVisible: true, source: 'Modello fisico DRIP' },
   { id: 'labels', label: 'Nomi delle strade', category: 'base', mapLayers: ['labels-text'], defaultVisible: true, source: 'OpenStreetMap' },
   { id: 'project', label: 'Evidenzia modifiche di progetto', category: 'design', mapLayers: ['project-outline', 'project-outline-rb'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#e8772e', label: 'Proposto' }] },
-  { id: 'assets', label: 'Arredo, verde, segnali, semafori', category: 'design', mapLayers: ['asset-fp-fill', 'asset-fp-line', 'asset-3d', 'asset-fp-extrude', 'asset-pt-sign', 'asset-pt-dot', 'signals-icon'], defaultVisible: true, source: 'Esistente (OSM) + progetto' },
+  { id: 'assets', label: 'Arredo, verde, segnali, semafori', category: 'design', mapLayers: ['asset-fp-fill', 'asset-fp-line', 'asset-3d', 'asset-fp-extrude', 'sign-poles-icon', 'asset-pt-sign', 'signs-3d', 'asset-pt-dot', 'signals-icon'], defaultVisible: true, source: 'Esistente (OSM) + progetto' },
   { id: 'sidewalksEst', label: 'Marciapiedi stimati', category: 'existing', mapLayers: ['sidewalks-est-fill', 'sidewalks-est-line'], defaultVisible: true, source: 'Stima DRIP dove mancano dati e percorsi pedonali (DM 5/11/2001)', legend: [{ color: '#c9b8a0', label: 'Stimato (non rilevato)' }] },
   { id: 'restrictions', label: 'Divieti e limiti di transito', category: 'mobility', mapLayers: ['restrictions-line', 'restrictions-label'], defaultVisible: true, source: 'Progetto + OpenStreetMap (hgv, maxweight, maxheight…)',
     legend: [{ color: '#b9312a', label: 'Divieto mezzi pesanti / transito' }, { color: '#d9a441', label: 'Solo destinazione o carico/scarico' }, { color: '#7e57c2', label: 'Limite di massa o dimensioni' }] },
@@ -154,6 +154,13 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
     'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.25, 1] } });
   L({ id: 'asset-fp-line', type: 'line', source: 'asset-fp', minzoom: 16, paint: { 'line-color': ['match', ['get', 'state'], 'project', '#e8772e', 'removed', '#d0614f', dark ? '#9aa3ab' : '#4d4a45'], 'line-width': ['match', ['get', 'state'], 'project', 1.1, 0.7], 'line-opacity': ['case', ['boolean', ['get', 'sprite'], false], 0.4, 1], 'line-dasharray': ['case', ['==', ['get', 'state'], 'removed'], ['literal', [2, 2]], ['literal', [1, 0]]] } });
   L({ id: 'asset-pt-dot', type: 'circle', source: 'asset-pt', minzoom: 14, maxzoom: 16.5, paint: { 'circle-radius': 2.4, 'circle-color': ['case', ['==', ['get', 'state'], 'project'], '#e8772e', '#5587a2'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 0.8 } });
+  L({ id: 'sign-poles-icon', type: 'symbol', source: 'sign-poles', minzoom: 16.5, layout: {
+    'icon-image': ['get', 'icon'], 'icon-size': groundScale(0.42, 0.18), 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-anchor': 'bottom' } as never,
+    paint: { 'icon-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.35, 1] } });
+  // Tilted map: plates at real size and height, standing up (offset per pitch set by MapView).
+  L({ id: 'signs-3d', type: 'symbol', source: 'signs3d', minzoom: 16, layout: {
+    visibility: 'none', 'icon-image': ['get', 'type'], 'icon-size': 0.3, 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-anchor': 'bottom',
+    'icon-pitch-alignment': 'viewport', 'icon-rotation-alignment': 'viewport', 'icon-offset': ['coalesce', ['get', 'off'], ['literal', [0, 0]]], 'symbol-sort-key': ['get', 'hm'] } as never });
   L({ id: 'asset-pt-sign', type: 'symbol', source: 'asset-pt', minzoom: 16.5, layout: {
     'icon-image': ['get', 'type'], 'icon-size': groundScale(0.42, 0.18), 'icon-allow-overlap': true, 'icon-ignore-placement': true,
     'icon-anchor': 'bottom', 'icon-offset': ['coalesce', ['get', 'off'], ['literal', [0, 0]]], 'symbol-sort-key': ['get', 'stack'] } as never, paint: { 'icon-opacity': ['case', ['==', ['get', 'state'], 'removed'], 0.35, 1] } });

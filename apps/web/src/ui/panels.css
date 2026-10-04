@@ -264,16 +264,10 @@
 
 /* ------------------------------------------------------------------ sign-in (DRIP ID / local) */
 .auth-screen { position: relative; min-height: 100%; display: grid; place-items: center; padding: var(--s-6) var(--s-4); background: var(--ink-0); overflow: auto; isolation: isolate; }
-.auth-aura { position: absolute; inset: -20%; z-index: -1; background:
-  radial-gradient(40% 45% at 22% 30%, rgba(85, 135, 162, 0.45), transparent 70%),
-  radial-gradient(35% 40% at 78% 26%, rgba(217, 179, 173, 0.32), transparent 70%),
-  radial-gradient(45% 50% at 62% 82%, rgba(232, 119, 46, 0.30), transparent 70%),
-  radial-gradient(30% 35% at 30% 78%, rgba(131, 180, 209, 0.30), transparent 70%);
-  filter: blur(34px) saturate(120%); animation: aura 21s ease-in-out infinite alternate; }
-@keyframes aura { to { transform: translate3d(2%, -2%, 0) rotate(4deg) scale(1.04); } }
-@media (prefers-reduced-motion: reduce) { .auth-aura { animation: none; } }
+.auth-aura { display: none; }
+
 .auth-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-6); border-radius: var(--r-4);
-  background: var(--glass); backdrop-filter: blur(34px) saturate(150%); box-shadow: var(--shadow-pop); }
+  background: var(--ink-1); border: 1px solid var(--line-1); box-shadow: var(--shadow-pop); }
 .auth-card > .lockup { margin-bottom: var(--s-3); }
 .auth-intro h1 { margin: 0 0 var(--s-1); font: 400 var(--fs-28) / var(--lh-tight) var(--font-editorial); letter-spacing: -0.01em; }
 .auth-intro p { margin: 0; color: var(--text-2); }
@@ -283,9 +277,6 @@
 .auth-provider img { height: 16px; }
 .auth-provider:hover { background: var(--ink-3); }
 .auth-provider:active { transform: scale(0.98); }
-.auth-provider.is-drip { background: var(--drip-gradient); color: #0d0d0d; }
-.auth-provider.is-drip img { filter: brightness(0); }
-.auth-provider.is-drip:hover { filter: brightness(1.06); }
 .auth-sep { display: flex; align-items: center; gap: var(--s-3); color: var(--text-3); font-size: var(--fs-11); margin: var(--s-2) 0; }
 .auth-sep::before, .auth-sep::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
 .auth-form { display: flex; flex-direction: column; gap: var(--s-3); }
@@ -297,13 +288,13 @@
 
 /* user menu, licence banner */
 .user-btn { display: inline-flex; align-items: center; gap: var(--s-2); background: none; border: 0; padding: 3px; border-radius: 50%; margin-left: var(--s-1); }
-.avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-11); font-weight: 700; color: #0d0d0d; background: var(--drip-gradient); flex: none; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-11); font-weight: 700; color: var(--text-1); background: var(--ink-3); flex: none; }
 .user-menu { min-width: 260px; }
 .user-menu .um-head { display: flex; gap: var(--s-3); align-items: center; padding: var(--s-2) var(--s-2) var(--s-3); }
 .user-menu .um-head strong { display: block; }
 .user-menu .um-head span { color: var(--text-3); font-size: var(--fs-11); }
-.plan-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: var(--fs-11); font-weight: 500; background: var(--drip-gradient-soft); color: var(--text-1); }
-.license-banner { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-4); border-radius: var(--r-3); background: var(--drip-gradient-soft); font-size: var(--fs-12); }
+.plan-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: var(--fs-11); font-weight: 500; background: var(--ink-2); color: var(--text-1); }
+.license-banner { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-4); border-radius: var(--r-3); background: var(--ink-2); font-size: var(--fs-12); }
 .license-banner .spacer { flex: 1; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--s-3); font-size: var(--fs-12); margin: 0; }
 .kv dt { color: var(--text-3); }
@@ -317,53 +308,42 @@
 .row-list li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 
-/* ------------------------------------------------------------------ Elios (AI assistant) */
-.elios-orb, .elios-orb[data-tip] { position: absolute; right: 56px; bottom: 22px; z-index: var(--z-map-ui); width: 46px; height: 46px; border-radius: 50%; border: 0; display: grid; place-items: center;
-  color: #0d0d0d; background: var(--drip-gradient); box-shadow: 0 8px 26px rgba(85, 135, 162, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15) inset; isolation: isolate; overflow: hidden;
-  transition: transform var(--t-spring) var(--spring), box-shadow var(--t-std); }
-.elios-orb:hover { transform: scale(1.06); box-shadow: 0 10px 34px rgba(232, 119, 46, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2) inset; }
-.elios-orb .icon { position: relative; z-index: 1; }
-.elios-orb-core { position: absolute; inset: -40%; z-index: 0; background: conic-gradient(from 0deg, #5587a2, #83b4d1, #d9b3ad, #e8772e, #5587a2); filter: blur(8px); opacity: 0.7; animation: orb 6s linear infinite; }
-@keyframes orb { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .elios-orb-core { animation: none; } }
-.elios { position: absolute; right: 56px; bottom: 80px; z-index: var(--z-panel); width: min(400px, calc(100% - 80px)); height: min(600px, calc(100% - 110px));
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-radius: var(--r-4); overflow: hidden; background: var(--glass); backdrop-filter: blur(34px) saturate(160%);
-  box-shadow: var(--shadow-pop); animation: elios-in var(--t-spring) var(--spring) both; transform-origin: bottom right; }
-.elios::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--drip-gradient); pointer-events: none;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.7; }
-@keyframes elios-in { from { opacity: 0; transform: translateY(13px) scale(0.97); } to { opacity: 1; transform: none; } }
-.elios-head { position: relative; display: flex; align-items: center; gap: var(--s-2); padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4); overflow: hidden; }
-.elios-head strong { display: block; font: 600 var(--fs-16) / 1.1 var(--font-display); letter-spacing: 0.02em; }
+/* ------------------------------------------------------------------ Elios (AI assistant): a panel of the shell, same surfaces as the rest */
+.elios { position: absolute; left: var(--s-3); top: var(--s-3); bottom: var(--s-3); z-index: var(--z-panel); width: min(380px, calc(100% - 24px));
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-radius: var(--r-3); overflow: hidden; background: var(--ink-1); border: 1px solid var(--line-1);
+  box-shadow: var(--shadow-pop); animation: elios-in var(--t-spring) var(--spring) both; transform-origin: top left; }
+@keyframes elios-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+.elios-head { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4); border-bottom: 1px solid var(--line-1); }
+.elios-head strong { display: block; font: 600 var(--fs-14) / 1.1 var(--font-ui); }
 .elios-head span { font-size: var(--fs-11); color: var(--text-3); }
-.elios-glow { position: absolute; inset: -60% -10% auto -10%; height: 200%; background: var(--drip-gradient); opacity: 0.22; filter: blur(30px); pointer-events: none; }
-.elios-mark { position: relative; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--drip-gradient); color: #0d0d0d; flex: none; }
-.elios-head > div, .elios-head > button { position: relative; }
+.elios-glow { display: none; }
+.elios-mark { width: 28px; height: 28px; border-radius: var(--r-2); display: grid; place-items: center; background: var(--ink-2); color: var(--drip-accent); flex: none; }
 .elios-mini { background: var(--ink-2); border: 0; border-radius: var(--r-2); padding: 4px 9px; font-size: var(--fs-11); color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; }
 .elios-mini:hover, .elios-mini.is-on { background: var(--ink-3); color: var(--text-1); }
-.elios-body { overflow-y: auto; padding: var(--s-2) var(--s-4) var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
+.elios-body { overflow-y: auto; padding: var(--s-3) var(--s-4) var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
 .elios-empty p, .elios-note p { margin: 0 0 var(--s-3); color: var(--text-2); font-size: var(--fs-12); line-height: var(--lh-text); }
-.elios-note { padding: var(--s-3); border-radius: var(--r-3); background: var(--drip-gradient-soft); }
+.elios-note { padding: var(--s-3); border-radius: var(--r-2); background: var(--ink-2); }
 .elios-chips { display: flex; flex-direction: column; gap: 6px; }
-.elios-chip { text-align: left; background: var(--ink-2); border: 1px solid var(--line-1); border-radius: var(--r-3); padding: 8px 11px; font-size: var(--fs-12); color: var(--text-1); }
-.elios-chip:hover { background: var(--drip-gradient-soft); border-color: var(--line-2); }
-.elios-msg { overflow-wrap: anywhere; max-width: 88%; padding: 9px 12px; border-radius: 15px; font-size: var(--fs-13); line-height: var(--lh-text); animation: msg-in var(--t-spring) var(--spring) both; }
+.elios-chip { text-align: left; background: var(--ink-2); border: 1px solid var(--line-1); border-radius: var(--r-2); padding: 8px 11px; font-size: var(--fs-12); color: var(--text-1); }
+.elios-chip:hover { background: var(--ink-3); border-color: var(--line-2); }
+.elios-msg { overflow-wrap: anywhere; max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: var(--fs-13); line-height: var(--lh-text); animation: msg-in var(--t-spring) var(--spring) both; }
 .elios-msg p { margin: 0 0 6px; } .elios-msg p:last-child { margin: 0; }
 .elios-msg ul { margin: 4px 0; padding-left: 18px; }
-.elios-msg.is-user { align-self: flex-end; background: var(--drip-accent-soft); color: var(--text-1); border-bottom-right-radius: 5px; }
-.elios-msg.is-elios { align-self: flex-start; background: var(--ink-2); border-bottom-left-radius: 5px; }
+.elios-msg.is-user { align-self: flex-end; background: var(--ink-3); color: var(--text-1); border-bottom-right-radius: 4px; }
+.elios-msg.is-elios { align-self: flex-start; background: var(--ink-2); border-bottom-left-radius: 4px; }
 @keyframes msg-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
 .elios-msg.is-typing { display: inline-flex; gap: 4px; padding: 12px 14px; }
-.elios-msg.is-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--drip-accent); animation: typing 1.2s infinite ease-in-out; }
-.elios-msg.is-typing span:nth-child(2) { animation-delay: 0.15s; background: var(--drip-rose); }
-.elios-msg.is-typing span:nth-child(3) { animation-delay: 0.3s; background: var(--drip-orange); }
+.elios-msg.is-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); animation: typing 1.2s infinite ease-in-out; }
+.elios-msg.is-typing span:nth-child(2) { animation-delay: 0.15s; }
+.elios-msg.is-typing span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typing { 0%, 80%, 100% { opacity: 0.3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
-.elios-action { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-11); padding: 4px 9px; border-radius: 20px; background: var(--drip-gradient-soft); color: var(--text-2); }
-.elios-action.is-err { background: rgba(208, 97, 79, 0.12); color: var(--err); }
+.elios-action { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-11); padding: 4px 9px; border-radius: var(--r-2); background: var(--ink-2); color: var(--text-2); }
+.elios-action.is-err { color: var(--err); }
 .elios-input { display: flex; align-items: flex-end; gap: var(--s-2); padding: var(--s-3); border-top: 1px solid var(--line-1); }
-.elios-input textarea { flex: 1; resize: none; background: var(--ink-2); border: 1px solid var(--line-1); border-radius: var(--r-3); padding: 9px 11px; color: var(--text-1); font-size: var(--fs-13); line-height: 1.4; max-height: 140px; }
+.elios-input textarea { flex: 1; resize: none; background: var(--ink-2); border: 1px solid var(--line-1); border-radius: var(--r-2); padding: 9px 11px; color: var(--text-1); font-size: var(--fs-13); line-height: 1.4; max-height: 140px; }
 .elios-input textarea:focus { outline: none; border-color: var(--drip-accent); }
 .elios-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-.elios-send { width: 36px; height: 36px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--drip-gradient); color: #0d0d0d; }
+.elios-send { width: 34px; height: 34px; border-radius: var(--r-2); border: 0; display: grid; place-items: center; background: var(--drip-accent); color: var(--ink-0); }
 .elios-send:disabled { opacity: 0.45; }
 .turn-cell { display: inline-flex; gap: 2px; }
 .cell.turn { width: 22px; min-width: 22px; font-size: 13px; line-height: 1; color: var(--text-3); }

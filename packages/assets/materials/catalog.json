@@ -470,6 +470,66 @@
    "scaleM": 0.5,
    "roughness": 1,
    "permeable": true
+  },
+  {
+   "id": "lens_red",
+   "label": "Lente rossa",
+   "category": "fixture",
+   "color": "#d12a1f",
+   "pattern": "flat",
+   "scaleM": 1,
+   "roughness": 0.3,
+   "permeable": false
+  },
+  {
+   "id": "lens_amber",
+   "label": "Lente gialla",
+   "category": "fixture",
+   "color": "#f2a51a",
+   "pattern": "flat",
+   "scaleM": 1,
+   "roughness": 0.3,
+   "permeable": false
+  },
+  {
+   "id": "lens_green",
+   "label": "Lente verde",
+   "category": "fixture",
+   "color": "#2bb35a",
+   "pattern": "flat",
+   "scaleM": 1,
+   "roughness": 0.3,
+   "permeable": false
+  },
+  {
+   "id": "reflective_white",
+   "label": "Pellicola rifrangente bianca",
+   "category": "fixture",
+   "color": "#f4f4f0",
+   "pattern": "flat",
+   "scaleM": 1,
+   "roughness": 0.3,
+   "permeable": false
+  },
+  {
+   "id": "led_warm",
+   "label": "LED 3000 K",
+   "category": "fixture",
+   "color": "#ffe9b8",
+   "pattern": "flat",
+   "scaleM": 1,
+   "roughness": 0.3,
+   "permeable": false
+  },
+  {
+   "id": "led_amber",
+   "label": "LED ambra",
+   "category": "fixture",
+   "color": "#ffb020",
+   "pattern": "flat",
+   "scaleM": 1,
+   "roughness": 0.3,
+   "permeable": false
   }
  ]
 }

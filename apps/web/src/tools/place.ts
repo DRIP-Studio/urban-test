@@ -1,4 +1,6 @@
-import { geom, type Asset, type LngLat } from '@drip-urban/core';
+import { toast } from '../state/toasts';
+import { zoneForPoint } from '../ztl/link';
+import { geom, type Asset, type LngLat, type Network } from '@drip-urban/core';
 import { fc } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import { plateOnPoleOps } from '../state/actions';
@@ -59,9 +61,11 @@ function makePlaceTool(kind: 'furniture' | 'sign'): ToolHandler {
       const at = e.lngLat;
       if (kind === 'sign') {
         // Click on an existing sign (Alt inverts the setting): the new plate goes under it, on the same pole.
-        const hit = ctx.map.queryRenderedFeatures([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]], { layers: ['asset-pt-sign'].filter((l) => ctx.map.getLayer(l)) })[0];
-        if (hit && (t.signStack !== e.alt)) {
-          const r = plateOnPoleOps(String(hit.properties.id), type);
+        // A plate or the pole itself (its foot is the sign coordinate; plates are drawn above it).
+        const hit = ctx.map.queryRenderedFeatures([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]], { layers: ['asset-pt-sign', 'signs-3d', 'sign-poles-icon'].filter((l) => ctx.map.getLayer(l)) })[0];
+        const baseId = hit ? signOnPole(network, String(hit.properties.id)) : null;
+        if (baseId && (t.signStack !== e.alt)) {
+          const r = plateOnPoleOps(baseId, type);
           if (r) {
             useTool.setState((s) => ({ recentSigns: [type, ...s.recentSigns.filter((x) => x !== type)].slice(0, 12) }));
             if (commit('batch', { label: 'Aggiungi pannello al palo', ops: r.ops }).ok) select({ kind: 'asset', ids: [r.asset.id] });
@@ -69,6 +73,13 @@ function makePlaceTool(kind: 'furniture' | 'sign'): ToolHandler {
           }
         }
         useTool.setState((s) => ({ recentSigns: [type, ...s.recentSigns.filter((x) => x !== type)].slice(0, 12) }));
+      }
+      // Electronic ZTL gates and panels are linked to the ZTL they serve (state and timetable come from it).
+      const item = kind === 'furniture' ? useApp.getState().catalogs?.furniture.items.find((i) => i.id === type) : undefined;
+      if (item?.led?.kind === 'ztl' || type === 'it.sign.zona_traffico_limitato') {
+        const z = zoneForPoint(network, at);
+        if (z) props.zoneId = z.id;
+        else if (item) toast.warn('Nessuna ZTL vicina', 'Il pannello resta «non collegato»: disegna la ZTL (strumento Zone) e collegalo dall\'Inspector.');
       }
       const asset: Asset = {
         id: newId('a'), type, at, rotationDeg: rotation(), state: 'project', properties: props,
@@ -94,3 +105,12 @@ function makePlaceTool(kind: 'furniture' | 'sign'): ToolHandler {
 
 export const furnitureTool = makePlaceTool('furniture');
 export const signTool = makePlaceTool('sign');
+
+/** Sign id to stack under: a plate id as is, or the lowest plate of a pole feature (`pole:<poleId>`). */
+function signOnPole(net: Network, id: string): string | null {
+  if (!id.startsWith('pole:')) return net.assets[id] ? id : null;
+  const pole = id.slice(5);
+  const plates = Object.values(net.assets).filter((a) => a.type.startsWith('it.sign.') && a.state !== 'removed' && ((a.properties.poleId as string | undefined) ?? a.id) === pole);
+  plates.sort((a, b) => Number(b.properties.stackOrder ?? 0) - Number(a.properties.stackOrder ?? 0));
+  return plates[0]?.id ?? null;
+}

@@ -82,6 +82,20 @@ function ledImage(state: string): ImageData {
   return g.getImageData(0, 0, W * s, H * s);
 }
 
+/** Sign pole for the plan view: galvanised tube from the base up to the middle of the top plate (same units as the plates). */
+function poleImage(n: number): ImageData {
+  const W = 10, H = 40 + (n - 1) * 50 + 24, s = 2;
+  const c = document.createElement('canvas');
+  c.width = W * s; c.height = H * s;
+  const g = c.getContext('2d')!;
+  g.scale(s, s);
+  const grad = g.createLinearGradient(3, 0, 7, 0);
+  grad.addColorStop(0, '#6d7277'); grad.addColorStop(0.45, '#c9cdd1'); grad.addColorStop(1, '#5c6166');
+  g.fillStyle = grad; g.fillRect(3, 0, 4, H - 3);
+  g.fillStyle = '#4b4f53'; g.beginPath(); g.ellipse(5, H - 3, 4.5, 2.5, 0, 0, Math.PI * 2); g.fill();
+  return g.getImageData(0, 0, W * s, H * s);
+}
+
 /** PMV: amber dot-matrix text, up to three lines, on a black panel. */
 function vmsImage(text: string): ImageData {
   const lines = text.split('\n').slice(0, 3);
@@ -135,6 +149,10 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
       const item = furniture().find((f) => f.id === itemId);
       const img = item ? furnitureSprite(item, byId, mat || undefined) : null;
       if (img) map.addImage(id, img, { pixelRatio: 2 });
+      return;
+    }
+    if (id.startsWith('pole:')) {
+      map.addImage(id, poleImage(Number(id.slice(5)) || 1), { pixelRatio: 2 });
       return;
     }
     if (id.startsWith('vms:')) {

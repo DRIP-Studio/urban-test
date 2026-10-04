@@ -2,7 +2,18 @@ import { LocalFrame, layoutSection, localDayMinutes, restrictionsOf, zoneActiveA
 import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
 import { partPrints } from '../models/parts';
+import { PX_PER_M } from './furnitureSprite';
 import { fc, type Feature, type LineString, type Point, type Polygon } from '../engine/geojson';
+
+/** Sign stacks: plan view in icon pixels (96 px plates), 3D in metres (lower edge 2.20 m, art. 81 Reg. CdS). */
+export const POLE_STEM_PX = 40, PLATE_STEP_PX = 50;
+export const SIGN_BOTTOM_M = 2.2, SIGN_STEP_M = 0.66, SIGN_PLATE_M = 0.6;
+
+/** Smallest icon-size that keeps the object at least MIN_PX on screen (sprites are PX_PER_M px/m at ratio 2). */
+const MIN_PX = 30;
+function minSpriteScale(item: FurnitureItem): number {
+  return MIN_PX / (Math.max(0.2, item.dims.w, item.dims.d) * (PX_PER_M / 2));
+}
 
 const close = (r: readonly LngLat[]) => [...r.map((p) => [p[0], p[1]]), [r[0]![0], r[0]![1]]];
 
@@ -78,16 +89,31 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
     const pole = (a.properties.poleId as string | undefined) ?? a.id;
     (poles.get(pole) ?? poles.set(pole, []).get(pole)!).push(a);
   }
-  const stackOf = new Map<string, number>();
-  for (const list of poles.values()) {
+  // level 0 = lowest plate; stackOrder 0 = top plate (art. 81 Reg. CdS: the main sign on top).
+  const levelOf = new Map<string, { level: number; n: number }>();
+  const poleFeatures: Feature<Point>[] = [];
+  const signs3d: Feature<Point>[] = [];
+  for (const [poleId, list] of poles) {
     list.sort((x, y) => ((x.properties.stackOrder as number) ?? 0) - ((y.properties.stackOrder as number) ?? 0));
-    list.forEach((a, i) => stackOf.set(a.id, i));
+    const n = list.length;
+    list.forEach((a, k) => levelOf.set(a.id, { level: n - 1 - k, n }));
+    const live = list.filter((a) => a.state !== 'removed');
+    const foot = live[0] ?? list[0]!;
+    poleFeatures.push({ type: 'Feature', id: `pole:${poleId}`, geometry: { type: 'Point', coordinates: [foot.at[0], foot.at[1]] }, properties: { id: `pole:${poleId}`, icon: `pole:${n}`, state: foot.state } });
+    if (live.length) {
+      // Real pole for the tilted map: Ø 60 mm up to the top plate.
+      const top = SIGN_BOTTOM_M + n * SIGN_STEP_M - 0.05;
+      const c = frame.toMetric(foot.at);
+      const ring = Array.from({ length: 10 }, (_, j) => { const t = (j / 10) * Math.PI * 2; const ll = frame.toLngLat([c[0] + 0.03 * Math.cos(t), c[1] + 0.03 * Math.sin(t)]); return [ll[0], ll[1]]; });
+      parts.push({ type: 'Feature', id: `pole:${poleId}`, geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]!]] }, properties: { id: `pole:${poleId}`, state: foot.state, material: 'steel', b: 0, h: top } });
+    }
   }
   for (const a of Object.values(net.assets)) {
     const base = { id: a.id, type: a.type, state: a.state, rot: a.rotationDeg };
     if (a.type.startsWith('it.sign.')) {
-      const i = stackOf.get(a.id) ?? 0;
-      pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, stack: i, off: [0, -i * 92] } });
+      const { level, n } = levelOf.get(a.id) ?? { level: 0, n: 1 };
+      pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, stack: n - level, off: [0, -(POLE_STEM_PX + level * PLATE_STEP_PX)] } });
+      if (a.state !== 'removed') signs3d.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { id: a.id, type: a.type, state: a.state, hm: SIGN_BOTTOM_M + level * SIGN_STEP_M } });
       continue;
     }
     const item = furniture.get(a.type);
@@ -126,9 +152,9 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
         parts.push({ type: 'Feature', id: `${a.id}:${k}`, geometry: { type: 'Polygon', coordinates: [[...pts, pts[0]!]] }, properties: { id: `${a.id}:${k}`, assetId: a.id, state: a.state, material: mat, b: pp.base + (a.elevationM ?? 0), h: pp.top + (a.elevationM ?? 0) } });
       });
     }
-    pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, type: '', sprite: `furn:${item.id}${a.material && a.material !== item.material ? `:${a.material}` : ''}` } });
+    pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, type: '', sprite: `furn:${item.id}${a.material && a.material !== item.material ? `:${a.material}` : ''}`, minK: minSpriteScale(item) } });
   }
-  return { fp: fc(fp), pt: fc(pt), signals: fc(sig), parts: fc(parts) };
+  return { fp: fc(fp), pt: fc(pt), signals: fc(sig), parts: fc(parts), poles: fc(poleFeatures), signs3d: fc(signs3d) };
 }
 
 const CLS = ['car', 'van', 'truck', 'bus', 'emergency'] as const;

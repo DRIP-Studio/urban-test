@@ -34,9 +34,8 @@ export function Login() {
   const providers = session?.providers ?? [];
   return (
     <div className="auth-screen">
-      <div className="auth-aura" aria-hidden />
       <main className="auth-card">
-        <TechnicalLockup size="lg" />
+        <TechnicalLockup />
         <div className="auth-intro">
           <h1>Accedi</h1>
           <p>Pianificazione urbana, progettazione stradale, traffico e digital twin.</p>
@@ -94,9 +93,8 @@ export function ChangePassword() {
   };
   return (
     <div className="auth-screen">
-      <div className="auth-aura" aria-hidden />
       <main className="auth-card">
-        <TechnicalLockup size="lg" />
+        <TechnicalLockup />
         <div className="auth-intro">
           <h1>Nuova password</h1>
           <p>{user?.provisional ? 'Stai usando le credenziali provvisorie. Scegli una password personale per continuare.' : 'Per continuare devi cambiare la password.'}</p>

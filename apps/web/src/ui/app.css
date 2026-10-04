@@ -51,11 +51,11 @@ h1, h2, h3 { text-wrap: balance; }
 .ws-body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 0; position: relative; }
 .ws-body > .ws-center { grid-column: 2; }
 .ws-body > .inspector { grid-column: 3; }
-.workspace.mode-present .ws-body > .ws-center, .workspace.mode-twin .ws-body > .ws-center { grid-column: 1; }
+.workspace.mode-present .ws-body > .ws-center { grid-column: 1; }
 .ws-center { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
 .ws-stage { position: relative; min-height: 0; background: var(--ink-1); }
 .map, .map.maplibregl-map { position: absolute; inset: 0; } /* MapLibre's own CSS sets position: relative on the container */
-.workspace.mode-present .ws-body, .workspace.mode-twin .ws-body { grid-template-columns: minmax(0, 1fr); }
+.workspace.mode-present .ws-body { grid-template-columns: minmax(0, 1fr); }
 
 /* ------------------------------------------------------------------ top bar */
 .topbar {
@@ -197,7 +197,6 @@ h1, h2, h3 { text-wrap: balance; }
 
 /* DRIP signature hairline under the top bar and the hub header. */
 .topbar, .hub-head { position: relative; }
-.topbar::after, .hub-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--drip-gradient); opacity: 0.55; pointer-events: none; }
 [data-tip-side='left']:hover::after, [data-tip-side='left']:focus-visible::after { top: 50%; left: auto; right: calc(100% + 13px); transform: translateY(-50%); }
 .tb-opt { display: contents; }
 /* Live collaboration: colleagues in the project (hidden below 1280 px with the other .tb-opt items). */
@@ -206,3 +205,17 @@ h1, h2, h3 { text-wrap: balance; }
 .presence-more { background: var(--ink-4); color: var(--text-1); }
 @media (max-width: 1280px) { .tb-opt { display: none; } .topbar-actions { gap: 0; } .user-btn { margin-left: 0; } }
 @media (max-width: 1100px) { .mode { padding: 6px 9px; } .topbar-project { flex-shrink: 0; } }
+
+/* Expandable rail: names next to the icons; Elios at the bottom. */
+.rail-toggle { color: var(--text-3); }
+.rail-end { margin-top: auto; }
+.rail.is-expanded { width: 212px; align-items: stretch; padding: var(--s-3) var(--s-2); }
+.rail.is-expanded .rail-group { align-items: stretch; }
+.rail.is-expanded .rail-group + .rail-group { width: auto; }
+.rail.is-expanded .rail-label { display: block; font-size: var(--fs-11); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 10px 2px; }
+.rail.is-expanded .rail-btn { width: 100%; height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px; justify-content: flex-start; }
+.rail.is-expanded .rail-btn span { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 6px; font-size: var(--fs-13); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail.is-expanded .rail-btn span kbd { font: 500 10px var(--font-mono, monospace); color: var(--text-3); background: var(--ink-2); border-radius: 4px; padding: 1px 5px; }
+.rail.is-expanded .rail-btn.is-on::before { left: -8px; }
+.rail-btn span kbd { display: none; }
+.rail.is-expanded .rail-btn span kbd { display: inline; }

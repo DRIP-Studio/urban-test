@@ -10,7 +10,7 @@ async function projectAssets(page: Page): Promise<Asset[]> {
   });
 }
 
-/** Rendered sign ids within 3 px of where the asset's coordinate projects at the given zoom. */
+/** Rendered sign ids on the vertical of the pole that stands where the asset's coordinate projects at the given zoom. */
 async function renderedAt(page: Page, at: [number, number], zoom: number): Promise<{ ids: string[]; x: number; y: number }> {
   return page.evaluate(async ({ at, zoom }) => {
     type M = { jumpTo(o: object): void; triggerRepaint(): void; once(e: string, f: () => void): void; project(p: [number, number]): { x: number; y: number }; queryRenderedFeatures(b: [[number, number], [number, number]], o: object): { properties: { id: string } }[] };
@@ -19,7 +19,9 @@ async function renderedAt(page: Page, at: [number, number], zoom: number): Promi
     map.triggerRepaint();
     await Promise.race([new Promise<void>((r) => map.once('idle', () => r())), new Promise((r) => setTimeout(r, 5000))]);
     const p = map.project(at);
-    const hits = map.queryRenderedFeatures([[p.x - 3, p.y - 3], [p.x + 3, p.y + 3]], { layers: ['asset-pt-sign'] });
+    // The pole stands on the coordinate; its plates are stacked on the same vertical, above it.
+    const pole = map.queryRenderedFeatures([[p.x - 3, p.y - 6], [p.x + 3, p.y]], { layers: ['sign-poles-icon'] });
+    const hits = pole.length ? map.queryRenderedFeatures([[p.x - 3, p.y - 400], [p.x + 3, p.y]], { layers: ['asset-pt-sign'] }) : [];
     return { ids: hits.map((h) => String(h.properties.id)), x: p.x, y: p.y };
   }, { at, zoom });
 }

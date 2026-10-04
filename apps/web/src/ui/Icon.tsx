@@ -34,6 +34,7 @@ const P: Record<string, string> = {
   chevronDown: 'M6 9l6 6 6-6',
   chevronRight: 'M9 6l6 6-6 6',
   chevronLeft: 'M15 6l-6 6 6 6',
+  menu: 'M4 7h16M4 12h16M4 17h16',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 1-.01 0',
   eyeOff: 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.5 6.6C3.8 8.3 2 12 2 12s4 7 10 7a9.7 9.7 0 0 0 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2',
   lock: 'M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',

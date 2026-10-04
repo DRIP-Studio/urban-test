@@ -1,4 +1,5 @@
-import { LocalFrame, geom, layoutSection, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { LocalFrame, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { ztlZones } from '../ztl/link';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
 import { commit, openDock, select, setDock, setTool, useApp } from '../state/store';
 import { deleteSelection, duplicateSelection, movePlate, plateOnPoleOps, polePlates } from '../state/actions';
@@ -127,6 +128,32 @@ function VmsSection({ asset }: { asset: Asset }) {
   );
 }
 
+/** Electronic ZTL gate / LED panel: which ZTL it serves, its state now and its timetable. */
+function ZtlLinkSection({ asset }: { asset: Asset }) {
+  const net = useApp((s) => s.network)!;
+  const zones = ztlZones(net);
+  const zone = net.zones[String(asset.properties.zoneId ?? '')];
+  const now = localDayMinutes(new Date());
+  const active = zone ? zoneActiveAt(zone, now.day, now.minutes) : null;
+  const set = (zoneId: string) => commit('asset.update', { assetId: asset.id, changes: { properties: { ...asset.properties, zoneId: zoneId || undefined } } });
+  return (
+    <Section title="ZTL collegata">
+      {zones.length ? (
+        <Field label="Zona">
+          <Select value={zone?.id ?? ''} ariaLabel="ZTL collegata" onChange={set} options={[{ value: '', label: 'Nessuna (pannello spento)' }, ...zones.map((z) => ({ value: z.id, label: z.name || 'ZTL' }))]} />
+        </Field>
+      ) : <p className="muted">Nel progetto non ci sono ZTL: disegnala con lo strumento Zone, poi il pannello mostrerà lo stato in tempo reale.</p>}
+      {zone ? (
+        <>
+          <p className={active ? 'warn-line' : 'ok'}><Icon name="led" size={14} /> {active ? 'ZTL ATTIVA ora' : 'ZTL NON ATTIVA ora'} · {zone.name}</p>
+          <p className="muted">Orari: {zone.schedule?.length ? zone.schedule.map((w) => `${w.days.map((d) => 'LMMGVSD'[d]).join('')} ${w.from}–${w.to}`).join(' · ') : 'sempre attiva'}</p>
+          <Button size="sm" icon="crosshair" onClick={() => select({ kind: 'zone', ids: [zone.id] })}>Apri la ZTL</Button>
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
 function AssetInspector({ ids }: { ids: readonly string[] }) {
   const net = useApp((s) => s.network)!;
   const catalogs = useApp((s) => s.catalogs);
@@ -168,6 +195,7 @@ function AssetInspector({ ids }: { ids: readonly string[] }) {
       </Section>
       {sign ? <PoleSection assetId={a.id} /> : null}
       {item?.led?.kind === 'vms' ? <VmsSection asset={a} /> : null}
+      {item?.led?.kind === 'ztl' || a.type === 'it.sign.zona_traffico_limitato' ? <ZtlLinkSection asset={a} /> : null}
       <div className="inspector-actions">
         <Button icon="crosshair" onClick={() => flyTo([a.at[0], a.at[1]], 19.5)}>Centra</Button>
         <Button icon="duplicate" onClick={() => duplicateSelection()}>Duplica</Button>

@@ -14,6 +14,7 @@ import { useContextMenu } from '../shell/contextMenu';
 import { basemapById } from './basemaps';
 import { installImageLoader } from './images';
 import { PX_PER_M } from './furnitureSprite';
+import { SIGN_PLATE_M } from './sources';
 import { addProjectLayers, allLayerDefs, setLayerOpacity, setLayerVisible } from './layers';
 import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
 import { assetsFC, buildingsFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
@@ -107,6 +108,15 @@ export function MapView() {
     let furnCat = catalogs.furniture;
     let furnitureById = new Map(furnCat.items.map((i) => [i.id, i]));
     let theme = themeOf(basemap);
+    // Tilted map: plate offsets follow the pitch (a vertical metre is ~ ground metre × sin(pitch) on screen).
+    let signs3dBase: ReturnType<typeof assetsFC>['signs3d'] | null = null;
+    let signsRaf = 0;
+    const updateSigns3d = () => {
+      if (!signs3dBase || map.getPitch() <= 12) return;
+      const k = Math.sin((map.getPitch() * Math.PI) / 180) * (48 / SIGN_PLATE_M); // 96 px raster at ratio 2 = 48 css px
+      setSource('signs3d', { ...signs3dBase, features: signs3dBase.features.map((f) => ({ ...f, properties: { ...f.properties, off: [0, -Number(f.properties.hm) * k] } })) });
+    };
+    map.on('pitch', () => { cancelAnimationFrame(signsRaf); signsRaf = requestAnimationFrame(updateSigns3d); });
     const pushNetwork = () => {
       const { network, selection } = useApp.getState();
       if (!network) return;
@@ -118,6 +128,8 @@ export function MapView() {
       if (cat && cat !== furnCat) { furnCat = cat; furnitureById = new Map(cat.items.map((i) => [i.id, i])); }
       const a = assetsFC(network, baseline.origin, furnitureById);
       syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals); syncSource('asset-parts', a.parts);
+      syncSource('sign-poles', a.poles);
+      signs3dBase = a.signs3d; updateSigns3d();
       setSource('selection', selectionFC(selection, network));
     };
     const init = () => {
@@ -137,7 +149,12 @@ export function MapView() {
       // Furniture symbols are drawn at PX_PER_M px/m (pixelRatio 2): size them in metres at this latitude.
       const pxPerM19 = 2 ** 19 * 512 / (40_075_016.7 * Math.cos((baseline.origin[1] * Math.PI) / 180));
       const k = pxPerM19 / (PX_PER_M / 2);
-      if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'icon-size', ['interpolate', ['exponential', 2], ['zoom'], 15, k / 16, 19, k, 22, k * 8]);
+      // Real scale, but never smaller than a readable minimum (minK per item, see sources.ts).
+      // Sign plates in 3D at their real size (0.6 m), 96 px rasters.
+      const plate = (z: number) => (pxPerM19 * 2 ** (z - 19) * SIGN_PLATE_M) / 48;
+      if (map.getLayer('signs-3d')) map.setLayoutProperty('signs-3d', 'icon-size', ['interpolate', ['exponential', 2], ['zoom'], 15, Math.max(0.08, plate(15)), 19, plate(19), 22, plate(22)] as never);
+      const atLeast = (v: number) => ['max', v, ['coalesce', ['get', 'minK'], 0]];
+      if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'icon-size', ['interpolate', ['exponential', 2], ['zoom'], 15, atLeast(k / 16), 19, atLeast(k), 22, atLeast(k * 8)] as never);
       applyPitchMode();
       useMapUi.setState({ ready: true });
     };
@@ -146,6 +163,9 @@ export function MapView() {
       const tilted = map.getPitch() > 12;
       for (const id of ['asset-fp-extrude', 'buildings-extrude']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'visible' : 'none');
       if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'visibility', tilted ? 'none' : 'visible');
+      for (const id of ['asset-pt-sign', 'sign-poles-icon']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', tilted ? 'none' : 'visible');
+      if (map.getLayer('signs-3d')) map.setLayoutProperty('signs-3d', 'visibility', tilted ? 'visible' : 'none');
+      updateSigns3d();
     };
     map.on('pitchend', applyPitchMode);
     map.on('load', init);

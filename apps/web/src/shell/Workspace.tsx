@@ -27,7 +27,7 @@ import { IconButton } from '../ui/controls';
 import { ContextMenu, StatusBar, ToolHint, ToolRail } from './Chrome';
 import { installShortcuts } from './commands';
 import { TopBar } from './TopBar';
-import { EliosButton, EliosPanel } from '../elios/Elios';
+import { EliosPanel } from '../elios/Elios';
 
 const TwinView = lazy(() => import('../twin/TwinView'));
 
@@ -103,14 +103,14 @@ export function Workspace() {
     <div className={`workspace mode-${mode} ${focus ? 'is-focus' : ''}`}>
       <TopBar />
       <div className="ws-body">
-        {map ? <ToolRail /> : null}
+        {mode !== 'present' ? <ToolRail /> : null}
         <main className="ws-center">
           <div className="ws-stage">
             {map ? <MapView /> : null}
             {mode === 'twin' ? <Suspense fallback={<div className="fullscreen-state"><span className="spinner lg" /><p>Caricamento del Twin 3D</p></div>}><TwinView /></Suspense> : null}
             {mode === 'present' ? <PresentView /> : null}
             {map ? <ToolHint /> : null}
-            {mode !== 'present' ? <><EliosButton /><EliosPanel /></> : null}
+            {mode !== 'present' ? <EliosPanel /> : null}
           </div>
           {bottom && map ? (
             <section className="dock" aria-label={bottom.title}>
