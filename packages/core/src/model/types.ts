@@ -453,7 +453,10 @@ export interface RoadFeature {
 export type MarkingKind =
   | 'line_solid' | 'line_dashed' | 'line_double' | 'line_mixed' | 'line_yellow' | 'zigzag'
   | 'stop_line' | 'give_way_line' | 'give_way_triangle'
-  | 'arrow' | 'text' | 'symbol' | 'hatch' | 'chevrons' | 'parking_bays' | 'box_junction';
+  | 'arrow' | 'text' | 'symbol' | 'hatch' | 'chevrons' | 'parking_bays' | 'box_junction'
+  | 'zebra' | 'bike_crossing' | 'shark_teeth' | 'island' | 'bus_lane' | 'bike_lane' | 'speed_number';
+/** Reserved bays (art. 149 Reg., art. 188 CdS, L. 120/2010 «stalli rosa», DL 76/2020 ricarica). */
+export type BayPurpose = 'free' | 'paid' | 'disabled' | 'loading' | 'taxi' | 'pink' | 'electric' | 'residents' | 'motorcycle';
 export type MarkingColor = 'white' | 'yellow' | 'blue' | 'red' | 'pink' | 'green';
 
 export interface Marking {
@@ -467,7 +470,7 @@ export interface Marking {
   /** symbol: 'bike' | 'wheelchair' | 'bus' | 'pedestrian' | 'school' | 'speed30'; arrow: TurnKind list joined by '+'. */
   readonly symbol?: string;
   /** parking_bays: layout and bay size. */
-  readonly bays?: { readonly layout: 'parallel' | 'perpendicular' | 'angled'; readonly lengthM: number; readonly widthM: number; readonly side: 'left' | 'right' };
+  readonly bays?: { readonly layout: 'parallel' | 'perpendicular' | 'angled'; readonly lengthM: number; readonly widthM: number; readonly side: 'left' | 'right'; readonly purpose?: BayPurpose };
   readonly state: AssetState;
   readonly provenance: Provenance;
 }

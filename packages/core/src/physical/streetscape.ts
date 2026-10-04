@@ -205,10 +205,86 @@ function addCustomMarkings(net: Network, metric: MetricCache, toLL: ToLL, out: O
         break;
       }
       case 'box_junction': for (const r of [...hatch(pts, dir, 1.5, 45, 0.15), ...hatch(pts, dir, 1.5, -45, 0.15)]) push(r, MARKING_MATERIAL.yellow); break;
-      case 'parking_bays': for (const r of bays(pts, m.bays?.layout ?? 'parallel', m.bays?.lengthM ?? 5, m.bays?.widthM ?? 2, m.bays?.side ?? 'right')) push(r); break;
+      case 'parking_bays': {
+        const purpose = m.bays?.purpose ?? 'free';
+        const pm = PURPOSE[purpose] ?? {};
+        const color = pm.color ?? m.color;
+        const layout = m.bays?.layout ?? 'parallel', side = m.bays?.side ?? 'right';
+        const lengthM = m.bays?.lengthM ?? (purpose === 'motorcycle' ? 2 : 5), widthM = m.bays?.widthM ?? (purpose === 'disabled' ? 3.2 : purpose === 'motorcycle' ? 1 : 2);
+        for (const r of bays(pts, layout, lengthM, widthM, side)) push(r, MARKING_MATERIAL[color]);
+        // Symbol or text in every bay (per-bay label: wheelchair, TAXI, CARICO SCARICO…).
+        const pitch = layout === 'parallel' ? lengthM : layout === 'perpendicular' ? widthM : widthM / Math.SQRT1_2;
+        const depth = layout === 'parallel' ? widthM : lengthM;
+        const Lb = lengthOf(pts), count = Math.floor(Lb / pitch), start = (Lb - count * pitch) / 2, s = side === 'left' ? 1 : -1;
+        if (pm.symbol || pm.text) for (let i = 0; i < count; i++) {
+          const { p, t } = sampleAt(pts, start + (i + 0.5) * pitch);
+          const c = add(p, mul(leftNormal(t), (s * depth) / 2));
+          const u = layout === 'parallel' ? t : mul(leftNormal(t), -s);
+          const rings = pm.symbol ? roadSymbol(pm.symbol, c, u, Math.min(1.4, depth * 0.6)) : roadText(pm.text!, c, u, Math.min(depth, pitch) * 0.8, layout === 'parallel' ? 0.9 : 1.2, 0.1);
+          for (const r of rings) push(r, MARKING_MATERIAL[color]);
+        }
+        break;
+      }
+      case 'zebra': {
+        // Fig. II.434: stripes 50 cm every 1 m across the carriageway, depth ≥ 2,5 m (4 m on main roads).
+        const a = pts[0]!, b = pts[pts.length - 1]!, across = unit(sub(b, a)), along = leftNormal(across), depth = m.widthM && m.widthM > 1 ? m.widthM : 4;
+        const L0 = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        for (let x = 0.25; x + 0.5 <= L0; x += 1.0) push(quad(add(a, mul(across, x + 0.25)), across, along, -0.25, 0.25, -depth / 2, depth / 2).map((q) => q) as V[]);
+        break;
+      }
+      case 'bike_crossing': {
+        // Art. 146 c. 3: two lines of 50 × 50 cm squares, 50 cm apart, 2 m between the lines (one-way 1 m).
+        const a = pts[0]!, b = pts[pts.length - 1]!, across = unit(sub(b, a)), along = leftNormal(across), L0 = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        for (const o of [-1.25, 1.25]) for (let x = 0; x + 0.5 <= L0; x += 1.0) push(quad(add(add(a, mul(across, x + 0.25)), mul(along, o)), across, along, -0.25, 0.25, -0.25, 0.25));
+        if (m.color === 'green' || m.color === 'red') push(solid([add(a, mul(along, 0)), add(b, mul(along, 0))], 2.0), MARKING_MATERIAL[m.color] === 'asphalt_green' ? 'asphalt_green' : MARKING_MATERIAL[m.color]);
+        break;
+      }
+      case 'shark_teeth': {
+        // Fig. II.432 «denti di squalo»: triangles 50 cm base, 60 cm high, every 75 cm, apex towards the driver.
+        const L0 = lengthOf(pts);
+        for (let x = 0.3; x + 0.25 <= L0; x += 0.75) {
+          const { p, t } = sampleAt(pts, x);
+          const n = leftNormal(t);
+          push([add(p, mul(t, -0.25)), add(p, mul(t, 0.25)), add(p, mul(n, -0.6))]);
+        }
+        break;
+      }
+      case 'island': {
+        // Isola spartitraffico rialzata: kerbed platform 15 cm, white kerb outline and hatched approach nose.
+        if (pts.length >= 3) {
+          out.surfaces.push({ id: `cm:${m.id}:isl`, kind: 'raised', ring: toLL(pts), state, material: 'concrete', z: 9, heightM: 0.15 });
+          push(solid([...pts, pts[0]!], 0.15));
+        }
+        break;
+      }
+      case 'bus_lane': {
+        // Corsia riservata (art. 140 c. 2-bis Reg.): yellow line 30 cm, «BUS» every 50 m in the lane.
+        push(solid(pts, 0.3), MARKING_MATERIAL.yellow);
+        const L0 = lengthOf(pts);
+        for (let x = 15; x < L0 - 5; x += 50) { const { p, t } = sampleAt(pts, x); for (const r of roadText(m.text || 'BUS', add(p, mul(leftNormal(t), -1.75)), t, 2.2, 1.6)) push(r, MARKING_MATERIAL.yellow); }
+        break;
+      }
+      case 'bike_lane': {
+        // Pista ciclabile su corsia (DM 557/1999 art. 7): white line 12 cm (or yellow), bike symbol and arrow every 40 m.
+        push(solid(pts, w));
+        const L0 = lengthOf(pts);
+        for (let x = 8; x < L0 - 3; x += 40) {
+          const { p, t } = sampleAt(pts, x), c = add(p, mul(leftNormal(t), -0.8));
+          for (const r of roadSymbol('bike', c, t, 1.2)) push(r);
+          push(arrowRing(add(c, mul(t, 2.2)), t, 'through'));
+        }
+        break;
+      }
+      case 'speed_number': for (const r of roadText(m.text || '30', pts[0]!, dir, 2.2, 2.5, 0.15)) push(r); break;
     }
   }
 }
+
+const PURPOSE: Record<string, { color?: 'white' | 'yellow' | 'blue' | 'pink' | 'green'; symbol?: string; text?: string }> = {
+  free: {}, paid: { color: 'blue' }, residents: { color: 'white', text: 'R' }, motorcycle: {},
+  disabled: { color: 'yellow', symbol: 'wheelchair' }, loading: { color: 'yellow', text: 'CARICO' }, taxi: { color: 'yellow', text: 'TAXI' },
+  pink: { color: 'pink', symbol: 'pedestrian' }, electric: { color: 'green', text: 'E' },
+};
 
 /** Bay outlines along a kerb line (stalli, art. 149 Reg.): parallel 2,0 × 5,0, perpendicular 2,5 × 5,0, angled 45°. */
 export function bays(line: readonly V[], layout: 'parallel' | 'perpendicular' | 'angled', lengthM: number, widthM: number, side: 'left' | 'right'): V[][] {
@@ -360,6 +436,34 @@ export function addStreetscapeRoads(net: Network, roads: Map<string, { axis: rea
     if (!road) continue;
     autoParkingBays(road, x.axis, x.state, toLL, out);
     autoApproachArrows(road, x.axis, x.ends, x.state, toLL, out);
+    autoReservedLanes(road, x.axis, x.state, toLL, out);
+  }
+}
+
+/**
+ * Corsie riservate: bus lanes get «BUS» in yellow every 50 m (the yellow 30 cm separator comes from the
+ * lane lines); cycle lanes in the section get the bike symbol and direction arrow every 40 m.
+ */
+function autoReservedLanes(road: Road, axis: readonly V[], state: PhysState, toLL: ToLL, out: Out): void {
+  const lay = layoutSection(road);
+  const L = lengthOf(axis);
+  if (L < 20) return;
+  let k = 0;
+  const push = (ring: V[], material: string) => out.markings.push({ id: `rl:${road.id}:${k++}`, kind: 'text', ring: toLL(ring), roadId: road.id, state, material, z: 10, heightM: 0 });
+  for (const pe of lay.elements) {
+    const lane = road.lanes.find((l) => l.id === pe.el.laneId);
+    const bus = pe.el.kind === 'bus' || lane?.restriction === 'bus_only' || lane?.priority === 'transit';
+    const bike = pe.el.kind === 'cycle' || lane?.restriction === 'bike_only';
+    if (!bus && !bike) continue;
+    const c = (pe.left + pe.right) / 2;
+    const backward = lane?.direction === 'backward' || (!lane && c > 0 && road.oneway === 'no');
+    for (let x = bus ? 20 : 10; x < L - 8; x += bus ? 50 : 40) {
+      const { p, t } = sampleAt(axis, backward ? L - x : x);
+      const dir = backward ? mul(t, -1) : t;
+      const at = add(p, mul(leftNormal(t), c));
+      if (bus) for (const r of roadText('BUS', at, dir, Math.min(2.4, Math.abs(pe.left - pe.right) * 0.75), 1.6)) push(r, MARKING_MATERIAL.yellow);
+      else { for (const r of roadSymbol('bike', at, dir, Math.min(1.2, Math.abs(pe.left - pe.right) * 0.8))) push(r, 'road_marking_white'); push(arrowRing(add(at, mul(dir, 2)), dir, 'through'), 'road_marking_white'); }
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { geom, humpLimits, layoutSection, type LngLat, type Marking, type RoadFeature, type RoadFeatureKind } from '@drip-urban/core';
+import { LocalFrame, geom, humpLimits, layoutSection, type LngLat, type Marking, type RoadFeature, type RoadFeatureKind } from '@drip-urban/core';
 import { commit, newId, select, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { makeDrawTool } from './draw';
@@ -48,8 +48,8 @@ export const calmingTool: ToolHandler = {
   },
 };
 
-const POLY = new Set(['hatch', 'chevrons', 'box_junction']);
-const POINT = new Set(['text', 'symbol', 'arrow', 'give_way_triangle']);
+const POLY = new Set(['hatch', 'chevrons', 'box_junction', 'island']);
+const POINT = new Set(['text', 'symbol', 'arrow', 'give_way_triangle', 'speed_number']);
 
 /** Lines and areas: click the vertices, Enter; text/symbols/arrows: click the position, then the direction of travel. */
 export const markingDraw = makeDrawTool({
@@ -60,13 +60,15 @@ export const markingDraw = makeDrawTool({
 function saveMarking(points: readonly { at: LngLat }[]): boolean {
     const t = useTool.getState();
     if (POLY.has(t.markingKind) && points.length < 3) { toast.info('Area incompleta', 'Servono almeno 3 vertici'); return false; }
+    if (t.markingKind === 'bollards') return placeBollards(points.map((p) => p.at));
+    const kind = t.markingKind;
     const geometry = POINT.has(t.markingKind) ? [points[0]!.at, points[1]!.at] : points.map((p) => p.at);
     const marking: Marking = {
-      id: newId('mk'), kind: t.markingKind, geometry, color: t.markingKind === 'box_junction' || t.markingKind === 'line_yellow' ? 'yellow' : t.markingColor, state: 'project', provenance: PROJECT,
-      ...(t.markingKind === 'text' ? { text: t.markingText.toUpperCase().slice(0, 12) } : {}),
+      id: newId('mk'), kind, geometry, color: kind === 'box_junction' || kind === 'line_yellow' || kind === 'bus_lane' ? 'yellow' : t.markingColor, state: 'project', provenance: PROJECT,
+      ...(kind === 'text' || kind === 'speed_number' ? { text: t.markingText.toUpperCase().slice(0, 12) } : {}),
       ...(t.markingKind === 'symbol' ? { symbol: t.markingSymbol } : {}),
       ...(t.markingKind === 'arrow' ? { symbol: t.markingArrow } : {}),
-      ...(t.markingKind === 'parking_bays' ? { bays: { layout: t.bayLayout, lengthM: 5, widthM: t.bayLayout === 'parallel' ? 2 : 2.5, side: 'right' as const } } : {}),
+      ...(kind === 'parking_bays' ? { bays: { layout: t.bayLayout, lengthM: t.bayPurpose === 'motorcycle' ? 2 : 5, widthM: t.bayPurpose === 'disabled' ? 3.2 : t.bayPurpose === 'motorcycle' ? 1 : t.bayLayout === 'parallel' ? 2 : 2.5, side: 'right' as const, purpose: t.bayPurpose } } : {}),
     };
     const ok = commit('marking.set', { marking }).ok;
     if (ok) select({ kind: 'marking', ids: [marking.id] });
@@ -99,3 +101,20 @@ export const markingTool: ToolHandler = {
     saveMarking([{ at: idx.frame.toLngLat(at) }, { at: idx.frame.toLngLat([at[0] + tan[0] * sign, at[1] + tan[1] * sign]) }]);
   },
 };
+
+/** Dissuasori di sosta: a bollard every 1,5 m along the drawn kerb line (art. 180 Reg.). */
+function placeBollards(line: readonly LngLat[]): boolean {
+  const b = useApp.getState().baseline;
+  if (!b) return false;
+  const f = new LocalFrame(b.origin);
+  const m = line.map((p) => f.toMetric(p) as geom.V);
+  const L = geom.lengthOf(m);
+  const n = Math.max(1, Math.floor(L / 1.5));
+  const assets = Array.from({ length: n + 1 }, (_, i) => {
+    const { p, t } = geom.sampleAt(m, (L * i) / n);
+    return { id: newId('a'), type: 'furniture.bollard', at: f.toLngLat(p), rotationDeg: (Math.atan2(t[0], t[1]) * 180) / Math.PI, state: 'project' as const, properties: {}, provenance: PROJECT };
+  });
+  const ok = commit('asset.add', { assets }).ok;
+  if (ok) { select({ kind: 'asset', ids: assets.map((a) => a.id) }); toast.success('Dissuasori posati', `${assets.length} paletti su ${L.toFixed(0)} m`); }
+  return ok;
+}

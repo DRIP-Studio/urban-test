@@ -188,3 +188,4 @@ label.check { display: flex; gap: 8px; align-items: center; font-size: var(--fs-
 .curv-chart .limit { stroke: var(--err); stroke-width: 1; stroke-dasharray: 4 3; opacity: .7; }
 .curv-chart .curve-band { fill: var(--drip-accent-soft); }
 .curv-chart .curv { fill: none; stroke: var(--drip-accent); stroke-width: 1.6; }
+.mk-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }

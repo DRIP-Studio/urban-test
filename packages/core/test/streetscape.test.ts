@@ -35,6 +35,37 @@ describe('streetscape: traffic calming, markings, structures', () => {
     expect(buildPhysicalModel(h.network, { origin: baseline.origin }).surfaces.some((s) => s.kind === 'raised')).toBe(false);
   });
 
+  it('draws every custom marking kind (zebra, bike crossing, shark teeth, island, bus/bike lane, reserved bays)', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const seg = (r: Road) => Math.hypot((r.axis[1]![0] - r.axis[0]![0]) * 84000, (r.axis[1]![1] - r.axis[0]![1]) * 111000);
+    const road = Object.values(h.network.roads).find((r) => car(r) && r.axis.length >= 2 && seg(r) > 40)!;
+    const [a, b] = [road.axis[0]!, road.axis[1]!];
+    const mid = (t: number): [number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    const across: [number, number][] = [[mid(0.5)[0] - 0.00006, mid(0.5)[1] + 0.00006], [mid(0.5)[0] + 0.00006, mid(0.5)[1] - 0.00006]];
+    const poly: [number, number][] = [mid(0.2), mid(0.4), [mid(0.4)[0] + 0.00003, mid(0.4)[1] + 0.00003]];
+    const kinds: [string, Partial<Record<string, unknown>>, [number, number][]][] = [
+      ['zebra', {}, across], ['bike_crossing', { color: 'green' }, across], ['shark_teeth', {}, across], ['island', {}, poly],
+      ['bus_lane', {}, [mid(0), mid(1)]], ['bike_lane', {}, [mid(0), mid(1)]], ['speed_number', { text: '30' }, [mid(0.5), mid(0.6)]],
+      ['parking_bays', { bays: { layout: 'perpendicular', lengthM: 5, widthM: 3.2, side: 'right', purpose: 'disabled' } }, [mid(0), mid(1)]],
+      ['parking_bays', { bays: { layout: 'parallel', lengthM: 5, widthM: 2, side: 'right', purpose: 'taxi' } }, [mid(0), mid(1)]],
+    ];
+    kinds.forEach(([kind, extra, geometry], i) => h.commit({ type: 'marking.set', payload: { marking: { id: `k${i}`, kind, geometry, color: 'white', state: 'project', provenance: P, ...extra } } }));
+    const m = buildPhysicalModel(h.network, { origin: baseline.origin });
+    kinds.forEach(([kind], i) => expect(m.markings.filter((x) => x.id.startsWith(`cm:k${i}:`)).length, kind).toBeGreaterThan(0));
+    expect(m.surfaces.some((x) => x.id === 'cm:k3:isl' && x.heightM === 0.15)).toBe(true);
+    expect(m.markings.filter((x) => x.id.startsWith('cm:k7:')).every((x) => x.material === 'road_marking_yellow')).toBe(true);
+    expect(m.markings.filter((x) => x.id.startsWith('cm:k4:')).some((x) => x.material === 'road_marking_yellow')).toBe(true);
+  });
+
+  it('marks reserved bus lanes in yellow with BUS', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const road = Object.values(h.network.roads).find((r) => car(r) && r.lanes.filter((l) => l.direction !== 'backward').length >= 2 && r.axis.length >= 2)!;
+    const lane = road.lanes.filter((l) => l.direction !== 'backward').sort((x, y) => x.index - y.index)[0]!;
+    h.commit({ type: 'road.setSection', payload: { roadId: road.id, lanes: road.lanes.map((l) => (l.id === lane.id ? { ...l, restriction: 'bus_only', priority: 'transit' } : l)), section: road.section } });
+    const m = buildPhysicalModel(h.network, { origin: baseline.origin });
+    expect(m.markings.some((x) => x.id.startsWith(`m:${road.id}:`) && x.material === 'road_marking_yellow')).toBe(true);
+  });
+
   it('draws road text across the lane with letters elongated along travel', () => {
     const r = roadText('BUS', [0, 0], [0, 1], 3, 1.6);
     const ys = r.flat().map((p) => p[1]), xs = r.flat().map((p) => p[0]);

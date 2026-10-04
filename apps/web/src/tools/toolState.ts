@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AreaKind, LngLat, MarkingColor, MarkingKind, RoadFeatureKind, RoundaboutType, ZoneKind } from '@drip-urban/core';
+import type { AreaKind, LngLat, MarkingColor, BayPurpose, MarkingKind, RoadFeatureKind, RoundaboutType, ZoneKind } from '@drip-urban/core';
 import type { SnapResult } from './snap';
 
 export interface ToolState {
@@ -29,7 +29,8 @@ export interface ToolState {
   measure: { total: number; area: number | null } | null;
   routePick: { from: LngLat | null; to: LngLat | null; target: 'from' | 'to' };
   /** Horizontal marking tool. */
-  markingKind: MarkingKind;
+  markingKind: MarkingKind | 'bollards';
+  bayPurpose: BayPurpose;
   markingColor: MarkingColor;
   markingText: string;
   markingSymbol: string;
@@ -57,7 +58,7 @@ export const useTool = create<ToolState>(() => ({
   recentSigns: saved.recentSigns ?? [], favoriteSigns: saved.favoriteSigns ?? [],
   arraySpacingM: 8, pavingMaterial: saved.pavingMaterial ?? 'porphyry', arrayItem: 'vegetation.tree', rb: null, measure: null,
   routePick: { from: null, to: null, target: 'from' },
-  markingKind: 'line_solid', markingColor: 'white', markingText: 'STOP', markingSymbol: 'bike', markingArrow: 'through', bayLayout: 'parallel',
+  markingKind: 'line_solid', markingColor: 'white', markingText: 'STOP', markingSymbol: 'bike', markingArrow: 'through', bayLayout: 'parallel', bayPurpose: 'free',
   calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true, roadHints: [], drainKind: 'inlet', drainDepthM: 1.5, drainDn: 315, drainMaterial: 'pvc',
 }));
 

@@ -329,8 +329,8 @@ function addRoadMarkings(
   const laneById = new Map(road.lanes.map((l) => [l.id, l]));
   const dash = dashFor(road);
   let k = 0;
-  const push = (kind: PhysPolygon['kind'], ring: V[]) =>
-    out.push({ id: `m:${road.id}:${k++}`, kind, ring: toLL(ring), roadId: road.id, state, material: 'road_marking_white', z: 10, heightM: 0 });
+  const push = (kind: PhysPolygon['kind'], ring: V[], material = 'road_marking_white') =>
+    out.push({ id: `m:${road.id}:${k++}`, kind, ring: toLL(ring), roadId: road.id, state, material, z: 10, heightM: 0 });
 
   // Lines between adjacent lanes.
   for (let i = 1; i < lanes.length; i++) {
@@ -339,8 +339,10 @@ function addRoadMarkings(
     const line = offset(axis, off);
     const da = laneById.get(a.el.laneId ?? '')?.direction, db = laneById.get(b.el.laneId ?? '')?.direction;
     const opposite = da && db && da !== db;
-    if (a.el.kind === 'bus' || b.el.kind === 'bus') {
-      push('lane_line', solid(line, 0.3));
+    const reserved = (e: typeof a) => e.el.kind === 'bus' || laneById.get(e.el.laneId ?? '')?.restriction === 'bus_only';
+    if (reserved(a) || reserved(b)) {
+      // Corsia riservata: yellow continuous line 30 cm (art. 140 Reg.).
+      push('lane_line', solid(line, 0.3), 'road_marking_yellow');
     } else {
       for (const r of dashes(line, dash)) push(opposite ? 'center_line' : 'lane_line', r);
     }

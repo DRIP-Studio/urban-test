@@ -1,4 +1,4 @@
-import type { Marking, MarkingColor, MarkingKind, Road, RoadFeature, RoadFeatureKind, RoadStructure, TurnKind } from '@drip-urban/core';
+import type { BayPurpose, Marking, MarkingColor, MarkingKind, Road, RoadFeature, RoadFeatureKind, RoadStructure, TurnKind } from '@drip-urban/core';
 import { LocalFrame, geom, humpLimits } from '@drip-urban/core';
 import { commit, useApp } from '../state/store';
 import { CALMING } from '../tools/streetscape';
@@ -6,23 +6,37 @@ import { useTool } from '../tools/toolState';
 import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, TextField } from '../ui/controls';
 
 /** Marking types with a small plan-view preview (white on asphalt). */
-const MARKINGS: { kind: MarkingKind; label: string; ref: string; draw: string }[] = [
-  { kind: 'line_solid', label: 'Linea continua', ref: 'art. 138', draw: 'M4 14h40' },
-  { kind: 'line_dashed', label: 'Linea tratteggiata', ref: 'art. 138', draw: 'M4 14h9M19 14h9M34 14h9' },
-  { kind: 'line_double', label: 'Doppia continua', ref: 'art. 138', draw: 'M4 11h40M4 17h40' },
-  { kind: 'line_mixed', label: 'Mista continua/tratteggiata', ref: 'art. 138', draw: 'M4 11h40M4 17h9M19 17h9M34 17h9' },
-  { kind: 'line_yellow', label: 'Linea gialla (cantiere, sosta vietata)', ref: 'artt. 138, 151', draw: 'M4 14h40' },
-  { kind: 'zigzag', label: 'Zig-zag (fermata, divieto di sosta)', ref: 'art. 151', draw: 'M4 18l5-8 5 8 5-8 5 8 5-8 5 8 5-8' },
-  { kind: 'stop_line', label: 'Linea di arresto STOP', ref: 'art. 144', draw: 'M4 10h40v8H4z' },
-  { kind: 'give_way_line', label: 'Linea dare precedenza', ref: 'art. 144', draw: 'M4 12h5v4H4zM13 12h5v4h-5zM22 12h5v4h-5zM31 12h5v4h-5zM40 12h4v4h-4z' },
-  { kind: 'give_way_triangle', label: 'Triangolo dare precedenza', ref: 'art. 144', draw: 'M14 6h20L24 24z' },
-  { kind: 'arrow', label: 'Freccia direzionale', ref: 'art. 147', draw: 'M24 24V9M18 13l6-6 6 6' },
-  { kind: 'text', label: 'Scritta (STOP, BUS, 30…)', ref: 'art. 148', draw: 'M8 20V8M8 8h7M8 14h5M20 8v12M20 8l6 12V8M31 8h8M35 8v12' },
-  { kind: 'symbol', label: 'Simbolo (bici, disabili…)', ref: 'art. 148', draw: 'M14 18a4 4 0 108 0 4 4 0 10-8 0M26 18a4 4 0 108 0 4 4 0 10-8 0M18 18l5-6 7 6' },
-  { kind: 'parking_bays', label: 'Stalli di sosta', ref: 'art. 149', draw: 'M4 8h40M4 8v12M14 8v12M24 8v12M34 8v12M44 8v12M4 20h40' },
-  { kind: 'hatch', label: 'Zebratura (isola di traffico)', ref: 'art. 150', draw: 'M6 22L22 6M14 22L30 6M22 22L38 6M30 22L42 10' },
-  { kind: 'chevrons', label: 'Chevron (deviazione)', ref: 'art. 150', draw: 'M6 20l8-12 8 12M22 20l8-12 8 12' },
-  { kind: 'box_junction', label: 'Incrocio da non impegnare (giallo)', ref: 'art. 151', draw: 'M6 6h36v16H6zM6 6l36 16M42 6L6 22' },
+type MkTool = MarkingKind | 'bollards';
+const MARKINGS: { kind: MkTool; label: string; ref: string; draw: string; group: string }[] = [
+  { group: 'Linee', kind: 'line_solid', label: 'Linea continua', ref: 'art. 138', draw: 'M4 14h40' },
+  { group: 'Linee', kind: 'line_dashed', label: 'Linea tratteggiata', ref: 'art. 138', draw: 'M4 14h9M19 14h9M34 14h9' },
+  { group: 'Linee', kind: 'line_double', label: 'Doppia continua', ref: 'art. 138', draw: 'M4 11h40M4 17h40' },
+  { group: 'Linee', kind: 'line_mixed', label: 'Mista continua/tratteggiata', ref: 'art. 138', draw: 'M4 11h40M4 17h9M19 17h9M34 17h9' },
+  { group: 'Linee', kind: 'line_yellow', label: 'Linea gialla (cantiere, sosta vietata)', ref: 'artt. 138, 151', draw: 'M4 14h40' },
+  { group: 'Linee', kind: 'zigzag', label: 'Zig-zag (fermata, divieto di sosta)', ref: 'art. 151', draw: 'M4 18l5-8 5 8 5-8 5 8 5-8 5 8 5-8' },
+  { group: 'Incroci e attraversamenti', kind: 'stop_line', label: 'Linea di arresto STOP', ref: 'art. 144', draw: 'M4 10h40v8H4z' },
+  { group: 'Incroci e attraversamenti', kind: 'give_way_line', label: 'Linea dare precedenza', ref: 'art. 144', draw: 'M4 12h5v4H4zM13 12h5v4h-5zM22 12h5v4h-5zM31 12h5v4h-5zM40 12h4v4h-4z' },
+  { group: 'Incroci e attraversamenti', kind: 'give_way_triangle', label: 'Triangolo dare precedenza', ref: 'art. 144', draw: 'M14 6h20L24 24z' },
+  { group: 'Incroci e attraversamenti', kind: 'shark_teeth', label: 'Denti di squalo', ref: 'fig. II.432', draw: 'M4 8l3 10 3-10M12 8l3 10 3-10M20 8l3 10 3-10M28 8l3 10 3-10M36 8l3 10 3-10' },
+  { group: 'Incroci e attraversamenti', kind: 'zebra', label: 'Attraversamento pedonale (zebre)', ref: 'art. 145', draw: 'M8 4v20M15 4v20M22 4v20M29 4v20M36 4v20' },
+  { group: 'Incroci e attraversamenti', kind: 'bike_crossing', label: 'Attraversamento ciclabile', ref: 'art. 146', draw: 'M4 8h4M12 8h4M20 8h4M28 8h4M36 8h4M4 20h4M12 20h4M20 20h4M28 20h4M36 20h4' },
+  { group: 'Incroci e attraversamenti', kind: 'box_junction', label: 'Incrocio da non impegnare (giallo)', ref: 'art. 151', draw: 'M6 6h36v16H6zM6 6l36 16M42 6L6 22' },
+  { group: 'Frecce e scritte', kind: 'arrow', label: 'Freccia direzionale', ref: 'art. 147', draw: 'M24 24V9M18 13l6-6 6 6' },
+  { group: 'Frecce e scritte', kind: 'text', label: 'Scritta (STOP, BUS, SCUOLA…)', ref: 'art. 148', draw: 'M8 20V8M8 8h7M8 14h5M20 8v12M20 8l6 12V8M31 8h8M35 8v12' },
+  { group: 'Frecce e scritte', kind: 'speed_number', label: 'Limite di velocità sulla carreggiata', ref: 'art. 148', draw: 'M10 8h8l-8 12h8M24 8h8v12h-8zM24 8v12' },
+  { group: 'Frecce e scritte', kind: 'symbol', label: 'Simbolo (bici, disabili, pedoni, scuola)', ref: 'art. 148', draw: 'M14 18a4 4 0 108 0 4 4 0 10-8 0M26 18a4 4 0 108 0 4 4 0 10-8 0M18 18l5-6 7 6' },
+  { group: 'Sosta', kind: 'parking_bays', label: 'Stalli di sosta (liberi, pagamento, disabili, carico/scarico, taxi, rosa, ricarica)', ref: 'art. 149', draw: 'M4 8h40M4 8v12M14 8v12M24 8v12M34 8v12M44 8v12M4 20h40' },
+  { group: 'Sosta', kind: 'bollards', label: 'Dissuasori di sosta (paletti)', ref: 'art. 180 Reg.', draw: 'M8 10v12M16 10v12M24 10v12M32 10v12M40 10v12' },
+  { group: 'Corsie riservate', kind: 'bus_lane', label: 'Corsia bus / preferenziale', ref: 'art. 140', draw: 'M4 6h40M10 12h6v10h-6zM20 12v10M28 12h6' },
+  { group: 'Corsie riservate', kind: 'bike_lane', label: 'Corsia ciclabile', ref: 'DM 557/1999', draw: 'M4 6h40M14 18a3 3 0 106 0 3 3 0 10-6 0M26 18a3 3 0 106 0 3 3 0 10-6 0' },
+  { group: 'Aree e isole', kind: 'hatch', label: 'Zebratura (isola di traffico)', ref: 'art. 150', draw: 'M6 22L22 6M14 22L30 6M22 22L38 6M30 22L42 10' },
+  { group: 'Aree e isole', kind: 'island', label: 'Isola spartitraffico rialzata', ref: 'art. 150, DM 19/4/2006', draw: 'M6 14l12-8h24v16H18z' },
+  { group: 'Aree e isole', kind: 'chevrons', label: 'Chevron (deviazione)', ref: 'art. 150', draw: 'M6 20l8-12 8 12M22 20l8-12 8 12' },
+];
+const BAY_PURPOSE: { value: BayPurpose; label: string }[] = [
+  { value: 'free', label: 'Liberi (bianchi)' }, { value: 'paid', label: 'A pagamento (blu)' }, { value: 'disabled', label: 'Persone con disabilità (giallo, 3,2 m)' },
+  { value: 'loading', label: 'Carico e scarico (giallo)' }, { value: 'taxi', label: 'Taxi (giallo)' }, { value: 'pink', label: 'Rosa: gestanti e genitori' },
+  { value: 'electric', label: 'Ricarica veicoli elettrici (verde)' }, { value: 'residents', label: 'Residenti' }, { value: 'motorcycle', label: 'Motocicli (1 × 2 m)' },
 ];
 const COLORS: { value: MarkingColor; label: string }[] = [
   { value: 'white', label: 'Bianco' }, { value: 'yellow', label: 'Giallo' }, { value: 'blue', label: 'Blu (sosta a pagamento)' },
@@ -42,15 +56,20 @@ export function MarkingPalette() {
   return (
     <>
       <Section title="Segnaletica orizzontale">
-        <div className="mk-grid">{MARKINGS.map((m) => (
-          <button key={m.kind} type="button" className={`mk-tile ${t.markingKind === m.kind ? 'is-on' : ''}`} onClick={() => useTool.setState({ markingKind: m.kind })} title={`${m.label} (${m.ref} Reg. CdS)`}>
-            <Preview d={m.draw} color={m.kind === 'line_yellow' || m.kind === 'box_junction' ? COLOR_HEX.yellow : COLOR_HEX[t.markingColor]} />
-            <span>{m.label}</span>
-          </button>
-        ))}</div>
+        {[...new Set(MARKINGS.map((m) => m.group))].map((g) => (
+          <div key={g} className="mk-group">
+            <div className="lib-group-title">{g}</div>
+            <div className="mk-grid">{MARKINGS.filter((m) => m.group === g).map((m) => (
+              <button key={m.kind} type="button" className={`mk-tile ${t.markingKind === m.kind ? 'is-on' : ''}`} onClick={() => useTool.setState({ markingKind: m.kind })} title={`${m.label} (${m.ref} Reg. CdS)`}>
+                <Preview d={m.draw} color={['line_yellow', 'box_junction', 'bus_lane'].includes(m.kind) ? COLOR_HEX.yellow : m.kind === 'bollards' ? '#9aa0a6' : COLOR_HEX[t.markingColor]} />
+                <span>{m.label}</span>
+              </button>
+            ))}</div>
+          </div>
+        ))}
       </Section>
       <Section title={cur.label}>
-        <p className="muted">{cur.ref} Reg. CdS (DPR 495/1992) · {['text', 'symbol', 'arrow', 'give_way_triangle'].includes(cur.kind) ? 'un clic sulla corsia: orientamento automatico sul senso di marcia' : ['hatch', 'chevrons', 'box_junction'].includes(cur.kind) ? 'clic sui vertici dell\'area, Invio per chiudere' : 'clic sui vertici, Invio per finire'}</p>
+        <p className="muted">{cur.ref} Reg. CdS (DPR 495/1992) · {['text', 'symbol', 'arrow', 'give_way_triangle', 'speed_number'].includes(cur.kind) ? 'un clic sulla corsia: orientamento automatico sul senso di marcia' : ['hatch', 'chevrons', 'box_junction', 'island'].includes(cur.kind) ? 'clic sui vertici dell\'area, Invio per chiudere' : ['zebra', 'bike_crossing'].includes(cur.kind) ? 'clic sui due bordi della carreggiata, Invio' : cur.kind === 'bollards' ? 'clic lungo il ciglio del marciapiede, Invio: un paletto ogni 1,5 m' : 'clic sui vertici, Invio per finire'}</p>
         {cur.kind !== 'line_yellow' && cur.kind !== 'box_junction' ? <Field label="Colore"><Select<MarkingColor> value={t.markingColor} ariaLabel="Colore" options={COLORS} onChange={(v) => useTool.setState({ markingColor: v })} /></Field> : null}
         {cur.kind === 'text' ? (
           <Field label="Scritta">
@@ -60,13 +79,15 @@ export function MarkingPalette() {
         ) : null}
         {cur.kind === 'symbol' ? <Field label="Simbolo"><Select value={t.markingSymbol} ariaLabel="Simbolo" options={SYMBOLS} onChange={(v) => useTool.setState({ markingSymbol: v })} /></Field> : null}
         {cur.kind === 'arrow' ? <Field label="Direzioni"><Select value={t.markingArrow} ariaLabel="Direzioni" options={ARROWS} onChange={(v) => useTool.setState({ markingArrow: v })} /></Field> : null}
+        {cur.kind === 'parking_bays' ? <Field label="Destinazione"><Select<BayPurpose> value={t.bayPurpose} ariaLabel="Destinazione" options={BAY_PURPOSE} onChange={(v) => useTool.setState({ bayPurpose: v })} /></Field> : null}
+        {cur.kind === 'speed_number' ? <div className="chips">{['10', '20', '30', '40', '50'].map((x) => <button key={x} type="button" className={`chip chip-sm ${t.markingText === x ? 'is-on' : ''}`} onClick={() => useTool.setState({ markingText: x })}>{x}</button>)}</div> : null}
         {cur.kind === 'parking_bays' ? (
           <Field label="Disposizione"><Segmented<'parallel' | 'perpendicular' | 'angled'> label="Disposizione" value={t.bayLayout} onChange={(v) => useTool.setState({ bayLayout: v })}
             options={[{ value: 'parallel', label: 'In linea 2×5 m' }, { value: 'perpendicular', label: 'A pettine 2,5×5 m' }, { value: 'angled', label: 'A spina 45°' }]} /></Field>
         ) : null}
       </Section>
       <Section title="Segnaletica automatica" defaultOpen={false}>
-        <p className="muted">Generata dal modello e sempre aggiornata: linee di corsia e di margine, frecce di preselezione con linee continue negli ultimi 30 m prima degli incroci (dalle svolte delle corsie), stalli sulle fasce di sosta (colore dalla sezione), zig-zag gialla e «BUS» alle fermate, zebre, linee di arresto e dare precedenza secondo la regolazione dell'incrocio.</p>
+        <p className="muted">Generata dal modello e sempre aggiornata: linee di corsia e di margine, frecce di preselezione con linee continue negli ultimi 30 m prima degli incroci (dalle svolte delle corsie), stalli sulle fasce di sosta (colore dalla sezione), corsie bus con linea gialla da 30 cm e «BUS» ogni 50 m, corsie ciclabili con simbolo e freccia, zig-zag gialla e «BUS» alle fermate, zebre, linee di arresto e dare precedenza secondo la regolazione dell'incrocio.</p>
       </Section>
     </>
   );
@@ -127,6 +148,7 @@ export function MarkingInspector({ id }: { id: string }) {
       <Field label="Colore"><Select<MarkingColor> value={m.color} ariaLabel="Colore" options={COLORS} onChange={(v) => set({ color: v })} /></Field>
       {m.kind === 'text' ? <Field label="Scritta"><TextField value={m.text ?? ''} ariaLabel="Scritta" onCommit={(v) => set({ text: v.toUpperCase().slice(0, 12) })} /></Field> : null}
       {m.kind === 'symbol' ? <Field label="Simbolo"><Select value={m.symbol ?? 'bike'} ariaLabel="Simbolo" options={SYMBOLS} onChange={(v) => set({ symbol: v })} /></Field> : null}
+      {m.kind === 'parking_bays' && m.bays ? <Field label="Destinazione"><Select<BayPurpose> value={m.bays.purpose ?? 'free'} ariaLabel="Destinazione" options={BAY_PURPOSE} onChange={(v) => set({ bays: { ...m.bays!, purpose: v } })} /></Field> : null}
       {m.kind === 'arrow' ? <Field label="Direzioni"><Select value={m.symbol ?? 'through'} ariaLabel="Direzioni" options={ARROWS} onChange={(v) => set({ symbol: v })} /></Field> : null}
       {m.kind.startsWith('line') ? <Field label="Larghezza striscia"><NumberField value={Math.round((m.widthM ?? 0.12) * 100)} unit="cm" min={10} max={50} step={1} decimals={0} ariaLabel="Larghezza" onCommit={(v) => set({ widthM: v / 100 })} /></Field> : null}
       <p className="muted">Larghezze di riferimento: 12 cm strade urbane, 15 cm extraurbane, 25 cm autostrade (art. 138 Reg.).</p>
