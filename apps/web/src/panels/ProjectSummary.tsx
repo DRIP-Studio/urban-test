@@ -61,6 +61,8 @@ export function ProjectSummary() {
           <button type="button" onClick={() => setDock('connect')}><Icon name="connect" /><span>Aggancia strade non collegate</span></button>
           <button type="button" onClick={() => setDock('quantities')}><Icon name="calculator" /><span>Computo metrico</span></button>
           <button type="button" onClick={() => setDock('norms')}><Icon name="law" /><span>Normativa e verifiche</span></button>
+          <button type="button" onClick={() => setDock('plans')}><Icon name="map" /><span>Piani urbanistico e del traffico</span></button>
+          <button type="button" onClick={() => setDock('drainage')}><Icon name="wave" /><span>Drenaggio urbano</span></button>
         </div>
       </Section>
     </>

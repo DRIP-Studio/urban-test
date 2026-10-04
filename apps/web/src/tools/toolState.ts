@@ -40,6 +40,10 @@ export interface ToolState {
   calmingHeightCm: number;
   /** Placing an imported model demolishes the buildings and removes the furniture under it. */
   modelClear: boolean;
+  drainKind: 'inlet' | 'manhole' | 'outfall';
+  drainDepthM: number;
+  drainDn: number;
+  drainMaterial: string;
 }
 
 const saved = (() => { try { return JSON.parse(localStorage.getItem('drip-urban:tools') ?? '{}') as Partial<ToolState>; } catch { return {}; } })();
@@ -52,7 +56,7 @@ export const useTool = create<ToolState>(() => ({
   arraySpacingM: 8, pavingMaterial: saved.pavingMaterial ?? 'porphyry', arrayItem: 'vegetation.tree', rb: null, measure: null,
   routePick: { from: null, to: null, target: 'from' },
   markingKind: 'line_solid', markingColor: 'white', markingText: 'STOP', markingSymbol: 'bike', markingArrow: 'through', bayLayout: 'parallel',
-  calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true,
+  calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true, drainKind: 'inlet', drainDepthM: 1.5, drainDn: 315, drainMaterial: 'pvc',
 }));
 
 useTool.subscribe((s) => {

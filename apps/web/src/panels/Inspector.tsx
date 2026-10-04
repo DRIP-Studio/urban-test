@@ -1,4 +1,5 @@
 import { LocalFrame, dmCategory, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { FunctionalClassField } from './PlansSheet';
 import { BuildingInspector, FeatureInspector, MarkingInspector, PreselectionSection, StructureSection } from './StreetscapePanels';
 import { ztlZones } from '../ztl/link';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
@@ -34,6 +35,7 @@ function RoadInspector({ road }: { road: Road }) {
           <Field label="Classe"><span className="readonly">{ROAD_CLASS[road.roadClass] ?? road.roadClass}</span></Field>
           <Field label="Velocità" prov={prov('speedKmh')}><NumberField value={road.speedKmh} unit="km/h" min={5} max={130} step={5} decimals={0} ariaLabel="Velocità" onCommit={(v) => commit('road.update', { roadId: road.id, changes: { speedKmh: v } })} /></Field>
         </div>
+        <FunctionalClassField roadId={road.id} />
         <Field label="Senso di marcia" prov={prov('oneway')}>
           <Segmented<Oneway> label="Senso di marcia" value={road.oneway} onChange={(v) => commit('road.setOneway', { roadId: road.id, oneway: v })}
             options={[{ value: 'no', label: 'Doppio' }, { value: 'forward', label: 'Unico →' }, { value: 'backward', label: 'Unico ←' }]} />

@@ -8,7 +8,7 @@ import { useWms, wmsLayerDefs } from './wms';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'sign-poles', 'signs3d', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures', 'plan-zones', 'plan-constraints', 'func-class', 'islands', 'drain-pipes', 'drain-nodes',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -57,6 +57,12 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'iso', label: 'Accessibilità / isocrone', category: 'analysis', mapLayers: ['iso-line'], defaultVisible: true, source: 'Analisi DRIP',
     legend: [{ color: '#2f7d5b', label: '≤ 5 min' }, { color: '#79a84d', label: '≤ 7 min' }, { color: '#d6a63b', label: '≤ 10 min' }, { color: '#c4643a', label: '≤ 15 min' }] },
   { id: 'heat', label: 'Heatmap sicurezza', category: 'safety', mapLayers: ['heat-layer', 'heat-points'], defaultVisible: true, source: 'Screening surrogato / sinistri importati' },
+  { id: 'plan-zones', label: 'Piano urbanistico: zone omogenee', category: 'official', mapLayers: ['plan-zones-fill', 'plan-zones-line', 'plan-zones-label'], defaultVisible: false, source: 'PUC/PRG importato (DM 1444/68)', opacity: [['plan-zones-fill', 'fill-opacity']], defaultOpacity: 0.35,
+    legend: [{ color: '#9c3b2a', label: 'A' }, { color: '#e8862e', label: 'B' }, { color: '#f2cf3a', label: 'C' }, { color: '#8a5aa8', label: 'D' }, { color: '#8fb36a', label: 'E' }, { color: '#4f86c6', label: 'F' }] },
+  { id: 'plan-constraints', label: 'Vincoli e fasce di rispetto', category: 'official', mapLayers: ['plan-constraints-fill', 'plan-constraints-line'], defaultVisible: false, source: 'PUC/PRG importato o generato' },
+  { id: 'func-class', label: 'Classificazione funzionale (PGTU)', category: 'traffic', mapLayers: ['func-class-line'], defaultVisible: false, source: 'Direttive 12/4/1995' },
+  { id: 'islands', label: 'Isole ambientali proposte', category: 'traffic', mapLayers: ['islands-fill', 'islands-line'], defaultVisible: false, source: 'PGTU (proposta DRIP)' },
+  { id: 'drainage', label: 'Rete di drenaggio', category: 'design', mapLayers: ['drain-pipes-line', 'drain-nodes-circle', 'drain-pipes-label'], defaultVisible: true, source: 'Progetto (metodo razionale)' },
   { id: 'norms', label: 'Verifiche normative', category: 'analysis', mapLayers: ['norms-circle'], defaultVisible: true, source: 'Normativa e verifiche (DRIP)',
     legend: [{ color: '#b9312a', label: 'Non conforme' }, { color: '#d9a441', label: 'Da verificare' }, { color: '#5587a2', label: 'Informazione' }] },
   { id: 'crashes', label: 'Sinistri importati', category: 'safety', mapLayers: ['crashes-circle'], defaultVisible: true, source: 'Dataset importato dall\'utente' },
@@ -138,6 +144,17 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
     'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.2, 'rgba(131,180,209,0.35)', 0.45, '#d9a441', 0.7, '#e1703a', 1, '#b9312a'],
     'heatmap-opacity': 0.75 } });
   L({ id: 'heat-points', type: 'circle', source: 'heat', minzoom: 14, filter: ['>=', ['get', 'score'], 40], paint: { 'circle-radius': ['interpolate', ['linear'], ['get', 'score'], 40, 4, 100, 10], 'circle-color': ['step', ['get', 'score'], '#d9a441', 60, '#e1703a', 80, '#b9312a'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.2 } });
+  L({ id: 'plan-zones-fill', type: 'fill', source: 'plan-zones', layout: { visibility: 'none' }, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.35 } });
+  L({ id: 'plan-zones-line', type: 'line', source: 'plan-zones', layout: { visibility: 'none' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1.4 } });
+  L({ id: 'plan-zones-label', type: 'symbol', source: 'plan-zones', minzoom: 14.5, layout: { visibility: 'none', 'text-field': ['get', 'code'], 'text-size': 12, 'text-font': ['Noto Sans Bold'] }, paint: { 'text-color': '#1c1d1f', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 } });
+  L({ id: 'plan-constraints-fill', type: 'fill', source: 'plan-constraints', layout: { visibility: 'none' }, paint: { 'fill-color': ['match', ['get', 'type'], 'paesaggistico', '#3e8e5a', 'idrogeologico', '#2f62b0', 'rispetto_stradale', '#8a8f96', 'cimiteriale', '#6b4f8a', 'ferroviario', '#9a6a3a', '#b9312a'], 'fill-opacity': 0.16 } });
+  L({ id: 'plan-constraints-line', type: 'line', source: 'plan-constraints', layout: { visibility: 'none' }, paint: { 'line-color': ['match', ['get', 'type'], 'paesaggistico', '#3e8e5a', 'idrogeologico', '#2f62b0', 'rispetto_stradale', '#5b5f64', 'cimiteriale', '#6b4f8a', 'ferroviario', '#9a6a3a', '#b9312a'], 'line-width': 1.2, 'line-dasharray': [4, 2] } });
+  L({ id: 'func-class-line', type: 'line', source: 'func-class', layout: { visibility: 'none', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2, 18, 7], 'line-opacity': ['case', ['get', 'authored'], 0.95, 0.6] } });
+  L({ id: 'islands-fill', type: 'fill', source: 'islands', layout: { visibility: 'none' }, paint: { 'fill-color': ['match', ['get', 'proposal'], 'ztl', '#d0614f', 'pedestrian', '#5f9d5a', '#e8a33d'], 'fill-opacity': 0.18 } });
+  L({ id: 'islands-line', type: 'line', source: 'islands', layout: { visibility: 'none' }, paint: { 'line-color': ['match', ['get', 'proposal'], 'ztl', '#d0614f', 'pedestrian', '#5f9d5a', '#e8a33d'], 'line-width': 2, 'line-dasharray': [2, 1.5] } });
+  L({ id: 'drain-pipes-line', type: 'line', source: 'drain-pipes', paint: { 'line-color': ['case', ['>', ['coalesce', ['get', 'fill'], 0], 0.7], '#b9312a', ['>', ['coalesce', ['get', 'fill'], 0], 0.5], '#d9a441', '#2f62b0'], 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 20, ['*', 6, ['coalesce', ['get', 'dn'], 0.3]]], 'line-dasharray': [3, 1] } });
+  L({ id: 'drain-pipes-label', type: 'symbol', source: 'drain-pipes', minzoom: 17.5, layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'label'], 'text-size': 10.5, 'text-font': ['Noto Sans Regular'], 'text-offset': [0, -0.9] }, paint: { 'text-color': '#2f62b0', 'text-halo-color': '#ffffff', 'text-halo-width': 1.3 } });
+  L({ id: 'drain-nodes-circle', type: 'circle', source: 'drain-nodes', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 2.5, 20, 7], 'circle-color': ['match', ['get', 'kind'], 'inlet', '#ffffff', 'outfall', '#2f62b0', '#5b5f64'], 'circle-stroke-color': '#2f62b0', 'circle-stroke-width': ['match', ['get', 'kind'], 'inlet', 2, 1.2] } });
   L({ id: 'norms-circle', type: 'circle', source: 'norms', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 3.5, 18, 8], 'circle-color': ['match', ['get', 'severity'], 'error', '#b9312a', 'warning', '#d9a441', '#5587a2'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } });
   L({ id: 'crashes-circle', type: 'circle', source: 'crashes', paint: { 'circle-radius': ['match', ['get', 'severity'], 'fatal', 7, 'serious', 5.5, 'slight', 4, 3], 'circle-color': ['match', ['get', 'severity'], 'fatal', '#5c0d0a', 'serious', '#b9312a', 'slight', '#e1703a', '#d9a441'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
   // Mode styles: rail thicker with a casing, train dashed black/white, BRT and tram solid, bus thinner.

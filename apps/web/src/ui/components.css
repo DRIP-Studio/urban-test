@@ -168,3 +168,17 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: 14px; height: 
 .presel { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .presel-lane { display: flex; gap: 4px; padding: 3px 6px; background: var(--ink-2); border-radius: var(--r-2); }
 .presel-lane .chip { min-width: 28px; font-size: 14px; }
+
+/* Plans and drainage sheets */
+.plans { display: flex; flex-direction: column; gap: var(--s-2); }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table td.bad { color: var(--err); font-weight: 600; }
+.table td.good { color: var(--ok, #3e8e5a); }
+.table tr.bad-row td:first-child { box-shadow: inset 3px 0 0 var(--err); }
+.table tr.clickable { cursor: pointer; }
+.table tr.clickable:hover td { background: var(--ink-2); }
+.legend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; font-size: var(--fs-12); color: var(--text-2); }
+.legend-item strong { color: var(--text-1); margin-left: 4px; }
+.plan-preview { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-2); padding: var(--s-2); background: var(--ink-2); border-radius: var(--r-2); }
+label.check { display: flex; gap: 8px; align-items: center; font-size: var(--fs-12); color: var(--text-2); margin: 6px 0; }
+.section-toggle { text-align: left; }
