@@ -2,7 +2,7 @@ import type { Route, TravelMode } from '@drip-urban/core';
 import { setSource } from '../map/mapStore';
 import { setTool } from '../state/store';
 import { drawRoutePins, usePicks } from '../tools/picks';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, Toggle } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, Toggle, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
 const MODES: { value: TravelMode; label: string }[] = [
@@ -26,7 +26,7 @@ export function Navigator() {
   return (
     <>
       <Section title="Navigatore sullo scenario">
-        <Field label="Mezzo"><Segmented<TravelMode> label="Mezzo" size="sm" value={mode} options={MODES} onChange={(v) => { set({ mode: v }); rerun(); }} /></Field>
+        <FieldGroup label="Mezzo"><Segmented<TravelMode> label="Mezzo" size="sm" value={mode} options={MODES} onChange={(v) => { set({ mode: v }); rerun(); }} /></FieldGroup>
         <div className="grid-2">
           <Field label="Giorno"><Select value={String(departure.day)} ariaLabel="Giorno" options={DAYS.map((d, i) => ({ value: String(i), label: d }))} onChange={(v) => { set({ departure: { ...departure, day: Number(v) } }); rerun(); }} /></Field>
           <Field label="Partenza"><NumberField value={departure.minutes / 60} unit="h" min={0} max={23.75} step={0.25} ariaLabel="Ora di partenza" onCommit={(v) => { set({ departure: { ...departure, minutes: Math.round(v * 60) } }); rerun(); }} /></Field>

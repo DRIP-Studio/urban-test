@@ -50,6 +50,7 @@ export const COMMANDS: Command[] = [
   { id: 'export', label: 'Esporta', group: 'Progetto', shortcut: 'Ctrl+E', when: inProject, run: () => setDock('export') },
   { id: 'sidewalks', label: 'Importa marciapiedi esistenti (dalle sagome degli edifici)', group: 'Progetto', when: inProject, run: () => void importExistingSidewalks() },
   { id: 'plans', label: 'Piani: urbanistico (PUC/PRG, standard DM 1444), traffico (PGTU), indicatori PUMS', group: 'Analisi', when: inProject, run: () => setDock('plans') },
+  { id: 'water', label: 'Rete acquedotto: pressioni, velocità, prova antincendio, dimensionamento', group: 'Progetto', when: inProject, run: () => setDock('water') },
   { id: 'drainage', label: 'Drenaggio urbano: rete di caditoie e collettori, verifica e dimensionamento', group: 'Progetto', when: inProject, run: () => setDock('drainage') },
   { id: 'norms', label: 'Normativa e verifiche di conformità (CdS, DM 5/11/2001, accessibilità…)', group: 'Analisi', when: inProject, run: () => setDock('norms') },
   { id: 'quantities', label: 'Computo metrico estimativo dello scenario', group: 'Progetto', when: inProject, run: () => setDock('quantities') },

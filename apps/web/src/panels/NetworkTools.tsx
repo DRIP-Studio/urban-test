@@ -4,7 +4,7 @@ import { fc, type Feature } from '../engine/geojson';
 import { flyTo, setSource } from '../map/mapStore';
 import { commit, newId, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, Section, Segmented } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, FieldGroup } from '../ui/controls';
 
 function drawLinks(links: readonly DanglingLink[], net: NonNullable<ReturnType<typeof useApp.getState>['network']>): void {
   const feats: Feature[] = [];
@@ -41,7 +41,7 @@ export function ConnectSheet() {
     <>
       <Section title="Aggancia strade non collegate">
         <p className="muted">Estremi di strada a meno di {tol} m dalla rete ma non collegati: per il navigatore sono interrotti. Con il raccordo nessuna geometria esistente cambia: la strada di arrivo si divide esattamente sul suo asse e un breve tratto collega l'estremo libero. In alternativa si sposta solo l'estremo libero. Per collegare due strade a mano usa lo strumento Aggancia (E).</p>
-        <Field label="Modalità"><Segmented<'connector' | 'move'> label="Modalità" size="sm" value={mode} onChange={setMode} options={[{ value: 'connector', label: 'Raccordo (geometrie invariate)' }, { value: 'move', label: 'Sposta l\'estremo' }]} /></Field>
+        <FieldGroup label="Modalità"><Segmented<'connector' | 'move'> label="Modalità" size="sm" value={mode} onChange={setMode} options={[{ value: 'connector', label: 'Raccordo (geometrie invariate)' }, { value: 'move', label: 'Sposta l\'estremo' }]} /></FieldGroup>
         <Field label="Distanza massima"><NumberField value={tol} unit="m" min={1} max={60} step={1} decimals={0} ariaLabel="Distanza massima" onCommit={setTol} /></Field>
         {links.length ? <Button variant="project" icon="connect" onClick={() => connect(links)}>Aggancia tutte ({links.length})</Button> : null}
       </Section>

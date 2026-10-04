@@ -3,7 +3,7 @@ import { LocalFrame, geom, humpLimits } from '@drip-urban/core';
 import { commit, useApp } from '../state/store';
 import { CALMING } from '../tools/streetscape';
 import { useTool } from '../tools/toolState';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, TextField } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, TextField, FieldGroup } from '../ui/controls';
 
 /** Marking types with a small plan-view preview (white on asphalt). */
 type MkTool = MarkingKind | 'bollards';
@@ -82,8 +82,8 @@ export function MarkingPalette() {
         {cur.kind === 'parking_bays' ? <Field label="Destinazione"><Select<BayPurpose> value={t.bayPurpose} ariaLabel="Destinazione" options={BAY_PURPOSE} onChange={(v) => useTool.setState({ bayPurpose: v })} /></Field> : null}
         {cur.kind === 'speed_number' ? <div className="chips">{['10', '20', '30', '40', '50'].map((x) => <button key={x} type="button" className={`chip chip-sm ${t.markingText === x ? 'is-on' : ''}`} onClick={() => useTool.setState({ markingText: x })}>{x}</button>)}</div> : null}
         {cur.kind === 'parking_bays' ? (
-          <Field label="Disposizione"><Segmented<'parallel' | 'perpendicular' | 'angled'> label="Disposizione" value={t.bayLayout} onChange={(v) => useTool.setState({ bayLayout: v })}
-            options={[{ value: 'parallel', label: 'In linea 2×5 m' }, { value: 'perpendicular', label: 'A pettine 2,5×5 m' }, { value: 'angled', label: 'A spina 45°' }]} /></Field>
+          <FieldGroup label="Disposizione"><Segmented<'parallel' | 'perpendicular' | 'angled'> label="Disposizione" value={t.bayLayout} onChange={(v) => useTool.setState({ bayLayout: v })}
+            options={[{ value: 'parallel', label: 'In linea 2×5 m' }, { value: 'perpendicular', label: 'A pettine 2,5×5 m' }, { value: 'angled', label: 'A spina 45°' }]} /></FieldGroup>
         ) : null}
       </Section>
       <Section title="Segnaletica automatica" defaultOpen={false}>

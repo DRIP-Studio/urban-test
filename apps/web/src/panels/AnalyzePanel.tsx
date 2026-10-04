@@ -7,7 +7,7 @@ import { flyTo, setSource, toggleLayer } from '../map/mapStore';
 import { select, setDock, setTool, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { usePicks } from '../tools/picks';
-import { Button, Empty, Field, ProvBadge, Section, Segmented, Select, Skeleton, Stat } from '../ui/controls';
+import { Button, Empty, Field, ProvBadge, Section, Segmented, Select, Skeleton, Stat, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
 type Tab = 'safety' | 'network' | 'access' | 'environment' | 'audit';
@@ -156,7 +156,7 @@ function Access() {
     <>
       <Section title="Città dei 7 minuti">
         <div className="grid-2">
-          <Field label="Soglia"><Segmented<string> label="Soglia" size="sm" value={minutes} onChange={setMinutes} options={['5', '7', '10', '15'].map((m) => ({ value: m, label: `${m}′` }))} /></Field>
+          <FieldGroup label="Soglia"><Segmented<string> label="Soglia" size="sm" value={minutes} onChange={setMinutes} options={['5', '7', '10', '15'].map((m) => ({ value: m, label: `${m}′` }))} /></FieldGroup>
           <Field label="Servizio"><Select value={cat} ariaLabel="Servizio" options={[{ value: 'all', label: 'Tutti i servizi' }, ...Object.entries(SERVICE_CATEGORIES).map(([k, v]) => ({ value: k, label: v.label }))]} onChange={setCat} /></Field>
         </div>
         <Button icon="play" busy={busy} onClick={() => void run()}>Calcola a piedi</Button>

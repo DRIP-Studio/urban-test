@@ -9,7 +9,7 @@ import { flyTo } from '../map/mapStore';
 import { drawFunctionalClasses, drawPlan, loadPlan, savePlan, showPlanLayers, usePlans } from '../state/plans';
 import { commit, newId, select, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, Section, Segmented, Select, Stat } from '../ui/controls';
+import { Button, Empty, Field, Section, Segmented, Select, Stat, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
 type Tab = 'urban' | 'traffic' | 'pums';
@@ -88,7 +88,7 @@ function PlanImport() {
     <Section title="Importa dal PUC/PRG" defaultOpen={!usePlans.getState().doc.zones.length}>
       <input ref={input} type="file" accept=".zip,.geojson,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void preview(f); e.target.value = ''; }} />
       <div className="grid-2">
-        <Field label="Contenuto"><Segmented<'zones' | 'constraints'> label="Contenuto" size="sm" value={target} onChange={setTarget} options={[{ value: 'zones', label: 'Zonizzazione' }, { value: 'constraints', label: 'Vincoli' }]} /></Field>
+        <FieldGroup label="Contenuto"><Segmented<'zones' | 'constraints'> label="Contenuto" size="sm" value={target} onChange={setTarget} options={[{ value: 'zones', label: 'Zonizzazione' }, { value: 'constraints', label: 'Vincoli' }]} /></FieldGroup>
         <Field label="Sistema di riferimento"><Select value={epsg} ariaLabel="EPSG" options={EPSG} onChange={setEpsg} /></Field>
       </div>
       <Button icon="import" busy={busy} onClick={() => input.current?.click()}>Scegli Shapefile (.zip) o GeoJSON</Button>

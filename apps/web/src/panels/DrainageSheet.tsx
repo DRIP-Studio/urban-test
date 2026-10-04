@@ -5,7 +5,7 @@ import { commit, setTool, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { DRAIN_KINDS } from '../tools/drainage';
 import { useTool } from '../tools/toolState';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
 const f1 = (v: number, d = 1) => v.toLocaleString('it-IT', { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -15,7 +15,7 @@ export function DrainageToolPanel() {
   const t = useTool();
   return (
     <Section title="Rete di drenaggio">
-      <Field label="Nodo"><Segmented<'inlet' | 'manhole' | 'outfall'> label="Nodo" size="sm" value={t.drainKind} options={DRAIN_KINDS} onChange={(v) => useTool.setState({ drainKind: v })} /></Field>
+      <FieldGroup label="Nodo"><Segmented<'inlet' | 'manhole' | 'outfall'> label="Nodo" size="sm" value={t.drainKind} options={DRAIN_KINDS} onChange={(v) => useTool.setState({ drainKind: v })} /></FieldGroup>
       <div className="grid-2">
         <Field label="Profondità scorrimento"><NumberField value={t.drainDepthM} unit="m" min={0.4} max={8} step={0.1} decimals={1} ariaLabel="Profondità" onCommit={(v) => useTool.setState({ drainDepthM: v })} /></Field>
         <Field label="Condotta DN"><Select value={String(t.drainDn)} ariaLabel="DN" options={COMMERCIAL_DN.map((d) => ({ value: String(d), label: `DN ${d}` }))} onChange={(v) => useTool.setState({ drainDn: Number(v) })} /></Field>

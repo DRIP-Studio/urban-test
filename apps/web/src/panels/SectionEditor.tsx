@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ROAD_TEMPLATES, roadFromTemplate, type CrossSectionElement, type CrossSectionElementKind, type Lane, type Road, type TurnKind } from '@drip-urban/core';
 import { commit, newId, useApp } from '../state/store';
-import { Button, Empty, Field, NumberField, Segmented, Select } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Segmented, Select, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 
 const KIND_LABEL: Record<CrossSectionElementKind, string> = {
@@ -141,7 +141,7 @@ export function SectionEditor() {
           <Field label="Larghezza"><NumberField value={el.widthM} unit="m" min={MIN_W[el.kind]} max={15} step={0.05} ariaLabel="Larghezza" onCommit={(v) => update(active, { widthM: v })} /></Field>
           {lane ? (
             <>
-              <Field label="Direzione"><Segmented label="Direzione corsia" value={lane.direction} onChange={(v) => updateLane({ direction: v })} options={[{ value: 'forward', label: 'Con l\'asse' }, { value: 'backward', label: 'Contro' }, { value: 'reversible', label: 'Reversibile' }]} /></Field>
+              <FieldGroup label="Direzione"><Segmented label="Direzione corsia" value={lane.direction} onChange={(v) => updateLane({ direction: v })} options={[{ value: 'forward', label: 'Con l\'asse' }, { value: 'backward', label: 'Contro' }, { value: 'reversible', label: 'Reversibile' }]} /></FieldGroup>
               <Field label="Svolte consentite">
                 <div className="chips">{(['left', 'through', 'right'] as TurnKind[]).map((t) => (
                   <button key={t} type="button" className={`chip ${lane.turns.includes(t) ? 'is-on' : ''}`} onClick={() => updateLane({ turns: lane.turns.includes(t) ? lane.turns.filter((x) => x !== t) : [...lane.turns, t] })}>{{ left: '↰ Sinistra', through: '↑ Dritto', right: '↱ Destra', uturn: 'Inversione' }[t]}</button>

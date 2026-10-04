@@ -4,7 +4,7 @@ import { engine } from '../engine/engine';
 import { setSignalPreview } from '../map/signalsLive';
 import { commit, newId, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, Section, Segmented, Skeleton, Stat, Toggle } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Skeleton, Stat, Toggle, FieldGroup } from '../ui/controls';
 import { drawJunction, useJunctionAnalysis, type JunctionResult } from './JunctionLab';
 
 const COLORS = ['#83b4d1', '#e8772e', '#c98bb0', '#6fae86', '#d9a441', '#7e8fa3'];
@@ -57,8 +57,8 @@ export function SignalStudio() {
     <div className="signal-studio">
       <div className="ss-head">
         <div className="ss-params">
-          <Field label="Logica"><Segmented<SignalPlan['mode']> label="Logica" value={plan.mode} onChange={(v) => setPlan({ ...plan, mode: v, ...(v === 'actuated' || v === 'adaptive' ? { actuation: plan.actuation ?? { minGreenS: 8, maxGreenS: 45, gapOutS: 3, extensionS: 2.5 } } : {}) })}
-            options={[{ value: 'fixed_time', label: 'Tempo fisso' }, { value: 'actuated', label: 'Attuato' }, { value: 'adaptive', label: 'Adattivo' }, { value: 'green_wave', label: 'Onda verde' }]} /></Field>
+          <FieldGroup label="Logica"><Segmented<SignalPlan['mode']> label="Logica" value={plan.mode} onChange={(v) => setPlan({ ...plan, mode: v, ...(v === 'actuated' || v === 'adaptive' ? { actuation: plan.actuation ?? { minGreenS: 8, maxGreenS: 45, gapOutS: 3, extensionS: 2.5 } } : {}) })}
+            options={[{ value: 'fixed_time', label: 'Tempo fisso' }, { value: 'actuated', label: 'Attuato' }, { value: 'adaptive', label: 'Adattivo' }, { value: 'green_wave', label: 'Onda verde' }]} /></FieldGroup>
           <Field label="Ciclo"><NumberField value={plan.cycleS} unit="s" min={20} max={240} step={1} decimals={0} ariaLabel="Ciclo" onCommit={(v) => setPlan({ ...plan, cycleS: v })} /></Field>
           <Field label="Offset"><NumberField value={plan.offsetS} unit="s" min={0} max={plan.cycleS} step={1} decimals={0} ariaLabel="Offset" onCommit={(v) => setPlan({ ...plan, offsetS: v })} /></Field>
           <Field label="Svolte a sinistra"><Toggle checked={!!plan.permissiveLeft} label="Permesse (danno precedenza)" onChange={(v) => setPlan({ ...plan, permissiveLeft: v })} /></Field>
@@ -284,7 +284,7 @@ function Coordination({ plan }: { plan: SignalPlan }) {
       <div className="grid-3">
         <Field label="Velocità di progressione"><NumberField value={speed} unit="km/h" min={10} max={90} step={5} decimals={0} ariaLabel="Velocità" onCommit={setSpeed} /></Field>
         <Field label="Ciclo comune"><NumberField value={cycle ?? 0} unit="s" min={0} max={180} step={1} decimals={0} ariaLabel="Ciclo comune (0 = automatico)" onCommit={(v) => setCycle(v >= 30 ? v : null)} /></Field>
-        <Field label="Direzione"><Segmented<'oneway' | 'twoway'> label="Direzione" value={direction} onChange={setDirection} options={[{ value: 'oneway', label: 'Un senso' }, { value: 'twoway', label: 'Due sensi' }]} /></Field>
+        <FieldGroup label="Direzione"><Segmented<'oneway' | 'twoway'> label="Direzione" value={direction} onChange={setDirection} options={[{ value: 'oneway', label: 'Un senso' }, { value: 'twoway', label: 'Due sensi' }]} /></FieldGroup>
       </div>
       <Toggle checked={half} label="Doppio ciclo per gli incroci minori quando allarga la banda" onChange={setHalf} />
       <p className="muted">Ciclo comune 0 = il più lungo tra gli incroci (Webster). La banda è calcolata sulle finestre di verde reali del movimento lungo il corridoio e sui tempi di percorrenza lungo le strade.</p>

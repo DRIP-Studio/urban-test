@@ -14,6 +14,7 @@ import { RoundaboutPlacePanel } from './RoundaboutPanel';
 import { ProjectSummary } from './ProjectSummary';
 import { CalmingPalette, MarkingPalette } from './StreetscapePanels';
 import { DrainageToolPanel } from './DrainageSheet';
+import { WaterToolPanel } from './WaterSheet';
 
 function RoadTemplates() {
   const t = useTool();
@@ -212,6 +213,7 @@ export function ToolSettings() {
     case 'roundabout': return <RoundaboutPlacePanel />;
     case 'marking': return <MarkingPalette />;
     case 'drainage': return <DrainageToolPanel />;
+    case 'water': return <WaterToolPanel />;
     case 'calming': return <CalmingPalette />;
     case 'paving': return <PavingLibrary />;
     case 'select': return <ProjectSummary />;

@@ -44,6 +44,11 @@ export interface ToolState {
   /** Live advice of the road pen (curves, crossings): shown, never applied. */
   roadHints: { level: 'ok' | 'warn' | 'info'; text: string }[];
   drainKind: 'inlet' | 'manhole' | 'outfall';
+  waterKind: 'junction' | 'reservoir' | 'tank' | 'hydrant' | 'valve';
+  waterDn: number;
+  waterMaterial: string;
+  waterDemandLs: number;
+  waterHeadM: number;
   drainDepthM: number;
   drainDn: number;
   drainMaterial: string;
@@ -59,7 +64,7 @@ export const useTool = create<ToolState>(() => ({
   arraySpacingM: 8, pavingMaterial: saved.pavingMaterial ?? 'porphyry', arrayItem: 'vegetation.tree', rb: null, measure: null,
   routePick: { from: null, to: null, target: 'from' },
   markingKind: 'line_solid', markingColor: 'white', markingText: 'STOP', markingSymbol: 'bike', markingArrow: 'through', bayLayout: 'parallel', bayPurpose: 'free',
-  calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true, roadHints: [], drainKind: 'inlet', drainDepthM: 1.5, drainDn: 315, drainMaterial: 'pvc',
+  calmingKind: 'raised_crossing', calmingHeightCm: 10, modelClear: true, roadHints: [], drainKind: 'inlet', waterKind: 'reservoir', waterDn: 110, waterMaterial: 'pead', waterDemandLs: 0.5, waterHeadM: 40, drainDepthM: 1.5, drainDn: 315, drainMaterial: 'pvc',
 }));
 
 useTool.subscribe((s) => {

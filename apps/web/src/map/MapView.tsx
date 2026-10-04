@@ -19,6 +19,7 @@ import { SIGN_PLATE_M } from './sources';
 import { addProjectLayers, allLayerDefs, setLayerOpacity, setLayerVisible } from './layers';
 import { setMapInstance, setSource, syncSource, updateSource, useMapUi } from './mapStore';
 import { drawDrainage } from '../state/drainage';
+import { drawWater } from '../state/water';
 import { assetsFC, buildingsFC, structuresFC, contextFC, labelsFC, zonesFC, restrictionsFC, preferentialLanesFC } from './sources';
 import { renderSignalHeads } from './signalsLive';
 import { loadWms, syncWmsOverlays, useWms } from './wms';
@@ -134,6 +135,7 @@ export function MapView() {
       syncSource('sign-poles', a.poles);
       syncSource('structures', structuresFC(network, baseline.origin));
       drawDrainage(network);
+      drawWater(network);
       if (network.removedBuildings !== removedRef) { removedRef = network.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef)); }
       signs3dBase = a.signs3d; updateSigns3d();
       setSource('selection', selectionFC(selection, network));

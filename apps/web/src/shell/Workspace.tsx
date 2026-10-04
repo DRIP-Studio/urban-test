@@ -20,6 +20,7 @@ import { QuantitiesSheet } from '../panels/QuantitiesSheet';
 import { NormsSheet } from '../panels/NormsSheet';
 import { PlansSheet } from '../panels/PlansSheet';
 import { DrainageSheet } from '../panels/DrainageSheet';
+import { WaterSheet } from '../panels/WaterSheet';
 import { TransitPanel } from '../panels/TransitPanel';
 import { PresentView } from '../present/PresentView';
 import { setDock, useApp } from '../state/store';
@@ -53,6 +54,7 @@ const SHEETS: Record<string, { title: string; render: () => ReactElement }> = {
   norms: { title: 'Normativa e verifiche', render: () => <NormsSheet /> },
   plans: { title: 'Piani: urbanistico, traffico, PUMS', render: () => <PlansSheet /> },
   drainage: { title: 'Drenaggio urbano', render: () => <DrainageSheet /> },
+  water: { title: 'Rete acquedotto', render: () => <WaterSheet /> },
 };
 const MODE_TITLE: Record<string, string> = { design: 'Progetta', analyze: 'Analizza', traffic: 'Traffico', transit: 'Trasporto pubblico', civic: 'Civico' };
 

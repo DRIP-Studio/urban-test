@@ -11,7 +11,7 @@ import { Icon } from '../ui/Icon';
 import { vehiclesFC } from '../map/sources';
 import { select, setTool, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Select, Slider, Stat, Toggle } from '../ui/controls';
+import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Select, Slider, Stat, Toggle, FieldGroup } from '../ui/controls';
 import { Navigator } from './Navigator';
 
 type Tab = 'live' | 'history' | 'estimate' | 'simulation' | 'navigator';
@@ -66,8 +66,8 @@ function Live() {
         ) : null}
         <Toggle label={`Aggiornamento automatico (ogni ${live.intervalMin} min e quando sposti la mappa)`} checked={live.auto} onChange={(v) => setLiveAuto(v)} />
         {live.auto ? (
-          <Field label="Intervallo"><Segmented<string> label="Intervallo" size="sm" value={String(live.intervalMin)} onChange={(v) => setLiveAuto(true, Number(v))}
-            options={[{ value: '2', label: '2 min' }, { value: '3', label: '3 min' }, { value: '5', label: '5 min' }, { value: '10', label: '10 min' }]} /></Field>
+          <FieldGroup label="Intervallo"><Segmented<string> label="Intervallo" size="sm" value={String(live.intervalMin)} onChange={(v) => setLiveAuto(true, Number(v))}
+            options={[{ value: '2', label: '2 min' }, { value: '3', label: '3 min' }, { value: '5', label: '5 min' }, { value: '10', label: '10 min' }]} /></FieldGroup>
         ) : null}
         <Button icon="refresh" busy={live.busy} onClick={() => void refreshLive()}>Aggiorna area visibile</Button>
       </Section>

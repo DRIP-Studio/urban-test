@@ -4,7 +4,7 @@ import { commit, useApp } from '../state/store';
 import { createRoundabout, drawPreview, roundaboutFrom } from '../tools/roundabout';
 import { deleteSelection } from '../state/actions';
 import { useTool } from '../tools/toolState';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, Toggle } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Toggle, FieldGroup } from '../ui/controls';
 import { NormRef } from '../ui/NormRef';
 
 const TYPES: { value: RoundaboutType; label: string; range: [number, number]; hint: string }[] = [
@@ -38,7 +38,7 @@ export function RoundaboutPlacePanel() {
           <Field label="Diametro esterno"><NumberField value={rb.outerDiameterM} unit="m" min={type.range[0]} max={type.range[1]} step={1} ariaLabel="Diametro" onCommit={(v) => set({ outerDiameterM: v })} /></Field>
           <Field label="Larghezza anello"><NumberField value={rb.circulatoryWidthM} unit="m" min={6} max={12} step={0.25} ariaLabel="Larghezza anello" onCommit={(v) => set({ circulatoryWidthM: v })} /></Field>
           <Field label="Fascia sormontabile"><NumberField value={rb.apronWidthM} unit="m" min={0} max={3} step={0.25} ariaLabel="Fascia" onCommit={(v) => set({ apronWidthM: v })} /></Field>
-          <Field label="Corsie anello"><Segmented<'1' | '2'> label="Corsie" value={String(rb.lanes) as '1' | '2'} options={[{ value: '1', label: '1' }, { value: '2', label: '2' }]} onChange={(v) => set({ lanes: Number(v) as 1 | 2 })} /></Field>
+          <FieldGroup label="Corsie anello"><Segmented<'1' | '2'> label="Corsie" value={String(rb.lanes) as '1' | '2'} options={[{ value: '1', label: '1' }, { value: '2', label: '2' }]} onChange={(v) => set({ lanes: Number(v) as 1 | 2 })} /></FieldGroup>
         </div>
         {rb.type === 'elliptical' ? (
           <div className="grid-2">
@@ -73,8 +73,8 @@ export function RoundaboutInspector({ rb }: { rb: Roundabout }) {
           <Field label="Fascia sormontabile"><NumberField value={rb.apronWidthM} unit="m" min={0} max={3} step={0.25} ariaLabel="Fascia" onCommit={(v) => update({ apronWidthM: v })} /></Field>
           <Field label="Velocità anello"><NumberField value={rb.speedKmh} unit="km/h" min={10} max={50} step={5} decimals={0} ariaLabel="Velocità" onCommit={(v) => update({ speedKmh: v })} /></Field>
         </div>
-        <Field label="Regolazione"><Segmented<Roundabout['control']> label="Regolazione" value={rb.control} onChange={(v) => update({ control: v })}
-          options={[{ value: 'yield', label: 'Precedenza' }, { value: 'signalized', label: 'Semaforica' }, { value: 'metered', label: 'A dosaggio' }, { value: 'part_time', label: 'Fasce orarie' }]} /></Field>
+        <FieldGroup label="Regolazione"><Segmented<Roundabout['control']> label="Regolazione" value={rb.control} onChange={(v) => update({ control: v })}
+          options={[{ value: 'yield', label: 'Precedenza' }, { value: 'signalized', label: 'Semaforica' }, { value: 'metered', label: 'A dosaggio' }, { value: 'part_time', label: 'Fasce orarie' }]} /></FieldGroup>
         <p className="muted">Diametri e corona giratoria: <NormRef id="dm-2006" article="Allegato, § 4.5" /> (mini 14–25 m, compatte 25–40 m, convenzionali 40–50 m).</p>
       </Section>
       <Section title="Bracci" count={rb.arms.length}>

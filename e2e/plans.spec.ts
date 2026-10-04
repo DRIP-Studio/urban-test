@@ -45,3 +45,24 @@ test('plans: PGTU functional classification proposal, environmental islands, PUM
   await page.getByRole('radio', { name: 'PUMS' }).click();
   await expect(page.getByText(/Efficacia ed efficienza/)).toBeVisible();
 });
+
+test('water supply: reservoir, nodes and a hydrant, pressures computed', async ({ page, request }) => {
+  const pid = await createProject(request, 'E2E acquedotto');
+  await openWorkspace(page, pid);
+  const j = (await junctions(page, 4))[1]!;
+  const p = await focus(page, j.at, 18.5);
+  await page.keyboard.press('q');
+  await page.mouse.click(p.x - 150, p.y);          // reservoir (default)
+  await page.getByRole('radio', { name: 'Nodo / utenza' }).click();
+  await page.mouse.click(p.x - 40, p.y);
+  await page.mouse.click(p.x + 60, p.y);
+  await page.getByRole('radio', { name: 'Idrante' }).click();
+  await page.mouse.click(p.x + 60, p.y + 90);
+  await expect.poll(() => opCount(page)).toBe(4);
+  await page.keyboard.press('Escape');
+  await openSheet(page, 'water');
+  await page.getByRole('button', { name: 'Calcola pressioni' }).click();
+  await expect(page.getByText('Rete verificata')).toBeVisible();
+  await page.getByRole('button', { name: 'Verifica 10 l/s' }).click();
+  await expect(page.getByText(/Pressione residua/)).toBeVisible();
+});

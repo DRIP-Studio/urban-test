@@ -11,6 +11,7 @@ import { selectTool } from './select';
 import { calmingTool, markingTool } from './streetscape';
 import { drainageTool } from './drainage';
 import { connectTool } from './connect';
+import { waterTool } from './water';
 import { useTool } from './toolState';
 import { usePicks } from './picks';
 import type { ToolDef } from './types';
@@ -87,6 +88,7 @@ export const TOOLS: readonly ToolDef[] = [
   { id: 'section', label: 'Sezione', icon: 'section', shortcut: 'S', group: 'civil', modes: ['design'], hint: 'Clic su una strada per modificare corsie, marciapiedi, sosta, ciclabili', handler: sectionTool },
   { id: 'junction', label: 'Junction Lab', icon: 'junction', shortcut: 'J', group: 'civil', modes: ['design', 'analyze'], hint: 'Clic su un incrocio: corsie, svolte, conflitti, regolazione', handler: makeJunctionPicker('junction') },
   { id: 'drainage', label: 'Drenaggio', icon: 'wave', shortcut: 'C', group: 'civil', modes: ['design'], hint: 'Clic: caditoie e pozzetti collegati da condotte in pendenza · clic su un nodo per collegarlo · Invio/Esc chiude il tratto', cursor: 'crosshair', handler: drainageTool },
+  { id: 'water', label: 'Acquedotto', icon: 'drop', shortcut: 'Q', group: 'civil', modes: ['design'], hint: 'Clic: serbatoio, nodi e idranti collegati da condotte in pressione · clic su un nodo esistente per chiudere un anello · Invio/Esc chiude il tratto', cursor: 'crosshair', handler: waterTool },
   { id: 'roundabout', label: 'Rotatoria', icon: 'roundabout', shortcut: 'O', group: 'civil', modes: ['design'], hint: 'Clic ovunque (si aggancia agli incroci) · [ ] diametro · Invio crea · Esc riposiziona', handler: roundaboutTool },
   { id: 'signals', label: 'Semafori', icon: 'signal', shortcut: 'T', group: 'civil', modes: ['design', 'traffic'], hint: 'Clic su un incrocio: Signal Studio con fasi e ciclo', handler: makeJunctionPicker('signals') },
   { id: 'signs', label: 'Cartelli', icon: 'sign', shortcut: 'G', group: 'street', modes: ['design'], hint: 'Scegli il segnale e clic per posarlo · Alt+clic su un cartello aggiunge un pannello allo stesso palo · Q/E ruota', cursor: 'crosshair', handler: signTool },

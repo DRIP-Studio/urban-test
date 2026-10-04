@@ -39,6 +39,17 @@ export function Segmented<T extends string>({ value, options, onChange, label, s
   );
 }
 
+/** Like Field, for groups of buttons (Segmented, chips): a <label> would name only the first button. */
+export function FieldGroup({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  return (
+    <div className="field" role="group" aria-label={label}>
+      <span className="field-label">{label}</span>
+      {children}
+      {hint ? <span className="field-hint">{hint}</span> : null}
+    </div>
+  );
+}
+
 export function Field({ label, children, hint, prov }: { label: string; children: ReactNode; hint?: string; prov?: ProvenanceKind }) {
   return (
     <label className="field">
