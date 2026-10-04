@@ -11,6 +11,7 @@ import './civicTools';
 import './terrainTools';
 import './normTools';
 import './streetscapeTools';
+import './planTools';
 
 type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown }; thoughtSignature?: string };
 interface Content { role: 'user' | 'model'; parts: Part[] }
