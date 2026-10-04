@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { partCenter, rotationMatrix } from '../models/parts';
 import { VEHICLE_CLASSES, paintIndex, vehicleGlbUrl } from '../models/vehicles';
 import { buildingLook } from '../models/buildings';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { SIM_STRIDE, pedestrianState, signalState, type Asset, type SignalHead, type SimFrame } from '@drip-urban/core';
+import { SIM_STRIDE, pedestrianState, signalState, type Asset, type LngLat, type SignalHead, type SimFrame } from '@drip-urban/core';
+import { HeightModel, MARKING_LIFT_M, corridorSlopes, densifyRing, footprintBase, geoidUndulation, heightmapTile, ringHeights } from './heights';
+import { loadTerrain, useTerrain } from '../state/terrain';
 import type { FurnitureItem, MaterialItem } from '../api/types';
 import { engine } from '../engine/engine';
 import type { PhysicalPayload } from '../engine/protocol';
@@ -20,13 +22,54 @@ const colorOf = (materials: Map<string, MaterialItem>, id: string, fallback = '#
   return Cesium.Color.fromCssColorString(m?.color ?? fallback).withAlpha(m?.opacity ?? 1);
 };
 
+/** Ellipsoidal ground height under a point (0 without DTM); set by the Twin when the height model changes. */
+let groundAt: (lon: number, lat: number) => number = () => 0;
+
 function enuMatrix(lon: number, lat: number, h: number, headingDeg: number): Cesium.Matrix4 {
   const pos = Cesium.Cartesian3.fromDegrees(lon, lat, h);
   return Cesium.Transforms.headingPitchRollToFixedFrame(pos, new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(headingDeg), 0, 0));
 }
 
+/** With the DTM: surfaces on the terrain or on the road design profile, kerbs as raised skins, earthwork slopes. */
+function draped(p: PhysicalPayload, materials: Map<string, MaterialItem>, hm: HeightModel): Cesium.Primitive[] {
+  const vf = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
+  const poly = (ring: readonly LngLat[], props: { roadId?: string | null; nodeId?: string | null }, lift: number, depth: number) => {
+    const { flat, min } = ringHeights(hm, densifyRing(ring, hm.frame, 6), props, lift);
+    return new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArrayHeights(flat)), perPositionHeight: true, extrudedHeight: min - depth, vertexFormat: vf });
+  };
+  const surf: Cesium.GeometryInstance[] = [];
+  for (const f of p.surfaces.features) {
+    const outer = (f.geometry.coordinates[0] as number[][]).slice(0, -1).map((q) => [q[0]!, q[1]!] as LngLat);
+    if (outer.length < 3) continue;
+    const pr = f.properties as { id?: string; roadId?: string | null; nodeId?: string | null; h?: number; z?: number; material?: string };
+    try {
+      surf.push(new Cesium.GeometryInstance({ id: pr.id, geometry: poly(outer, pr, Number(pr.h ?? 0) + Number(pr.z ?? 4) * 0.004, 0.25), attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(colorOf(materials, String(pr.material))) } }));
+    } catch { /* degenerate ring */ }
+  }
+  const marks: Cesium.GeometryInstance[] = [];
+  for (const f of p.markings.features) {
+    const outer = (f.geometry.coordinates[0] as number[][]).slice(0, -1).map((q) => [q[0]!, q[1]!] as LngLat);
+    const pr = f.properties as { roadId?: string | null; nodeId?: string | null; h?: number; material?: string };
+    try { marks.push(new Cesium.GeometryInstance({ geometry: poly(outer, pr, MARKING_LIFT_M + 0.03 + Number(pr.h ?? 0), 0.01), attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(colorOf(materials, String(pr.material ?? 'road_marking_white'))) } })); } catch { /* skip */ }
+  }
+  const slopes: Cesium.GeometryInstance[] = [];
+  for (const r of hm.profiledRoads) {
+    for (const q of corridorSlopes(r, hm.grid, hm.origin).quads) {
+      try {
+        slopes.push(new Cesium.GeometryInstance({
+          geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArrayHeights(q.ring.flatMap((c) => [c[0], c[1], hm.toEllipsoid(c[2])]))), perPositionHeight: true, vertexFormat: vf }),
+          attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(q.cut ? '#b39a7c' : '#8fa26a')) },
+        }));
+      } catch { /* skip */ }
+    }
+  }
+  const app = () => new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false });
+  return [surf, marks, slopes].filter((x) => x.length).map((inst) => new Cesium.Primitive({ geometryInstances: inst, appearance: app(), asynchronous: true, releaseGeometryInstances: true }));
+}
+
 /** Surfaces and markings: one batched primitive each, heights from the physical model (same data as the 2D map). */
-function physicalPrimitives(p: PhysicalPayload, materials: Map<string, MaterialItem>): Cesium.Primitive[] {
+function physicalPrimitives(p: PhysicalPayload, materials: Map<string, MaterialItem>, hm: HeightModel | null): Cesium.Primitive[] {
+  if (hm) return draped(p, materials, hm);
   const surf: Cesium.GeometryInstance[] = [];
   for (const f of p.surfaces.features) {
     const rings = f.geometry.coordinates as number[][][];
@@ -46,8 +89,8 @@ function physicalPrimitives(p: PhysicalPayload, materials: Map<string, MaterialI
     } catch { /* degenerate ring: skipped in 3D exactly as MapLibre drops it */ }
   }
   const marks: Cesium.GeometryInstance[] = p.markings.features.map((f) => new Cesium.GeometryInstance({
-    geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray((f.geometry.coordinates[0] as number[][]).slice(0, -1).flat())), height: 0.045, vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }),
-    attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString('#f2f1ec')) },
+    geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray((f.geometry.coordinates[0] as number[][]).slice(0, -1).flat())), height: 0.045 + Number(f.properties.h ?? 0), vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT }),
+    attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(colorOf(materials, String(f.properties.material ?? 'road_marking_white'))) },
   }));
   const app = () => new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false });
   return [
@@ -56,7 +99,7 @@ function physicalPrimitives(p: PhysicalPayload, materials: Map<string, MaterialI
   ];
 }
 
-function buildingsPrimitive(buildings: { id: string; footprint: readonly (readonly [number, number])[]; heightM: number; minHeightM: number }[], translucent: boolean): Cesium.Primitive {
+function buildingsPrimitive(buildings: { id: string; footprint: readonly (readonly [number, number])[]; heightM: number; minHeightM: number }[], translucent: boolean, hm: HeightModel | null): Cesium.Primitive {
   // Facade and roof colours shared with the 2D map (sources.ts): plaster tones, tiled roofs on low-rise blocks.
   const inst: Cesium.GeometryInstance[] = [];
   for (const b of buildings) {
@@ -64,8 +107,10 @@ function buildingsPrimitive(buildings: { id: string; footprint: readonly (readon
     const hier = new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(b.footprint.flatMap((p) => [p[0], p[1]])));
     const vf = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
     const col = (c: string) => Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(c).withAlpha(translucent ? 0.55 : 1));
-    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: b.minHeightM, extrudedHeight: b.heightM, vertexFormat: vf }), attributes: { color: col(look.facade) } }));
-    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: b.heightM, extrudedHeight: b.heightM + look.roofH, vertexFormat: vf }), attributes: { color: col(look.roof) } }));
+    // On the DTM the building stands on the lowest ground under its footprint (no floating corners).
+    const g = hm ? hm.toEllipsoid(footprintBase(hm, b.footprint)) : 0;
+    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: g + (hm && !b.minHeightM ? -1 : b.minHeightM), extrudedHeight: g + b.heightM, vertexFormat: vf }), attributes: { color: col(look.facade) } }));
+    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: g + b.heightM, extrudedHeight: g + b.heightM + look.roofH, vertexFormat: vf }), attributes: { color: col(look.roof) } }));
   }
   return new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent }), asynchronous: true, releaseGeometryInstances: true });
 }
@@ -78,7 +123,7 @@ function furniturePrimitive(assets: Asset[], items: Map<string, FurnitureItem>, 
     const item = items.get(a.type);
     if (!item || a.type.startsWith('signal.') || a.state === 'removed' || item.gltf) continue;
     ids.add(a.id);
-    const base = enuMatrix(a.at[0], a.at[1], a.elevationM ?? 0, a.rotationDeg);
+    const base = enuMatrix(a.at[0], a.at[1], (a.elevationM ?? 0) + groundAt(a.at[0], a.at[1]), a.rotationDeg);
     for (const part of item.model) {
       const vf = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
       let geometry: Cesium.Geometry | Cesium.GeometryFactory;
@@ -111,6 +156,15 @@ export function TwinView() {
   const selection = useApp((s) => s.selection);
   const [ready, setReady] = useState(false);
   const [buildingsTranslucent, setBT] = useState(false);
+  const grid = useTerrain((s) => s.grid);
+  const [useDtm, setUseDtm] = useState(true);
+  useEffect(() => { if (!useTerrain.getState().loaded) void loadTerrain(); }, []);
+  // InfraWorks-like ground: project DTM (orthometric) on the WGS84 ellipsoid through the geoid undulation.
+  const hm = useMemo(() => {
+    if (!grid || !useDtm || !baseline || !network) return null;
+    return new HeightModel(grid, network, baseline.origin, { geoidM: geoidUndulation(baseline.origin[0], baseline.origin[1]) });
+  }, [grid, useDtm, baseline, network]);
+  groundAt = hm ? (lon, lat) => hm.toEllipsoid(hm.terrain(lon, lat)) : () => 0;
   const [parity, setParity] = useState<{ twin: number; map: number } | null>(null);
   const [status, setStatus] = useState('Avvio del Twin');
   const layers = useRef<{ phys: Cesium.Primitive[]; bld: Cesium.Primitive | null; furn: Cesium.Primitive | null; ents: Cesium.Entity[]; models: Cesium.Model[] }>({ phys: [], bld: null, furn: null, ents: [], models: [] });
@@ -144,6 +198,27 @@ export function TwinView() {
     return () => { destroyed = true; viewerRef.current?.destroy(); viewerRef.current = null; };
   }, [baseline]);
 
+  // Terrain provider: DTM heightmap tiles when available, otherwise the ellipsoid.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!ready || !viewer) return;
+    if (hm) {
+      const g = hm.grid, geoid = hm.opts.geoidM;
+      const scheme = new Cesium.GeographicTilingScheme();
+      viewer.terrainProvider = new Cesium.CustomHeightmapTerrainProvider({
+        width: 33, height: 33, tilingScheme: scheme,
+        callback: (x, y, level) => {
+          const r = scheme.tileXYToRectangle(x, y, level);
+          return heightmapTile(g, { west: Cesium.Math.toDegrees(r.west), south: Cesium.Math.toDegrees(r.south), east: Cesium.Math.toDegrees(r.east), north: Cesium.Math.toDegrees(r.north) }, 33, 33, geoid);
+        },
+      });
+      setStatus(`Terreno DTM (${g.source}) · geoide ${hm.opts.geoidM.toFixed(0)} m${hm.hasProfiles ? ` · ${hm.profiledRoads.length} strade su livelletta` : ''}`);
+    } else {
+      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+      setStatus(grid ? 'Terreno piano (DTM disattivato)' : 'Terreno piano · carica il DTM in Profilo per il rilievo');
+    }
+  }, [ready, hm, grid]);
+
   // Physical model (same payload as the 2D map)
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -151,21 +226,21 @@ export function TwinView() {
     const materials = new Map(catalogs.materials.items.map((m) => [m.id, m]));
     const apply = (p: PhysicalPayload) => {
       for (const prim of layers.current.phys) viewer.scene.primitives.remove(prim);
-      layers.current.phys = physicalPrimitives(p, materials).map((prim) => viewer.scene.primitives.add(prim) as Cesium.Primitive);
+      layers.current.phys = physicalPrimitives(p, materials, hm).map((prim) => viewer.scene.primitives.add(prim) as Cesium.Primitive);
       heads.current = p.heads;
     };
     if (engine.lastPhysical) apply(engine.lastPhysical);
     const off = engine.onPhysical(() => apply(engine.lastPhysical!));
     return off;
-  }, [ready, catalogs]);
+  }, [ready, catalogs, hm]);
 
   // Buildings
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!ready || !viewer || !baseline) return;
     if (layers.current.bld) viewer.scene.primitives.remove(layers.current.bld);
-    layers.current.bld = viewer.scene.primitives.add(buildingsPrimitive(Object.values(baseline.buildings).filter((b) => !removedBuildings?.[b.id]), buildingsTranslucent)) as Cesium.Primitive;
-  }, [ready, baseline, buildingsTranslucent, removedBuildings]);
+    layers.current.bld = viewer.scene.primitives.add(buildingsPrimitive(Object.values(baseline.buildings).filter((b) => !removedBuildings?.[b.id]), buildingsTranslucent, hm)) as Cesium.Primitive;
+  }, [ready, baseline, buildingsTranslucent, removedBuildings, hm]);
 
   // Assets: furniture primitives, sign plates on poles, signal heads
   useEffect(() => {
@@ -189,7 +264,7 @@ export function TwinView() {
       const item = items.get(a.type);
       if (!item?.gltf || a.state === 'removed') continue;
       rendered.add(a.id);
-      const matrix = enuMatrix(a.at[0], a.at[1], a.elevationM ?? 0, a.rotationDeg);
+      const matrix = enuMatrix(a.at[0], a.at[1], (a.elevationM ?? 0) + groundAt(a.at[0], a.at[1]), a.rotationDeg);
       Cesium.Matrix4.multiplyByUniformScale(matrix, item.scale ?? 1, matrix);
       void Cesium.Model.fromGltfAsync({ url: item.gltf, modelMatrix: matrix, id: a.id, upAxis: Cesium.Axis.Y, forwardAxis: Cesium.Axis.Z } as never)
         .then((model) => { if (alive && !viewer.isDestroyed()) layers.current.models.push(viewer.scene.primitives.add(model) as Cesium.Model); else model.destroy(); })
@@ -202,13 +277,13 @@ export function TwinView() {
       list.sort((x, y) => ((x.properties.stackOrder as number) ?? 0) - ((y.properties.stackOrder as number) ?? 0));
       const base = list[0]!;
       const top = 2.2 + list.length * 0.95;
-      layers.current.ents.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(base.at[0], base.at[1], top / 2), cylinder: { length: top, topRadius: 0.03, bottomRadius: 0.03, material: Cesium.Color.fromCssColorString('#8d9196') } }));
+      layers.current.ents.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(base.at[0], base.at[1], groundAt(base.at[0], base.at[1]) + top / 2), cylinder: { length: top, topRadius: 0.03, bottomRadius: 0.03, material: Cesium.Color.fromCssColorString('#8d9196') } }));
       list.forEach((a, i) => {
         const sign = signs.get(a.type);
         if (!sign) return;
         rendered.add(a.id);
         const heading = Cesium.Math.toRadians(a.rotationDeg + 180);
-        const pos = Cesium.Cartesian3.fromDegrees(a.at[0], a.at[1], top - 0.45 - i * 0.95);
+        const pos = Cesium.Cartesian3.fromDegrees(a.at[0], a.at[1], groundAt(a.at[0], a.at[1]) + top - 0.45 - i * 0.95);
         layers.current.ents.push(viewer.entities.add({
           id: `sign:${a.id}`, position: pos,
           orientation: Cesium.Transforms.headingPitchRollQuaternion(pos, new Cesium.HeadingPitchRoll(heading, 0, 0)),
@@ -219,16 +294,16 @@ export function TwinView() {
     // Signal assets (existing OSM signals and placed ones) and signal-plan heads with live state.
     const lampColors: Record<string, Cesium.Color> = { red: Cesium.Color.fromCssColorString('#e5483a'), yellow: Cesium.Color.fromCssColorString('#f3b52f'), green: Cesium.Color.fromCssColorString('#3fc06a'), off: Cesium.Color.fromCssColorString('#2c2e31') };
     const addHead = (at: readonly [number, number], heading: number, stateOf: () => string, ped: boolean) => {
-      const h = ped ? 2.4 : 3.0;
-      layers.current.ents.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(at[0], at[1], h / 2), cylinder: { length: h, topRadius: 0.05, bottomRadius: 0.05, material: Cesium.Color.fromCssColorString('#3a3d40') } }));
+      const h = ped ? 2.4 : 3.0, g = groundAt(at[0], at[1]);
+      layers.current.ents.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(at[0], at[1], g + h / 2), cylinder: { length: h, topRadius: 0.05, bottomRadius: 0.05, material: Cesium.Color.fromCssColorString('#3a3d40') } }));
       // Housing faces the approaching traffic (heading = direction of travel towards the stop line).
-      const hp = Cesium.Cartesian3.fromDegrees(at[0], at[1], h + 0.15);
+      const hp = Cesium.Cartesian3.fromDegrees(at[0], at[1], g + h + 0.15);
       layers.current.ents.push(viewer.entities.add({ position: hp, orientation: Cesium.Transforms.headingPitchRollQuaternion(hp, new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(heading), 0, 0)),
         box: { dimensions: new Cesium.Cartesian3(0.34, 0.22, 1.0), material: Cesium.Color.fromCssColorString('#1c1d1f') } }));
       ['red', 'yellow', 'green'].forEach((c, i) => {
         layers.current.ents.push(viewer.entities.add({
           // Lamps sit on the face of the housing that looks at the drivers (local −y of the travel heading).
-          position: Cesium.Matrix4.multiplyByPoint(enuMatrix(at[0], at[1], 0, heading), new Cesium.Cartesian3(0, -0.13, h + 0.45 - i * 0.3), new Cesium.Cartesian3()), ellipsoid: { radii: new Cesium.Cartesian3(0.11, 0.11, 0.11),
+          position: Cesium.Matrix4.multiplyByPoint(enuMatrix(at[0], at[1], g, heading), new Cesium.Cartesian3(0, -0.13, h + 0.45 - i * 0.3), new Cesium.Cartesian3()), ellipsoid: { radii: new Cesium.Cartesian3(0.11, 0.11, 0.11),
             material: new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty(() => (stateOf() === c ? lampColors[c] : lampColors.off), false)) },
         }));
       });
@@ -246,7 +321,7 @@ export function TwinView() {
     const expected = assets.filter((a) => a.state !== 'removed' && (items.has(a.type) || signs.has(a.type))).length;
     setParity({ twin: rendered.size, map: expected });
     return () => { alive = false; };
-  }, [ready, network, catalogs]);
+  }, [ready, network, catalogs, hm]);
 
   // Simulated vehicles: detailed glTF models (built in memory per class and paint), one per vehicle id.
   useEffect(() => {
@@ -254,7 +329,7 @@ export function TwinView() {
     if (!ready || !viewer) return;
     const live = new Map<number, { model: Cesium.Model | null; seen: number }>();
     let tick = 0;
-    const place = (lon: number, lat: number, heading: number) => enuMatrix(lon, lat, 0.02, heading);
+    const place = (lon: number, lat: number, heading: number) => enuMatrix(lon, lat, groundAt(lon, lat) + 0.02, heading);
     const off = engine.onSim((f) => {
       sim.current = f;
       tick++;
@@ -299,6 +374,7 @@ export function TwinView() {
         <Segmented<Preset> label="Inquadratura" size="sm" value="perspective" onChange={preset}
           options={[{ value: 'top', label: 'Dall\'alto' }, { value: 'perspective', label: 'Prospettiva' }, { value: 'street', label: 'Strada' }, { value: 'junction', label: 'Incrocio' }, { value: 'district', label: 'Quartiere' }]} />
         <Toggle label="Edifici trasparenti" checked={buildingsTranslucent} onChange={setBT} />
+        {grid ? <Toggle label="Terreno DTM" checked={useDtm} onChange={setUseDtm} /> : null}
         <Button size="sm" icon="camera" onClick={() => {
           const v = viewerRef.current;
           if (!v) return;
