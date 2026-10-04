@@ -8,6 +8,7 @@ import { commit, newId, select, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { Button, Field, NumberField, ProvBadge, Section, Segmented, Select, TextField, Toggle } from '../ui/controls';
 import { ScheduleEditor, describeSchedule } from '../ui/ScheduleEditor';
+import { NormRef } from '../ui/NormRef';
 import { setAllSides, setSideEnabled, setSidewalksEnabled, useSidewalks } from '../state/sidewalks';
 
 const PROJECT = { kind: 'project' as const, source: 'DRIP Urban scenario' };
@@ -79,7 +80,7 @@ export function ZoneInspector({ zone }: { zone: Zone }) {
       ) : null}
       {zone.kind === 'ztl' || zone.kind === 'school' || zone.kind === 'low_emission' ? (
         <Section title="Varchi e pannelli LED" count={gates.filter((g) => g.type === 'ztl.gate').length}>
-          <p className="muted">Un varco per ogni strada che entra nella zona: telecamera, pannello a messaggio variabile «ZTL attiva / non attiva» comandato dagli orari, segnale fig. II 322 CdS.</p>
+          <p className="muted">Un varco per ogni strada che entra nella zona: telecamera, pannello a messaggio variabile «ZTL attiva / non attiva» comandato dagli orari, segnale fig. II 322 CdS. <NormRef id="cds" article="art. 7 c. 9" /> · <NormRef id="dpr-250-1999" /></p>
           <div className="grid-2">
             <Field label="Testo zona attiva"><TextField value={zone.ledText?.on ?? 'ZTL ATTIVA'} ariaLabel="Testo attiva" onCommit={(v) => set({ ledText: { on: v, off: zone.ledText?.off ?? 'ZTL NON ATTIVA' } })} /></Field>
             <Field label="Testo zona non attiva"><TextField value={zone.ledText?.off ?? 'ZTL NON ATTIVA'} ariaLabel="Testo non attiva" onCommit={(v) => set({ ledText: { on: zone.ledText?.on ?? 'ZTL ATTIVA', off: v } })} /></Field>

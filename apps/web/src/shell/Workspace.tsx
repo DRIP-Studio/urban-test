@@ -17,6 +17,7 @@ import { SignalStudio } from '../panels/SignalStudio';
 import { TrafficStudio } from '../panels/TrafficStudio';
 import { ConnectSheet } from '../panels/NetworkTools';
 import { QuantitiesSheet } from '../panels/QuantitiesSheet';
+import { NormsSheet } from '../panels/NormsSheet';
 import { TransitPanel } from '../panels/TransitPanel';
 import { PresentView } from '../present/PresentView';
 import { setDock, useApp } from '../state/store';
@@ -46,6 +47,7 @@ const SHEETS: Record<string, { title: string; render: () => ReactElement }> = {
   compare: { title: 'Confronto scenari', render: () => <ComparePanel /> },
   connect: { title: 'Aggancia strade', render: () => <ConnectSheet /> },
   quantities: { title: 'Computo metrico', render: () => <QuantitiesSheet /> },
+  norms: { title: 'Normativa e verifiche', render: () => <NormsSheet /> },
 };
 const MODE_TITLE: Record<string, string> = { design: 'Progetta', analyze: 'Analizza', traffic: 'Traffico', transit: 'Trasporto pubblico', civic: 'Civico' };
 

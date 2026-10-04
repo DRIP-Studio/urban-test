@@ -8,7 +8,7 @@ import { useWms, wmsLayerDefs } from './wms';
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'signals',
   'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -56,6 +56,8 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'iso', label: 'Accessibilità / isocrone', category: 'analysis', mapLayers: ['iso-line'], defaultVisible: true, source: 'Analisi DRIP',
     legend: [{ color: '#2f7d5b', label: '≤ 5 min' }, { color: '#79a84d', label: '≤ 7 min' }, { color: '#d6a63b', label: '≤ 10 min' }, { color: '#c4643a', label: '≤ 15 min' }] },
   { id: 'heat', label: 'Heatmap sicurezza', category: 'safety', mapLayers: ['heat-layer', 'heat-points'], defaultVisible: true, source: 'Screening surrogato / sinistri importati' },
+  { id: 'norms', label: 'Verifiche normative', category: 'analysis', mapLayers: ['norms-circle'], defaultVisible: true, source: 'Normativa e verifiche (DRIP)',
+    legend: [{ color: '#b9312a', label: 'Non conforme' }, { color: '#d9a441', label: 'Da verificare' }, { color: '#5587a2', label: 'Informazione' }] },
   { id: 'crashes', label: 'Sinistri importati', category: 'safety', mapLayers: ['crashes-circle'], defaultVisible: true, source: 'Dataset importato dall\'utente' },
   { id: 'junction', label: 'Junction Lab (movimenti e conflitti)', category: 'safety', mapLayers: ['moves-line', 'moves-arrow', 'conflicts-circle', 'plan-signals-icon'], defaultVisible: true, source: 'Analisi incrocio e piani semaforici',
     legend: [{ color: '#d0614f', label: 'Attraversamento' }, { color: '#d9a441', label: 'Immissione' }, { color: '#83b4d1', label: 'Diversione' }] },
@@ -131,6 +133,7 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
     'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.2, 'rgba(131,180,209,0.35)', 0.45, '#d9a441', 0.7, '#e1703a', 1, '#b9312a'],
     'heatmap-opacity': 0.75 } });
   L({ id: 'heat-points', type: 'circle', source: 'heat', minzoom: 14, filter: ['>=', ['get', 'score'], 40], paint: { 'circle-radius': ['interpolate', ['linear'], ['get', 'score'], 40, 4, 100, 10], 'circle-color': ['step', ['get', 'score'], '#d9a441', 60, '#e1703a', 80, '#b9312a'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.2 } });
+  L({ id: 'norms-circle', type: 'circle', source: 'norms', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 3.5, 18, 8], 'circle-color': ['match', ['get', 'severity'], 'error', '#b9312a', 'warning', '#d9a441', '#5587a2'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } });
   L({ id: 'crashes-circle', type: 'circle', source: 'crashes', paint: { 'circle-radius': ['match', ['get', 'severity'], 'fatal', 7, 'serious', 5.5, 'slight', 4, 3], 'circle-color': ['match', ['get', 'severity'], 'fatal', '#5c0d0a', 'serious', '#b9312a', 'slight', '#e1703a', '#d9a441'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
   // Mode styles: rail thicker with a casing, train dashed black/white, BRT and tram solid, bus thinner.
   const modeW = (base: number): ExpressionSpecification => ['*', base, ['match', ['get', 'mode'], 'metro', 1.8, 'train', 1.6, 'tram', 1.3, 'brt', 1.4, 'funicular', 1.3, 'ferry', 1, 'on_demand', 0.8, 1]] as unknown as ExpressionSpecification;

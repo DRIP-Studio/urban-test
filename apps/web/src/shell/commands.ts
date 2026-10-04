@@ -49,6 +49,7 @@ export const COMMANDS: Command[] = [
   { id: 'history', label: 'Cronologia e versioni', group: 'Progetto', when: inProject, run: () => setDock('history') },
   { id: 'export', label: 'Esporta', group: 'Progetto', shortcut: 'Ctrl+E', when: inProject, run: () => setDock('export') },
   { id: 'sidewalks', label: 'Importa marciapiedi esistenti (dalle sagome degli edifici)', group: 'Progetto', when: inProject, run: () => void importExistingSidewalks() },
+  { id: 'norms', label: 'Normativa e verifiche di conformità (CdS, DM 5/11/2001, accessibilità…)', group: 'Analisi', when: inProject, run: () => setDock('norms') },
   { id: 'quantities', label: 'Computo metrico estimativo dello scenario', group: 'Progetto', when: inProject, run: () => setDock('quantities') },
   { id: 'profile', label: 'Profilo longitudinale, livellette e movimenti terra della strada selezionata', group: 'Progetto', when: inProject, run: () => { setMode('design'); setDock('profile'); } },
   { id: 'connect', label: 'Aggancia strade non collegate (senza deformare la rete)', group: 'Progetto', when: inProject, run: () => { setMode('design'); setDock('connect'); } },
