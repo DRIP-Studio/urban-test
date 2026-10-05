@@ -109,6 +109,11 @@ function endWidth(p: Pending | undefined, atStart: boolean): number {
   return w >= MIN_WIDTH ? Math.round(w * 20) / 20 : 0;
 }
 
+/** One side of one road, before corners: a final status, or the samples of an estimated side. */
+interface SideResult { readonly side: 'left' | 'right'; readonly L: number; readonly status: SideStatus; readonly widthM: number; readonly samples?: readonly Sample[] }
+/** Per baseline (buildings are static), per road: last result and the roads it depended on. */
+const resultCache = new WeakMap<CityBaseline, Map<string, { deps: Road[]; results: SideResult[] }>>();
+
 /** Road side seen from an arm: the arm's left is the road's left when the arm starts the road. */
 const roadSide = (arm: Arm, armSide: 'left' | 'right'): 'left' | 'right' => ((armSide === 'left') === arm.atStart ? 'left' : 'right');
 
@@ -157,11 +162,12 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
   const sides: SidewalkSide[] = [];
   const totals: Record<SideStatus, number> = { data: 0, footway: 0, estimated: 0, no_room: 0, rural: 0 };
   const pending: Pending[] = [];
-  for (const road of Object.values(net.roads)) {
-    if (isPedestrianRoad(road) || SKIP.has(road.roadClass) || road.tags?.roundabout) continue;
+  /** Samples and status of both sides of one road (independent of every other estimated side). */
+  const sideResults = (road: Road): SideResult[] => {
+    const out: SideResult[] = [];
     const axis = road.axis.map((q) => frame.toMetric(q) as V);
     const L = lengthOf(axis);
-    if (L < 8 || (road.roadClass === 'service' && (L < 40 || ['driveway', 'parking_aisle', 'drive-through'].includes(road.tags?.service ?? '')))) continue;
+    if (L < 8 || (road.roadClass === 'service' && (L < 40 || ['driveway', 'parking_aisle', 'drive-through'].includes(road.tags?.service ?? '')))) return out;
     const lay = layoutSection(road);
     const els = road.section.elements;
     const tag = road.tags?.sidewalk ?? road.tags?.['sidewalk:both'];
@@ -189,11 +195,7 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
       const edge = side === 'left' ? lay.cwLeft : lay.cwRight;
       const outer = side === 'left' ? lay.outerLeft : lay.outerRight;
       const has = side === 'left' ? els[0]?.kind === 'sidewalk' : els[els.length - 1]?.kind === 'sidewalk';
-      const key = `${road.id}:${side}`;
-      const push = (status: SideStatus, widthM: number, rings?: LngLat[][], estimatedM?: number) => {
-        sides.push({ key, roadId: road.id, side, status, widthM, lengthM: Math.round(L), ...(rings?.length ? { ring: rings[0], rings, estimatedM: Math.round(estimatedM ?? 0) } : {}) });
-        totals[status] += status === 'estimated' ? estimatedM ?? 0 : L;
-      };
+      const push = (status: SideStatus, widthM: number) => { out.push({ side, L, status, widthM }); };
       if (has) { push('data', Math.abs(outer - edge)); continue; }
       // Samples along the side: facade gap and parallel footway.
       const want = SIDEWALK_WIDTH[road.roadClass] ?? 1.5;
@@ -241,9 +243,45 @@ export function sidewalkCoverage(net: Network, baseline: CityBaseline): Sidewalk
         }
       }
       if (!samples.some((q) => q.w >= MIN_WIDTH)) { push('no_room', 0); continue; }
-      pending.push({ key, road, side, L, samples, cut: [0, 0], corner: [false, false], joint: [null, null] });
+      out.push({ side, L, status: 'estimated', widthM: 0, samples });
+    }
+    return out;
+  };
+
+  // Incremental: a road reuses its result while it and every road within reach of its samples are the
+  // same objects (the network is immutable, so an edit changes only the roads it touches).
+  const cache = resultCache.get(baseline) ?? resultCache.set(baseline, new Map()).get(baseline)!;
+  const RB = 100, reach = 45;
+  const bboxOf = (r: Road) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of r.axis) { const [x, y] = frame.toMetric(q); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return [x0, y0, x1, y1] as const; };
+  const allRoads = Object.values(net.roads);
+  const boxes = new Map(allRoads.map((r) => [r, bboxOf(r)]));
+  const cells = new Map<string, Road[]>();
+  for (const [r, [x0, y0, x1, y1]] of boxes) for (let x = Math.floor(x0 / RB); x <= Math.floor(x1 / RB); x++) for (let y = Math.floor(y0 / RB); y <= Math.floor(y1 / RB); y++) (cells.get(`${x},${y}`) ?? cells.set(`${x},${y}`, []).get(`${x},${y}`)!).push(r);
+  const neighbours = (r: Road): Road[] => {
+    const [x0, y0, x1, y1] = boxes.get(r)!;
+    const out = new Set<Road>();
+    for (let x = Math.floor((x0 - reach) / RB); x <= Math.floor((x1 + reach) / RB); x++) for (let y = Math.floor((y0 - reach) / RB); y <= Math.floor((y1 + reach) / RB); y++) for (const o of cells.get(`${x},${y}`) ?? []) {
+      const [a0, b0, a1, b1] = boxes.get(o)!;
+      if (a1 >= x0 - reach && a0 <= x1 + reach && b1 >= y0 - reach && b0 <= y1 + reach) out.add(o);
+    }
+    return [...out].sort((a, b) => (a.id < b.id ? -1 : 1));
+  };
+  const seen = new Set<string>();
+  for (const road of allRoads) {
+    if (isPedestrianRoad(road) || SKIP.has(road.roadClass) || road.tags?.roundabout) continue;
+    seen.add(road.id);
+    const deps = neighbours(road);
+    const hit = cache.get(road.id);
+    const results = hit && hit.deps.length === deps.length && hit.deps.every((d, i) => d === deps[i]) ? hit.results : sideResults(road);
+    if (results !== hit?.results) cache.set(road.id, { deps, results });
+    for (const r of results) {
+      const key = `${road.id}:${r.side}`;
+      if (r.samples) { pending.push({ key, road, side: r.side, L: r.L, samples: r.samples.map((q) => ({ ...q })), cut: [0, 0], corner: [false, false], joint: [null, null] }); continue; }
+      sides.push({ key, roadId: road.id, side: r.side, status: r.status, widthM: r.widthM, lengthM: Math.round(r.L) });
+      totals[r.status] += r.L;
     }
   }
+  for (const id of cache.keys()) if (!seen.has(id)) cache.delete(id);
 
   // Corners: at every junction (roundabout rings excepted) two consecutive estimated sides are joined
   // by a corner built with the junction's own kerb geometry; the side pieces stop where it starts.

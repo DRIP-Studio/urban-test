@@ -13,6 +13,7 @@
 ### Marciapiedi stimati
 - Gli angoli agli incroci sono chiusi: raccordo del cordolo con lo stesso raggio della carreggiata e retro del marciapiede arrotondato. Prima la stima si interrompeva 2,5 m prima di ogni incrocio e lasciava gli angoli scoperti.
 - Ogni angolo esiste solo se sono attivi entrambi i lati che collega; contorno tratteggiato solo sul lato edifici, senza cuciture tra i pezzi.
+- Ricalcolo «Live» incrementale: dopo una modifica si ricalcolano solo le strade entro 45 m da quella cambiata (~0,2 s invece di ~0,7 s su Frattamaggiore), così il ricalcolo non ritarda più il disegno.
 
 ### Segnaletica
 - Frecce di corsia, frecce di preselezione e scritte BUS/bici non finiscono più dentro gli attraversamenti pedonali: vengono spostate a monte della zebra, oppure omesse se non c'è spazio.
@@ -24,11 +25,12 @@
 - Una nuova strada senza nome resta senza nome invece di prendere il nome del modello di sezione.
 
 ### Interfaccia
+- La barra strumenti ha nomi accessibili e scorciatoie dichiarate anche quando è compatta.
 - Le notifiche non intercettano più i clic sul pannello sottostante: sono attivi solo i loro pulsanti.
 - L'import automatico dei marciapiedi al primo avvio non ricarica più il progetto: aggiorna solo la città di base e mantiene modalità, strumento, pannello, selezione e le modifiche fatte nel frattempo (prima poteva azzerare lo strumento in uso e perdere modifiche non ancora salvate). Una sola notifica di avanzamento.
 
 ### Test
-Core 78 (nuovi: angoli dei marciapiedi; nessuna freccia nelle zebre), web 61, API 46, end-to-end 15 (suite da ~10 a 1,4 minuti).
+Core 79 (nuovi: angoli dei marciapiedi; nessuna freccia nelle zebre; calcolo incrementale identico a quello completo), web 61, API 46, end-to-end 15, stabili in tre esecuzioni consecutive (suite da ~10 a 1,4 minuti).
 
 ## 2.0.0 — aggiornamento del 2026-10-04 (sera)
 

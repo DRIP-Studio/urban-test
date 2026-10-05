@@ -202,3 +202,21 @@ describe('estimated sidewalks are geometrically sound', () => {
     }
   });
 });
+
+describe('sidewalk coverage is incremental', () => {
+  it('after one edit only nearby roads are recomputed, with the same result as a fresh run', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    sidewalkCoverage(h.network, baseline);
+    const road = Object.values(h.network.roads).find((r) => r.roadClass === 'residential' && r.section.elements.every((e) => e.kind !== 'sidewalk') && r.axis.length >= 2)!;
+    h.commit({ type: 'road.update', payload: { roadId: road.id, changes: { speedKmh: 30, name: `${road.name} (modificata)` } } });
+    h.commit({ type: 'road.setSection', payload: { roadId: road.id, lanes: road.lanes, section: { elements: [{ id: 'swx', kind: 'sidewalk', widthM: 2 }, ...road.section.elements] } } });
+    const t0 = Date.now();
+    const inc = sidewalkCoverage(h.network, baseline);
+    const ms = Date.now() - t0;
+    // A fresh baseline object has no cache: same data, computed from scratch.
+    const fresh = sidewalkCoverage(h.network, JSON.parse(JSON.stringify(baseline)) as CityBaseline);
+    expect(JSON.stringify(inc)).toBe(JSON.stringify(fresh));
+    expect(inc.sides.find((s) => s.key === `${road.id}:left`)?.status).toBe('data');
+    expect(ms).toBeLessThan(600);
+  });
+});

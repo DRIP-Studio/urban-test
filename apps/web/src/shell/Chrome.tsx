@@ -31,7 +31,7 @@ export function ToolRail() {
   const tip = (label: string) => (expanded ? undefined : label);
   return (
     <nav className={`rail ${expanded ? 'is-expanded' : ''}`} aria-label="Strumenti">
-      <button type="button" className="rail-btn rail-toggle" onClick={toggle} aria-expanded={expanded} data-tip={tip('Mostra i nomi')} data-tip-side="right">
+      <button type="button" className="rail-btn rail-toggle" onClick={toggle} aria-expanded={expanded} aria-label={expanded ? 'Riduci la barra strumenti' : 'Mostra i nomi degli strumenti'} data-tip={tip('Mostra i nomi')} data-tip-side="right">
         <Icon name={expanded ? 'chevronLeft' : 'menu'} size={18} />
         <span>{expanded ? 'Riduci' : 'Espandi'}</span>
       </button>
@@ -39,7 +39,7 @@ export function ToolRail() {
         <div key={g} className="rail-group" role="group" aria-label={GROUP_LABEL[g]}>
           <span className="rail-label">{GROUP_LABEL[g]}</span>
           {tools.filter((t) => t.group === g).map((t) => (
-            <button key={t.id} type="button" className={`rail-btn ${tool === t.id ? 'is-on' : ''}`} onClick={() => setTool(t.id)} aria-pressed={tool === t.id} data-tip={tip(`${t.label}${t.shortcut ? ` · ${t.shortcut}` : ''}`)} data-tip-side="right">
+            <button key={t.id} type="button" className={`rail-btn ${tool === t.id ? 'is-on' : ''}`} onClick={() => setTool(t.id)} aria-pressed={tool === t.id} aria-label={t.label} aria-keyshortcuts={t.shortcut || undefined} data-tip={tip(`${t.label}${t.shortcut ? ` · ${t.shortcut}` : ''}`)} data-tip-side="right">
               <Icon name={t.icon} size={20} />
               <span>{t.label}{t.shortcut ? <kbd>{t.shortcut}</kbd> : null}</span>
             </button>
@@ -48,7 +48,7 @@ export function ToolRail() {
       ))}
       <div className="rail-group rail-end" role="group" aria-label="Assistente">
         <span className="rail-label">Assistente</span>
-        <button type="button" className={`rail-btn ${eliosOpen ? 'is-on' : ''}`} onClick={toggleElios} aria-pressed={eliosOpen} data-tip={tip('Elios · assistente AI')} data-tip-side="right">
+        <button type="button" className={`rail-btn ${eliosOpen ? 'is-on' : ''}`} onClick={toggleElios} aria-pressed={eliosOpen} aria-label="Elios, assistente AI" data-tip={tip('Elios · assistente AI')} data-tip-side="right">
           <Icon name="sparkle" size={20} />
           <span>Elios</span>
         </button>

@@ -50,14 +50,15 @@ test('traffic calming and custom markings: palette, placement, map hit-test, ins
   await expect.poll(() => opCount(page)).toBe(4);
 
   // The letters are physical marking polygons with the marking's own ids (clickable on the map).
-  const ids = await page.evaluate(async () => {
+  // The physical model arrives from the worker asynchronously: wait until the map shows it.
+  const markingIds = () => page.evaluate(async () => {
     const map = (window as unknown as { __dripMap: { getMap(): { once(e: string, f: () => void): void; triggerRepaint(): void; querySourceFeatures(s: string): { properties: { id: string } }[] } } }).__dripMap.getMap();
     map.triggerRepaint();
-    await Promise.race([new Promise<void>((r) => map.once('idle', () => r())), new Promise((r) => setTimeout(r, 4000))]);
+    await Promise.race([new Promise<void>((r) => map.once('idle', () => r())), new Promise((r) => setTimeout(r, 1000))]);
     return map.querySourceFeatures('markings').map((f) => String(f.properties.id));
   });
-  expect(ids.some((id) => id.startsWith('cm:'))).toBeTruthy();
-  expect(ids.some((id) => id.startsWith('fm:'))).toBeTruthy();
+  await expect.poll(async () => (await markingIds()).some((id) => id.startsWith('cm:')), { timeout: 20_000 }).toBeTruthy();
+  expect((await markingIds()).some((id) => id.startsWith('fm:'))).toBeTruthy();
 
   await page.keyboard.press('Control+z');
   await expect.poll(() => opCount(page)).toBe(3);
