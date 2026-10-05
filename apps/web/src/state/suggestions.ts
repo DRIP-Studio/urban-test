@@ -66,12 +66,12 @@ function approachSigns(net: Network, road: Road, station: number, distM: number,
   return out;
 }
 
-function addSidewalks(road: Road, widthM: number): void {
+function sidewalkOp(road: Road, widthM: number): { type: string; payload: unknown } {
   const els = road.section.elements;
   const has = (side: 0 | 1) => (side === 0 ? els[0] : els[els.length - 1])?.kind === 'sidewalk';
   const sw = (s: string) => ({ id: `${road.id}:sw${s}-${newId('e')}`, kind: 'sidewalk' as const, widthM });
   const elements = [...(has(0) ? [] : [sw('l')]), ...els, ...(has(1) ? [] : [sw('r')])];
-  commit('road.setSection', { roadId: road.id, lanes: road.lanes, section: { elements } });
+  return { type: 'road.setSection', payload: { roadId: road.id, lanes: road.lanes, section: { elements } } };
 }
 
 /** ZTL / pedestrian / school zones: electronic gate with LED panel and the zone sign at each entry. */
@@ -96,35 +96,66 @@ export function generateZoneGates(zone: Zone): number {
 
 // ------------------------------------------------------------------ rules
 
-function forRoad(net: Network, road: Road): Suggestion[] {
+/** Names of the other roads meeting at a node, for titles like «Incrocio con Via Roma». */
+function otherNames(net: Network, nodeId: string, roadId: string): string {
+  const names = [...new Set(Object.values(net.roads).filter((r) => r.id !== roadId && (r.from === nodeId || r.to === nodeId) && r.name).map((r) => r.name))];
+  return names.length ? names.slice(0, 2).join(' e ') : '';
+}
+
+/**
+ * A drawn road arrives as several pieces (it is split where it crosses other roads): sidewalk and speed
+ * advice is one card for all of them, and its action applies to every piece.
+ */
+function forNewRoads(roads: readonly Road[]): Suggestion[] {
   const out: Suggestion[] = [];
+  if (!roads.length) return out;
   const f = frame();
-  const mid = geom.sampleAt(road.axis.map((p) => f.toMetric(p) as geom.V), geom.lengthOf(road.axis.map((p) => f.toMetric(p) as geom.V)) / 2).p;
-  const at = f.toLngLat(mid);
-  if (VEHICULAR(road) && !road.section.elements.some((e) => e.kind === 'sidewalk') && !URBAN_FAST.has(road.roadClass)) {
-    const key = `sw:${road.id}`;
+  const longest = roads.reduce((a, b) => (geom.lengthOf(b.axis.map((p) => f.toMetric(p) as geom.V)) > geom.lengthOf(a.axis.map((p) => f.toMetric(p) as geom.V)) ? b : a));
+  const axis = longest.axis.map((p) => f.toMetric(p) as geom.V);
+  const at = f.toLngLat(geom.sampleAt(axis, geom.lengthOf(axis) / 2).p);
+  const ids = roads.map((r) => r.id);
+  const label = longest.name || 'La nuova strada';
+  const noWalk = roads.filter((r) => VEHICULAR(r) && !r.section.elements.some((e) => e.kind === 'sidewalk') && !URBAN_FAST.has(r.roadClass));
+  if (noWalk.length) {
+    const key = `sw:${ids.join(',')}`;
     out.push({
       key, icon: 'section', at, title: 'Aggiungi i marciapiedi', ref: 'DM 5/11/2001 · DM 236/1989',
-      detail: `«${road.name || 'Nuova strada'}» non ha marciapiedi: in ambito urbano servono su entrambi i lati, larghezza ≥ 1,50 m (percorso accessibile).`,
-      actions: [{ label: 'Aggiungi 1,50 m per lato', primary: true, run: () => { addSidewalks(road, 1.5); dismissSuggestion(key); } }, { label: 'Ignora', run: done(key) }],
-      valid: (n) => !!n.roads[road.id] && !n.roads[road.id]!.section.elements.some((e) => e.kind === 'sidewalk'),
+      detail: `${longest.name ? `«${longest.name}»` : label} non ha marciapiedi: in ambito urbano servono su entrambi i lati, larghezza ≥ 1,50 m (percorso accessibile).`,
+      actions: [{ label: 'Aggiungi 1,50 m per lato', primary: true, run: () => {
+        const net = useApp.getState().network!;
+        const ops = noWalk.map((r) => net.roads[r.id]).filter((r): r is Road => !!r).map((r) => sidewalkOp(r, 1.5));
+        if (ops.length) commit('batch', { label: 'Marciapiedi sulla nuova strada', ops });
+        dismissSuggestion(key);
+      } }, { label: 'Ignora', run: done(key) }],
+      valid: (n) => noWalk.some((r) => n.roads[r.id] && !n.roads[r.id]!.section.elements.some((e) => e.kind === 'sidewalk')),
     });
   }
-  if (VEHICULAR(road) && road.speedKmh > 50 && !URBAN_FAST.has(road.roadClass)) {
-    const key = `v50:${road.id}`;
+  const fast = roads.filter((r) => VEHICULAR(r) && r.speedKmh > 50 && !URBAN_FAST.has(r.roadClass));
+  if (fast.length) {
+    const key = `v50:${ids.join(',')}`;
     out.push({
-      key, icon: 'warning', at, title: `Limite ${road.speedKmh} km/h in ambito urbano`, ref: 'art. 142 CdS',
+      key, icon: 'warning', at, title: `Limite ${fast[0]!.speedKmh} km/h in ambito urbano`, ref: 'art. 142 CdS',
       detail: 'Nei centri abitati il limite generale è 50 km/h; limiti superiori (fino a 70) solo su strade con caratteristiche adeguate.',
-      actions: [{ label: 'Porta a 50 km/h', primary: true, run: () => { commit('road.update', { roadId: road.id, changes: { speedKmh: 50 } }); dismissSuggestion(key); } }, { label: 'Ignora', run: done(key) }],
-      valid: (n) => (n.roads[road.id]?.speedKmh ?? 0) > 50,
+      actions: [{ label: 'Porta a 50 km/h', primary: true, run: () => {
+        commit('batch', { label: 'Limite 50 km/h', ops: fast.map((r) => ({ type: 'road.update', payload: { roadId: r.id, changes: { speedKmh: 50 } } })) });
+        dismissSuggestion(key);
+      } }, { label: 'Ignora', run: done(key) }],
+      valid: (n) => fast.some((r) => (n.roads[r.id]?.speedKmh ?? 0) > 50),
     });
   }
+  return out;
+}
+
+/** Junctions created by a new road. */
+function forRoad(net: Network, road: Road): Suggestion[] {
+  const out: Suggestion[] = [];
   for (const nodeId of [road.from, road.to]) {
     const arms = Object.values(net.roads).filter((r) => r.from === nodeId || r.to === nodeId).length;
     if (arms < 3 || net.junctions[nodeId]) continue;
     const key = `jn:${nodeId}`;
+    const withName = otherNames(net, nodeId, road.id);
     out.push({
-      key, icon: 'junction', at: net.nodes[nodeId]?.at, title: 'Regola il nuovo incrocio', ref: 'artt. 145, 37 CdS',
+      key, icon: 'junction', at: net.nodes[nodeId]?.at, title: withName ? `Regola l'incrocio con ${withName}` : 'Regola il nuovo incrocio', ref: 'artt. 145, 37 CdS',
       detail: `Incrocio a ${arms} rami senza regolazione: precedenza a destra. Imposta dare precedenza o STOP sulla strada nuova, una rotatoria o un impianto semaforico.`,
       actions: [
         { label: 'Dare precedenza sulla nuova', primary: true, run: () => { commit('junction.set', { spec: { nodeId, control: 'priority', cornerRadiusM: 6, minorRoadIds: [road.id] } }); dismissSuggestion(key); } },
@@ -242,14 +273,35 @@ function forSignals(net: Network, nodeId: string): Suggestion[] {
 
 const added = <T>(a: Readonly<Record<string, T>> | undefined, b: Readonly<Record<string, T>> | undefined) => Object.keys(b ?? {}).filter((k) => !a?.[k]);
 
+/**
+ * A piece of an existing road cut by the edit (a new road crossing it): same name and section as a road
+ * that disappeared, every vertex on that road's axis. It is not a new road: no "new road" advice for it.
+ */
+function isSplitPiece(before: Network, after: Network, r: Road): boolean {
+  const f = frame();
+  for (const id of Object.keys(before.roads)) {
+    if (after.roads[id]) continue;
+    const old = before.roads[id]!;
+    if (old.name !== r.name || old.roadClass !== r.roadClass) continue;
+    const axis = old.axis.map((p) => f.toMetric(p) as geom.V);
+    if (r.axis.every((p) => geom.project(axis, f.toMetric(p) as geom.V).d < 0.5)) return true;
+  }
+  return false;
+}
+
 export function suggestFor(before: Network, after: Network): Suggestion[] {
   const out: Suggestion[] = [];
-  for (const id of added(before.roads, after.roads)) { const r = after.roads[id]!; if (!r.tags?.roundabout && r.provenance.geometry?.kind === 'project') out.push(...forRoad(after, r)); }
+  const fresh = added(before.roads, after.roads).map((id) => after.roads[id]!)
+    .filter((r) => !r.tags?.roundabout && r.provenance.geometry?.kind === 'project' && !isSplitPiece(before, after, r));
+  out.push(...forNewRoads(fresh));
+  for (const r of fresh) out.push(...forRoad(after, r));
   for (const id of added(before.areas, after.areas)) if (after.areas[id]!.kind === 'crossing') out.push(...forCrossing(after, id));
   for (const id of Object.keys(after.zones)) if (!before.zones[id] || before.zones[id]!.kind !== after.zones[id]!.kind) out.push(...forZone(after.zones[id]!));
   for (const id of added(before.features, after.features)) out.push(...forFeature(after, id));
   for (const id of added(before.signalPlans, after.signalPlans)) out.push(...forSignals(after, id));
-  return out;
+  // Two pieces of the new road meet at the same junction: one card per junction.
+  const seen = new Set<string>();
+  return out.filter((x) => !seen.has(x.key) && !!seen.add(x.key));
 }
 
 let installed = false;

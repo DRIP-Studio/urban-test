@@ -6,7 +6,6 @@ import { engine } from '../engine/engine';
 import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import { useApp } from './store';
-import { toast } from './toasts';
 import { importExistingSidewalks } from './existingState';
 
 /**
@@ -29,10 +28,20 @@ function draw(): void {
   const { doc, coverage } = useSidewalks.getState();
   if (!coverage || !doc.enabled) { setSource('sidewalks-est', null); return; }
   const off = new Set(doc.disabled);
-  const feats: Feature[] = coverage.sides.filter((s) => s.status === 'estimated' && !off.has(s.key)).flatMap((s) => (s.rings ?? (s.ring ? [s.ring] : [])).map((ring, i): Feature => ({
-    type: 'Feature', id: `${s.key}:${i}`, geometry: { type: 'Polygon', coordinates: [[...ring.map((p) => [p[0], p[1]]), [ring[0]![0], ring[0]![1]]]] },
-    properties: { id: `${s.key}:${i}`, side: s.key, roadId: s.roadId, widthM: s.widthM },
-  })));
+  const poly = (id: string, ring: readonly (readonly [number, number])[], props: Record<string, unknown>): Feature => ({
+    type: 'Feature', id, geometry: { type: 'Polygon', coordinates: [[...ring.map((p) => [p[0], p[1]]), [ring[0]![0], ring[0]![1]]]] }, properties: { id, ...props },
+  });
+  const edge = (id: string, line: readonly (readonly [number, number])[]): Feature => ({ type: 'Feature', id, geometry: { type: 'LineString', coordinates: line.map((p) => [p[0], p[1]]) }, properties: { id, edge: true } });
+  const sides = coverage.sides.filter((s) => s.status === 'estimated' && !off.has(s.key));
+  const feats: Feature[] = sides.flatMap((s) => [
+    ...(s.rings ?? (s.ring ? [s.ring] : [])).map((ring, i) => poly(`${s.key}:${i}`, ring, { side: s.key, roadId: s.roadId, widthM: s.widthM })),
+    ...(s.edges ?? []).map((line, i) => edge(`${s.key}:e${i}`, line)),
+  ]);
+  // A corner exists only while both sides it joins are switched on.
+  for (const c of coverage.corners ?? []) {
+    if (off.has(c.sides[0]) || off.has(c.sides[1])) continue;
+    feats.push(poly(`c:${c.key}`, c.ring, { corner: true, side: c.sides[0] }), edge(`c:${c.key}:e`, c.outer));
+  }
   setSource('sidewalks-est', fc(feats));
 }
 
@@ -61,9 +70,7 @@ export async function initSidewalks(): Promise<void> {
     const fresh: SidewalkDoc = { enabled: true, disabled: [], autoImportedAt: new Date().toISOString() };
     await saveDoc(fresh);
     if (Object.keys(useApp.getState().baseline?.roads ?? {}).length) {
-      toast.info('Marciapiedi', 'Importo automaticamente i marciapiedi esistenti misurati sulle sagome degli edifici…');
       await importExistingSidewalks({ silent: true });
-      return; // the project reopens with the new baseline; init runs again with the saved doc
     }
   } else {
     useSidewalks.setState({ doc: { enabled: doc.enabled ?? true, disabled: doc.disabled ?? [], autoImportedAt: doc.autoImportedAt } });

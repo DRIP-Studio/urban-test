@@ -32,6 +32,7 @@ const P: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
   close: 'M6 6l12 12M18 6L6 18',
   chevronDown: 'M6 9l6 6 6-6',
+  chevronUp: 'M6 15l6-6 6 6',
   chevronRight: 'M9 6l6 6-6 6',
   chevronLeft: 'M15 6l-6 6 6 6',
   menu: 'M4 7h16M4 12h16M4 17h16',

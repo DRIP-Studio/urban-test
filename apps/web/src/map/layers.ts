@@ -121,8 +121,8 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   // Proposed changes are outlined along their kerbs (and roundabout outer edge), not on every internal surface seam.
   L({ id: 'project-outline', type: 'line', source: 'lines', filter: ['all', ['==', ['get', 'state'], 'project'], ['==', ['get', 'kind'], 'kerb']], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2], 'line-opacity': 0.95 } });
   L({ id: 'project-outline-rb', type: 'line', source: 'surfaces', filter: ['==', ['get', 'kind'], 'roundabout_ring'], paint: { 'line-color': '#e8772e', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 2.2] } });
-  L({ id: 'sidewalks-est-fill', type: 'fill', source: 'sidewalks-est', minzoom: 15, paint: { 'fill-color': dark ? '#7d7466' : '#cfc6b5', 'fill-opacity': 0.85 } });
-  L({ id: 'sidewalks-est-line', type: 'line', source: 'sidewalks-est', minzoom: 16, paint: { 'line-color': dark ? '#a99c86' : '#9a8f7c', 'line-width': 1, 'line-dasharray': [2, 1.5] } });
+  L({ id: 'sidewalks-est-fill', type: 'fill', source: 'sidewalks-est', minzoom: 15, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': dark ? '#7d7466' : '#cfc6b5', 'fill-opacity': 0.92 } });
+  L({ id: 'sidewalks-est-line', type: 'line', source: 'sidewalks-est', minzoom: 16, filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': dark ? '#a99c86' : '#9a8f7c', 'line-width': 1, 'line-dasharray': [2, 1.5] } });
   L({ id: 'restrictions-line', type: 'line', source: 'restrictions', layout: { 'line-cap': 'round' }, paint: {
     'line-color': ['match', ['get', 'level'], 'ban', '#b9312a', 'partial', '#d9a441', '#7e57c2'],
     'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 18, 5], 'line-dasharray': [1.2, 1], 'line-opacity': 0.9 } });

@@ -100,6 +100,26 @@ describe('physical model on the real Frattamaggiore baseline', () => {
     const m = buildPhysicalModel(h.network, { origin: baseline.origin });
     expect(m.markings.filter((p) => p.kind === 'stop_line' || p.kind === 'give_way')).toHaveLength(0);
   });
+
+  it('arrows and lane texts are never painted inside a pedestrian crossing', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const m = buildPhysicalModel(h.network, { origin: baseline.origin, features: baseline.features });
+    const frame = new LocalFrame(baseline.origin);
+    const zebras = new Map<string, geom.V[][]>();
+    for (const p of m.markings) if (p.kind === 'zebra' && p.roadId) (zebras.get(p.roadId) ?? zebras.set(p.roadId, []).get(p.roadId)!).push(p.ring.map((q) => frame.toMetric(q) as geom.V));
+    expect([...zebras.values()].flat().length).toBeGreaterThan(100);
+    let checked = 0, overlapping = 0;
+    for (const p of m.markings) {
+      if ((p.kind !== 'arrow' && p.kind !== 'text') || !p.roadId) continue;
+      const near = zebras.get(p.roadId);
+      if (!near) continue;
+      checked++;
+      const ring = p.ring.map((q) => frame.toMetric(q) as geom.V);
+      if (near.some((z) => geom.polygonIntersectionArea(ring, z) > 0.01)) overlapping++;
+    }
+    expect(checked).toBeGreaterThan(20);
+    expect(overlapping).toBe(0);
+  });
 });
 
 describe('roundabout on a real 4-arm junction', () => {

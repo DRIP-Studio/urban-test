@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.0.0 — aggiornamento del 2026-10-05
+
+### Novità già nel branch, ora documentate
+- Aggancio di due strade con un raccordo, senza spostare nessun vertice esistente (Alt+clic: sposta l'estremo).
+- Consigli di tracciamento in tempo reale mentre si disegna (raggi delle curve rispetto al minimo DM 5/11/2001, angoli degli incroci, incroci troppo vicini): solo consigli, niente cambia in automatico.
+- Aggiornamento «Live» di tutte le analisi aperte dopo ogni modifica, sospendibile dalla barra di stato.
+- Segnaletica orizzontale completa: attraversamenti, denti di squalo, isole, corsie riservate, stalli speciali, dissuasori.
+- Città intere fino a 5.000 km² (es. Roma): import a tasselli, zona di lavoro, vista d'insieme.
+- Rete acquedotto in pressione e DTM da nuvole di punti LAS/XYZ.
+
+### Marciapiedi stimati
+- Gli angoli agli incroci sono chiusi: raccordo del cordolo con lo stesso raggio della carreggiata e retro del marciapiede arrotondato. Prima la stima si interrompeva 2,5 m prima di ogni incrocio e lasciava gli angoli scoperti.
+- Ogni angolo esiste solo se sono attivi entrambi i lati che collega; contorno tratteggiato solo sul lato edifici, senza cuciture tra i pezzi.
+
+### Segnaletica
+- Frecce di corsia, frecce di preselezione e scritte BUS/bici non finiscono più dentro gli attraversamenti pedonali: vengono spostate a monte della zebra, oppure omesse se non c'è spazio.
+
+### Prossimi passi
+- I consigli non compaiono più sui pezzi di una strada esistente tagliata dalla nuova (prima proponeva marciapiedi a strade che li avevano).
+- Un solo consiglio per marciapiedi e limiti su tutta la strada disegnata, applicato a tutti i suoi tratti; gli incroci sono indicati con il nome della strada incrociata.
+- Pannello a fisarmonica: una scheda aperta, le altre su una riga; si può comprimere; aprire una scheda inquadra il punto in mappa.
+- Una nuova strada senza nome resta senza nome invece di prendere il nome del modello di sezione.
+
+### Interfaccia
+- Le notifiche non intercettano più i clic sul pannello sottostante: sono attivi solo i loro pulsanti.
+- L'import automatico dei marciapiedi al primo avvio non ricarica più il progetto: aggiorna solo la città di base e mantiene modalità, strumento, pannello, selezione e le modifiche fatte nel frattempo (prima poteva azzerare lo strumento in uso e perdere modifiche non ancora salvate). Una sola notifica di avanzamento.
+
+### Test
+Core 78 (nuovi: angoli dei marciapiedi; nessuna freccia nelle zebre), web 61, API 46, end-to-end 15 (suite da ~10 a 1,4 minuti).
+
 ## 2.0.0 — aggiornamento del 2026-10-04 (sera)
 
 ### Segnaletica orizzontale e moderazione del traffico

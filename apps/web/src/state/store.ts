@@ -137,6 +137,29 @@ export async function openProject(pid: string): Promise<void> {
   }
 }
 
+/**
+ * The existing state changed on the server (e.g. sidewalks imported): reloads only the city baseline and
+ * replays the scenario in memory on it. Mode, tool, panel, selection and any edit made meanwhile are kept;
+ * only the undo stack restarts, because its entries were recorded on the previous baseline.
+ */
+export async function reloadBaseline(): Promise<void> {
+  const { project: current } = get();
+  if (!current) return;
+  const project = await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(current.id)}`);
+  const area = project.large && project.workArea ? `&bbox=${project.workArea.map((x) => x.toFixed(6)).join(',')}` : '';
+  const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(project.id)}/baseline?rev=${project.baselineRevision ?? 0}${area}`);
+  const now = get();
+  if (now.project?.id !== project.id || !now.scenario) return; // closed or switched meanwhile
+  await engine.init(baseline);
+  const sc = get().scenario!;
+  const history = new ScenarioHistory(baseline, sc, get().user?.name ?? 'Utente locale', () => newId('op'));
+  const sel = get().selection;
+  set({ project, baseline, history });
+  syncFromHistory();
+  // Keep the selection only if what it points at still exists.
+  if (sel && sel.kind === 'road' && !sel.ids.every((id) => history.network.roads[id])) set({ selection: null });
+}
+
 export function closeProject(): void {
   set({ project: null, baseline: null, scenario: null, history: null, network: null, selection: null, physStats: null, failedOps: [] });
 }

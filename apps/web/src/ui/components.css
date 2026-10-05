@@ -140,7 +140,10 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: 14px; height: 
 .modal h2 { margin: 0; font-size: var(--fs-20); font-weight: 500; letter-spacing: -0.01em; }
 .modal p { margin: 0; color: var(--text-2); line-height: var(--lh-text); }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
-.toasts { position: fixed; right: var(--s-4); bottom: calc(var(--statusbar-h) + var(--s-4)); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--s-2); width: 360px; }
+.toasts { position: fixed; right: var(--s-4); bottom: calc(var(--statusbar-h) + var(--s-4)); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--s-2); width: 360px;; pointer-events: none; }
+/* Toasts never swallow clicks meant for the panel or map below: only their own buttons are interactive. */
+.toasts .toast { pointer-events: none; }
+.toasts .toast button { pointer-events: auto; }
 .toast { display: flex; gap: 11px; align-items: flex-start; background: var(--glass); backdrop-filter: blur(21px) saturate(150%); border-radius: var(--r-3); padding: 13px 13px 13px 15px; box-shadow: var(--shadow-pop); animation: toast-in var(--t-spring) var(--spring-bounce) both; }
 .toast > .icon { color: var(--drip-accent); margin-top: 1px; }
 .toast-success > .icon { color: var(--ok); } .toast-warn > .icon { color: var(--warn); } .toast-error > .icon { color: var(--err); }

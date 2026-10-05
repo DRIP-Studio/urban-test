@@ -89,7 +89,8 @@ export function planRoad(idx: NetworkIndex, points: readonly SnapResult[], axisL
     if (at(a.node)) piece[0] = at(a.node)!;
     if (at(b.node)) piece[piece.length - 1] = at(b.node)!;
     const id = newId('r');
-    const road = roadFromTemplate(t, id, a.node, b.node, piece, name.trim() || t.label);
+    // The template is a cross-section, not a name: an unnamed road stays unnamed until the designer names it.
+    const road = roadFromTemplate(t, id, a.node, b.node, piece, name.trim());
     ops.push({ type: 'road.add', payload: { road, nodes: newNodes.filter((n) => n.id === a.node || n.id === b.node) } });
   }
   return { ops };

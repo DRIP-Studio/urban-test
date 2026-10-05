@@ -76,6 +76,28 @@ export function arrowRing(at: V, dir: V, turn: TurnKind = 'through', length: num
   return ring;
 }
 
+/** Along-road interval [from, to] (m) where no other marking may be painted, e.g. a zebra crossing. */
+export type KeepOut = readonly [number, number];
+
+/** Keep-out of a zebra centred at `along`: its depth plus 1 m on each side. */
+export const zebraKeepOut = (along: number, depthM: number = MARKING.zebraDepthM): KeepOut => [along - depthM / 2 - 1, along + depthM / 2 + 1];
+
+/**
+ * Station for a marking of length `len` whose tail is at `s` and which extends towards `dir` (+1 along the
+ * axis, -1 against it): moved upstream (against `dir`) until it clears every keep-out interval.
+ * Null when it would leave [lo, hi]: better no arrow than an arrow painted inside a crossing.
+ */
+export function clearStation(s: number, len: number, dir: 1 | -1, keepOut: readonly KeepOut[], lo: number, hi: number): number | null {
+  let x = s;
+  for (let guard = 0; guard <= keepOut.length; guard++) {
+    const a = Math.min(x, x + dir * len), b = Math.max(x, x + dir * len);
+    const hit = keepOut.find(([k0, k1]) => a < k1 && b > k0);
+    if (!hit) return a >= lo && b <= hi ? x : null;
+    x = dir > 0 ? hit[0] - len : hit[1] + len;
+  }
+  return null;
+}
+
 /** Positions (distance along the lane line) for repeated direction arrows. */
 export function arrowStations(laneLength: number, spacing = 45, margin = 8): number[] {
   const usable = laneLength - 2 * margin - MARKING.arrowLengthM;

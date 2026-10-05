@@ -163,5 +163,42 @@ describe('estimated sidewalks are geometrically sound', () => {
     let inside = 0;
     for (const p of pieces) for (const c0 of centres) if (Math.abs(p.ring[0]![0] - c0[0]) < 40 && Math.abs(p.ring[0]![1] - c0[1]) < 40 && geom.pointInRing(c0, p.ring)) inside++;
     expect(inside).toBe(0);
+
+    // Corners close the sidewalk around junctions: sound rings, outside buildings and junction centres,
+    // and the two sides they join stop exactly where the corner starts (no gap, no overlap).
+    expect(c.corners.length).toBeGreaterThan(100);
+    const sideKeys = new Set(c.sides.filter((s) => s.status === 'estimated').map((s) => s.key));
+    let twisted = 0, inBuildings = 0, onCentre = 0;
+    for (const k of c.corners) {
+      expect(k.sides.every((s) => sideKeys.has(s))).toBe(true);
+      const ring = k.ring.map((q) => f.toMetric(q) as geom.V);
+      if (geom.ringSelfIntersects(ring)) twisted++;
+      for (const r of buildingsNear(ring)) if (geom.polygonIntersectionArea(ring, r) > 0.5) { inBuildings++; break; }
+      const c0 = f.toMetric(net.nodes[k.nodeId]!.at) as geom.V;
+      if (geom.pointInRing(c0, ring)) onCentre++;
+    }
+    expect(twisted).toBe(0);
+    expect(inBuildings / c.corners.length).toBeLessThan(0.02);
+    expect(onCentre).toBe(0);
+    let gaps = 0, joins = 0;
+    for (const k of c.corners.slice(0, 300)) {
+      const ring = k.ring.map((q) => f.toMetric(q) as geom.V);
+      for (const key of k.sides) {
+        const ends = (c.sides.find((s) => s.key === key)?.rings ?? []).flatMap((r) => { const m = r.map((q) => f.toMetric(q) as geom.V); return [m[0]!, m[m.length - 1]!, m[Math.floor(m.length / 2) - 1]!, m[Math.floor(m.length / 2)]!]; });
+        if (!ends.length) continue;
+        joins++;
+        const d = Math.min(...ends.flatMap((e) => ring.map((q) => Math.hypot(q[0] - e[0], q[1] - e[1]))));
+        if (d > 0.3) gaps++;
+      }
+    }
+    expect(joins).toBeGreaterThan(100);
+    expect(gaps / joins).toBeLessThan(0.05);
+
+    function buildingsNear(ring: geom.V[]): Set<geom.V[]> {
+      const xs = ring.map((q) => q[0]), ys = ring.map((q) => q[1]);
+      const near = new Set<geom.V[]>();
+      for (let x = Math.floor(Math.min(...xs) / cell); x <= Math.floor(Math.max(...xs) / cell); x++) for (let y = Math.floor(Math.min(...ys) / cell); y <= Math.floor(Math.max(...ys) / cell); y++) for (const r of idx.get(`${x},${y}`) ?? []) near.add(r);
+      return near;
+    }
   });
 });

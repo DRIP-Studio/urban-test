@@ -1,6 +1,6 @@
 import { add, dot, leftNormal, lengthOf, mul, offset, project, sampleAt, sub, unit, type V } from '../geo/polyline';
 import type { LngLat, Marking, MarkingColor, Network, Road, RoadFeature, TurnKind } from '../model/types';
-import { arrowRing, dashes, MARKING, solid, zebra } from './markings';
+import { arrowRing, clearStation, dashes, MARKING, solid, zebra, type KeepOut } from './markings';
 import { layoutSection } from './section';
 import type { MetricCache } from './topology';
 import type { PhysPolygon, PhysState } from './build';
@@ -347,7 +347,7 @@ function autoParkingBays(road: Road, axis: readonly V[], state: PhysState, toLL:
  * inbound lane gets its turn arrows (from lane.turns; inferred when empty: leftmost lane left+through,
  * rightmost through+right, single lane none).
  */
-function autoApproachArrows(road: Road, axis: readonly V[], atEndIsJunction: [boolean, boolean], state: PhysState, toLL: ToLL, out: Out): void {
+function autoApproachArrows(road: Road, axis: readonly V[], atEndIsJunction: [boolean, boolean], state: PhysState, toLL: ToLL, out: Out, keepOut: readonly KeepOut[]): void {
   const lay = layoutSection(road);
   const L = lengthOf(axis);
   if (L < 25) return;
@@ -364,7 +364,9 @@ function autoApproachArrows(road: Road, axis: readonly V[], atEndIsJunction: [bo
       const turns: TurnKind[] = lane!.turns.length ? [...lane!.turns] : i === 0 ? ['left', 'through'] : i === inbound.length - 1 ? ['through', 'right'] : ['through'];
       const c = (e.left + e.right) / 2;
       for (const back of [12, 32]) {
-        const along = end === 1 ? L - back : back;
+        // Tail `back` metres from the junction, head towards it; never inside a crossing.
+        const along = clearStation(end === 1 ? L - back : back, MARKING.arrowLengthM, end === 1 ? 1 : -1, keepOut, 1, L - 1);
+        if (along === null) continue;
         const { p, t } = sampleAt(axis, along);
         const dir = end === 1 ? t : mul(t, -1);
         const tail = add(p, mul(leftNormal(t), c));
@@ -430,13 +432,13 @@ function addRaisedJunctions(net: Network, surfaces: PhysPolygon[]): void {
 }
 
 /** Per-road automatic markings (cached by the builder per road). */
-export function addStreetscapeRoads(net: Network, roads: Map<string, { axis: readonly V[]; state: PhysState; ends: [boolean, boolean] }>, toLL: ToLL, out: Out): void {
+export function addStreetscapeRoads(net: Network, roads: Map<string, { axis: readonly V[]; state: PhysState; ends: [boolean, boolean]; keepOut?: readonly KeepOut[] }>, toLL: ToLL, out: Out): void {
   for (const [roadId, x] of roads) {
     const road = net.roads[roadId];
     if (!road) continue;
     autoParkingBays(road, x.axis, x.state, toLL, out);
-    autoApproachArrows(road, x.axis, x.ends, x.state, toLL, out);
-    autoReservedLanes(road, x.axis, x.state, toLL, out);
+    autoApproachArrows(road, x.axis, x.ends, x.state, toLL, out, x.keepOut ?? []);
+    autoReservedLanes(road, x.axis, x.state, toLL, out, x.keepOut ?? []);
   }
 }
 
@@ -444,7 +446,7 @@ export function addStreetscapeRoads(net: Network, roads: Map<string, { axis: rea
  * Corsie riservate: bus lanes get «BUS» in yellow every 50 m (the yellow 30 cm separator comes from the
  * lane lines); cycle lanes in the section get the bike symbol and direction arrow every 40 m.
  */
-function autoReservedLanes(road: Road, axis: readonly V[], state: PhysState, toLL: ToLL, out: Out): void {
+function autoReservedLanes(road: Road, axis: readonly V[], state: PhysState, toLL: ToLL, out: Out, keepOut: readonly KeepOut[]): void {
   const lay = layoutSection(road);
   const L = lengthOf(axis);
   if (L < 20) return;
@@ -457,7 +459,10 @@ function autoReservedLanes(road: Road, axis: readonly V[], state: PhysState, toL
     if (!bus && !bike) continue;
     const c = (pe.left + pe.right) / 2;
     const backward = lane?.direction === 'backward' || (!lane && c > 0 && road.oneway === 'no');
-    for (let x = bus ? 20 : 10; x < L - 8; x += bus ? 50 : 40) {
+    for (let x0 = bus ? 20 : 10; x0 < L - 8; x0 += bus ? 50 : 40) {
+      // «BUS» is ~6 m long, the bike symbol plus arrow ~7 m: both kept out of crossings.
+      const x = clearStation(x0, bus ? 6 : 7, 1, keepOut.map(([a, b]) => (backward ? [L - b, L - a] as const : [a, b] as const)), 2, L - 2);
+      if (x === null) continue;
       const { p, t } = sampleAt(axis, backward ? L - x : x);
       const dir = backward ? mul(t, -1) : t;
       const at = add(p, mul(leftNormal(t), c));
