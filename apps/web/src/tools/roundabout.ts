@@ -63,7 +63,7 @@ export function createRoundabout(): void {
     ...draft,
     arms: plan.arms.map((a) => ({
       roadId: a.roadId, entryRadiusM: Math.max(6, p.outerDiameterM * 0.35), exitRadiusM: Math.max(8, p.outerDiameterM * 0.45),
-      splitter: p.splitters && p.type !== 'mini', splitterLengthM: 10, splitterWidthM: 1.5, crossing: p.crossings,
+      splitter: p.splitters && p.type !== 'mini', splitterLengthM: 14, splitterWidthM: 2.5, crossing: p.crossings,
     })),
   };
   if (commit('roundabout.add', { roundabout: r }).ok) {

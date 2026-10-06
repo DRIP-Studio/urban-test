@@ -250,4 +250,46 @@ describe('geometric roundabout insertion', () => {
     h.commit({ type: 'roundabout.remove', payload: { roundaboutId: 'rbx' } });
     expect(JSON.stringify([h.network.roads, h.network.nodes])).toBe(before);
   });
+  it('inspector edits apply: diameter, type, splitters, crossings, control (each one undoable)', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const deg = new Map<string, number>();
+    for (const r of Object.values(h.network.roads)) if (!layoutSection(r).pedestrianOnly) for (const n of [r.from, r.to]) deg.set(n, (deg.get(n) ?? 0) + 1);
+    const node = [...deg].find(([, d]) => d === 4)![0];
+    h.commit({ type: 'roundabout.add', payload: { roundabout: rbAt(h.network.nodes[node]!.at, { replacedNodeId: node }) } });
+    const edits: ((rb: Roundabout) => Partial<Roundabout>)[] = [
+      () => ({ outerDiameterM: 38 }),
+      () => ({ type: 'standard', outerDiameterM: 44 }),
+      (rb) => ({ arms: rb.arms.map((a, i) => (i === 0 ? { ...a, splitter: true, splitterLengthM: 12 } : a)) }),
+      (rb) => ({ arms: rb.arms.map((a, i) => (i === 1 ? { ...a, crossing: true } : a)) }),
+      () => ({ control: 'signalized' }),
+      () => ({ circulatoryWidthM: 8, apronWidthM: 2, speedKmh: 25 }),
+    ];
+    for (const e of edits) {
+      const rb = h.network.roundabouts.rbx!;
+      const next = { ...rb, ...e(rb) };
+      h.commit({ type: 'roundabout.update', payload: { roundabout: next } });
+      const now = h.network.roundabouts.rbx!;
+      for (const [k, v] of Object.entries(e(rb))) if (k !== 'arms') expect((now as unknown as Record<string, unknown>)[k], k).toEqual(v);
+    }
+    const final = h.network.roundabouts.rbx!;
+    expect(final.outerDiameterM).toBe(44);
+    expect(final.arms.some((a) => a.splitter && a.splitterLengthM === 12)).toBe(true);
+    expect(final.arms.some((a) => a.crossing)).toBe(true);
+    const m = buildPhysicalModel(h.network, { origin: baseline.origin });
+    const frame = new LocalFrame(baseline.origin);
+    const islands = m.surfaces.filter((p) => p.kind === 'splitter');
+    expect(islands.length).toBeGreaterThan(0);
+    // Hatch (zebratura) leads to the nose where the arm has room for it.
+    expect(m.markings.some((k) => k.kind === 'custom' && k.id.includes(':hatch:'))).toBe(true);
+    for (const isl of islands) {
+      const ring = isl.ring.map((q) => frame.toMetric(q) as geom.V);
+      // A real island: at least ~2 m² per metre of a 12 m, 2,5 m wide teardrop, never twisted.
+      expect(Math.abs(geom.ringArea(ring))).toBeGreaterThan(2); // kerbed refuge, not a sliver
+      expect(selfIntersects(isl.ring, frame)).toBe(false);
+      // Hatch leads to the nose; no lane line of the arm is painted across the island.
+      for (const k of m.markings.filter((x) => x.roadId === isl.roadId && (x.kind === 'lane_line' || x.kind === 'center_line' || x.kind === 'arrow'))) {
+        expect(geom.polygonIntersectionArea(k.ring.map((q) => frame.toMetric(q) as geom.V), ring)).toBeLessThan(0.01);
+      }
+    }
+  });
 });

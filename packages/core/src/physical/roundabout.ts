@@ -7,7 +7,7 @@ import { buildArm, incidence, type MetricCache } from './topology';
 
 export interface RbPolygon {
   readonly id: string;
-  readonly kind: 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter' | 'carriageway' | 'give_way' | 'ring_line' | 'zebra';
+  readonly kind: 'roundabout_ring' | 'roundabout_island' | 'roundabout_apron' | 'splitter' | 'carriageway' | 'give_way' | 'ring_line' | 'zebra' | 'custom';
   readonly ring: V[];
   readonly holes?: V[][];
   readonly nodeId?: string;
@@ -134,8 +134,16 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         const angle = Math.atan2(P(along(0), 0)[1] - c[1], P(along(0), 0)[0] - c[0]);
         const Ro = radiusTowards(outer, angle);
         const wl = arm.cwLeft, wr = arm.cwRight;
-        const S = Math.max(along(wl), along(wr)) + entryR;
+        const edge0 = along(0);
+        const wanted = spec?.splitter ? splitterShape(spec.splitterLengthM, spec.splitterWidthM) : null;
+        const S = Math.max(along(wl), along(wr), wanted ? edge0 + wanted.reach : 0) + entryR;
         const setback = Math.max(0, Math.min(S, arm.length * 0.6));
+        // Short arm: the road strip (and its lane lines) starts earlier, so the island and its hatch must
+        // end before it: shorter hatch first, then a shorter island; below 4 m there is no room for one.
+        const room = setback - entryR * 0.3 - edge0 - 1.0;
+        const island = !wanted || room >= wanted.reach - 1.0 ? wanted
+          : room >= 4 + 3 ? splitterShape(Math.min(spec!.splitterLengthM, room - Math.min(HATCH_M, room / 3)), spec!.splitterWidthM, Math.min(HATCH_M, room / 3))
+          : room >= 4 ? splitterShape(room, spec!.splitterWidthM, 0) : null;
         out.setbacks.set(armKey(arm), setback);
 
         // Tangent fillets from both carriageway edges onto the outer edge.
@@ -168,20 +176,52 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         }
         throat.push(...leftCurve.slice(1), ...arcPts, ...[...rightCurve].reverse().slice(0, -1));
         out.polygons.push({ id: `rb:${id}:throat:${arm.road.id}`, kind: 'carriageway', ring: throat, roadId: arm.road.id, state: 'project', material: 'asphalt', z: 4, heightM: 0 });
-        const edgeS = along(0);
+        const edgeS = edge0;
 
-        if (spec?.splitter) {
-          const L0 = edgeS + 1.0, L1 = edgeS + 1.0 + spec.splitterLengthM, hw = spec.splitterWidthM / 2;
-          const island: V[] = [];
-          for (let i = 0; i <= 8; i++) {
-            const t = i / 8;
-            island.push(P(L0 + (L1 - L0) * t, hw * Math.sin(Math.PI * (0.5 + 0.5 * t))));
+        // Crossing station: through the island (pedestrian refuge) or 6 m from the ring.
+        const crossS = edgeS + (island ? island.start + island.length * 0.55 : 6);
+        if (island) {
+          // Teardrop island (DM 19/04/2006 § 4.5.3): wide towards the ring, nose outwards, kerbed 15 cm.
+          // The carriageway flares around it so both lanes keep their width, and a hatched taper
+          // (zebratura, art. 150 Reg.) leads to the nose.
+          const s0 = edgeS + island.start;
+          const pieces = spec!.crossing ? [[0, island.length * 0.55 - 1.4], [island.length * 0.55 + 1.4, island.length]] : [[0, island.length]];
+          pieces.forEach(([a = 0, b = 0], k) => {
+            if (b - a < 0.8) return;
+            const ring = island.outline(a, b).map(([t, w]) => P(s0 + t, w));
+            out.polygons.push({ id: `rb:${id}:splitter:${arm.road.id}${k ? `:${k}` : ''}`, kind: 'splitter', ring, roadId: arm.road.id, state: 'project', material: 'concrete', z: 6, heightM: 0.15 });
+          });
+          // Flares: each carriageway edge pushed out by the island half-width, tapering back over 15 m.
+          const taper = island.hatch + 6, end = island.length + taper;
+          for (const side of [1, -1] as const) {
+            const base = side > 0 ? wl : wr;
+            const inner: V[] = [], outerEdge: V[] = [];
+            for (let i = 0; i <= 24; i++) {
+              const t = -island.start + ((end + island.start) * i) / 24;
+              const h = t <= island.length ? island.half(Math.max(0, t)) : island.half(island.length) * Math.max(0, 1 - (t - island.length) / taper);
+              inner.push(P(s0 + t, base));
+              outerEdge.push(P(s0 + t, base + side * (h + 0.05)));
+            }
+            out.polygons.push({ id: `rb:${id}:flare:${arm.road.id}:${side > 0 ? 'l' : 'r'}`, kind: 'carriageway', ring: [...inner, ...outerEdge.reverse()], roadId: arm.road.id, state: 'project', material: 'asphalt', z: 4, heightM: 0 });
           }
-          for (let i = 8; i >= 0; i--) {
-            const t = i / 8;
-            island.push(P(L0 + (L1 - L0) * t, -hw * Math.sin(Math.PI * (0.5 + 0.5 * t))));
+          // Zebratura ahead of the nose: two converging edge lines and 45° stripes every 1.5 m.
+          const hz = island.half(island.length), Lz = island.hatch;
+          const zs = s0 + island.length;
+          const edgeAt = (t: number) => hz * (1 - t / Lz);
+          let k = 0;
+          if (Lz >= 1) {
+          const mk = (ring: V[]) => out.markings.push({ id: `rb:${id}:hatch:${arm.road.id}:${k++}`, kind: 'custom', ring, roadId: arm.road.id, state: 'project', material: 'road_marking_white', z: 10, heightM: 0 });
+          for (const side of [1, -1] as const) {
+            const pts: V[] = [], back: V[] = [];
+            for (let i = 0; i <= 8; i++) { const t = (Lz * i) / 8; pts.push(P(zs + t, side * edgeAt(t))); back.push(P(zs + t, side * Math.max(0, edgeAt(t) - 0.12))); }
+            mk([...pts, ...back.reverse()]);
           }
-          out.polygons.push({ id: `rb:${id}:splitter:${arm.road.id}`, kind: 'splitter', ring: island, roadId: arm.road.id, state: 'project', material: 'granite', z: 6, heightM: 0.15 });
+          for (let t = 0.8; t < Lz - 1; t += 1.5) {
+            const w = edgeAt(t) - 0.12;
+            if (w < 0.25) break;
+            mk([P(zs + t - w, w), P(zs + t - w + 0.5, w), P(zs + t + w + 0.5, -w), P(zs + t + w, -w)]);
+          }
+          }
         }
         // Give-way line across the inbound lanes at the ring edge (yield control is the legal default).
         if (rb.control === 'yield') {
@@ -196,7 +236,7 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
           }
         }
         if (spec?.crossing) {
-          const s = edgeS + (spec.splitter ? 1.0 + spec.splitterLengthM * 0.55 : 6);
+          const s = crossS;
           const depth = MARKING.zebraDepthM / 2;
           const width = arm.cwLeft - arm.cwRight;
           const period = MARKING.zebraStripeM + MARKING.zebraGapM;
@@ -214,4 +254,35 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
     }
   }
   return out;
+}
+
+/**
+ * Splitter island outline in its own frame: t from the ring end (0) to the nose (length), w lateral.
+ * Width `widthM` at the ring end narrowing to a 0,6 m rounded nose; ring-end corners rounded 0,5 m.
+ */
+/** Painted hatch (zebratura) ahead of a splitter nose, metres. */
+const HATCH_M = 12;
+
+export function splitterShape(lengthM: number, widthM: number, hatchM: number = HATCH_M): {
+  readonly start: number; readonly length: number; readonly reach: number; readonly hatch: number;
+  half(t: number): number;
+  outline(a: number, b: number): [number, number][];
+} {
+  // Kerbed part: from W/2 to a blunt 0,3·W nose; the painted hatch then tapers it to the centre line.
+  const length = Math.max(4, lengthM), W = Math.max(1.5, widthM), nose = Math.max(0.45, 0.3 * W);
+  const half = (t: number) => nose + (W / 2 - nose) * Math.pow(1 - Math.min(1, Math.max(0, t / length)), 0.75);
+  const outline = (a: number, b: number): [number, number][] => {
+    const n = 12, left: [number, number][] = [], right: [number, number][] = [];
+    for (let i = 0; i <= n; i++) {
+      const t = a + ((b - a) * i) / n;
+      // Round the ends: shrink the half-width over the first and last 0,5 m (nose: a semicircle).
+      const ra = Math.min(0.5, (b - a) / 2), dA = t - a, dB = b - t;
+      let h = half(t);
+      if (dA < ra) h *= Math.sqrt(Math.max(0, 1 - ((ra - dA) / ra) ** 2)) * 0.6 + 0.4;
+      if (dB < ra) h *= Math.sqrt(Math.max(0, 1 - ((ra - dB) / ra) ** 2)) * 0.6 + 0.4;
+      left.push([t, h]); right.push([t, -h]);
+    }
+    return [...left, ...right.reverse()];
+  };
+  return { start: 1.0, length, reach: 1.0 + length + hatchM + 6, hatch: hatchM, half, outline };
 }

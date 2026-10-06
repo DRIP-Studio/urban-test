@@ -231,7 +231,7 @@ export function insertRoundabout(net: Network, rb: Roundabout): Network {
 
   const armSpecs = plan.arms.map((a) => rb.arms.find((s) => s.roadId === a.roadId) ?? {
     roadId: a.roadId, entryRadiusM: Math.max(6, rb.outerDiameterM * 0.35), exitRadiusM: Math.max(8, rb.outerDiameterM * 0.45),
-    splitter: rb.type !== 'mini' && rb.outerDiameterM >= 26, splitterLengthM: 10, splitterWidthM: 1.5, crossing: false,
+    splitter: rb.type !== 'mini' && rb.outerDiameterM >= 26, splitterLengthM: 14, splitterWidthM: 2.5, crossing: false,
   });
   return {
     ...net, roads, nodes, junctions, signalPlans,
