@@ -74,6 +74,8 @@ export type Role = 'viewer' | 'editor' | 'publisher' | 'admin';
 export interface SessionUser {
   readonly sub: string; readonly name: string; readonly username?: string; readonly email?: string; readonly role: Role;
   readonly provider: string; readonly providerLabel?: string; readonly provisional?: boolean; readonly mustChangePassword?: boolean; readonly expiresAt?: string;
+  /** Profile photo: DRIP ID «picture» (https) or the uploaded photo of a local account. */
+  readonly picture?: string | null;
 }
 export interface SessionInfo {
   readonly mode: 'open' | 'protected';

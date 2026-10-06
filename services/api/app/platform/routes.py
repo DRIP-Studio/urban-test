@@ -6,8 +6,8 @@ import re
 from typing import Any
 
 import anyio
-from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from app.projects import service as ps
 from app.settings import VERSION
@@ -51,6 +51,9 @@ def _cookie(resp, token: str, max_age: int, request: Request) -> None:
 def session(request: Request) -> dict:
     cfg = config.load()
     u = auth.current_user.get()
+    if u and u.get("provider") == "local" and u.get("username"):
+        # The session keeps the identity of the login: the photo may have changed since.
+        u = {**u, "picture": auth.local_avatar_url(u["username"])}
     return {
         "mode": cfg["authMode"], "authenticated": bool(u and u.get("provider") != "open"), "user": u,
         "localLogin": cfg.get("localLogin", True),
@@ -63,6 +66,36 @@ def _provisional_hint() -> str | None:
     users = auth._load_users()  # noqa: SLF001 — creates the provisional admin on first run
     u = next((x for x in users if x["username"] == "admin" and x.get("mustChangePassword") and x.get("provisional")), None)
     return "Primo accesso: utente «admin», password «admin». Ti verrà chiesto di cambiarla subito." if u else None
+
+
+@router.put("/api/auth/me/avatar")
+async def put_avatar(file: UploadFile = File(...)) -> dict:
+    u = _me()
+    if u.get("provider") != "local":
+        raise HTTPException(400, "La foto di questo account si cambia su DRIP ID")
+    data = await file.read(auth.AVATAR_MAX + 1)
+    try:
+        return {"picture": auth.set_local_avatar(u["username"], data)}
+    except (ValueError, PermissionError) as exc:
+        raise _bad(exc) from exc
+
+
+@router.delete("/api/auth/me/avatar")
+def delete_avatar() -> dict:
+    u = _me()
+    if u.get("provider") != "local":
+        raise HTTPException(400, "La foto di questo account si cambia su DRIP ID")
+    auth.set_local_avatar(u["username"], None)
+    return {"picture": None}
+
+
+@router.get("/api/auth/avatar/{username}")
+def get_avatar(username: str) -> Response:
+    _me()
+    a = auth.local_avatar(username)
+    if not a:
+        raise HTTPException(404, "Nessuna foto")
+    return Response(a[0], media_type=a[1], headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/api/auth/login")
@@ -166,6 +199,21 @@ def del_user(username: str) -> dict:
 
 
 # ------------------------------------------------------------------ platform configuration (admin)
+
+@router.get("/api/platform/services")
+def services(request: Request) -> list[dict]:
+    """DRIP services for the launcher, with the addresses this installation actually knows."""
+    _me()
+    cfg = config.load()
+    drip = next((p for p in cfg["identityProviders"] if p["id"] == "drip" and p.get("enabled") and p.get("issuer")), None)
+    known = {
+        "urban": str(request.base_url).rstrip("/") + "/",
+        "fst": cfg.get("fstUrl") or "",
+        # Keycloak account console of the DRIP realm.
+        "account": f"{drip['issuer'].rstrip('/')}/account" if drip else "",
+    }
+    return [{**s, "url": s.get("url") or known.get(s["id"], ""), "current": s["id"] == "urban"} for s in cfg.get("services", [])]
+
 
 @router.get("/api/platform/config")
 def get_config() -> dict:

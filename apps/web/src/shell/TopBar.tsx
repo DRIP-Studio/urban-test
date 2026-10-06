@@ -13,6 +13,7 @@ import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
 import { toggleTheme, useTheme } from '../ui/theme';
 import { UserMenu, initials } from './UserMenu';
+import { AppsLauncher } from './AppsLauncher';
 import { useCollab } from '../state/collab';
 import { avatarStack, presenceLabel } from '../state/collabLogic';
 
@@ -149,7 +150,7 @@ export function TopBar() {
       <ModeSwitch mode={mode} />
       <div className="topbar-actions">
         <button type="button" className="search-btn" onClick={() => usePalette.getState().toggle()} aria-label="Comandi e ricerca">
-          <Icon name="search" size={15} /><span>Cerca comandi, luoghi, strade</span><kbd className="kbd">Ctrl K</kbd>
+          <Icon name="search" size={15} /><span>Cerca</span><span className="search-long">comandi, luoghi, strade</span><kbd className="kbd">Ctrl K</kbd>
         </button>
         <IconButton icon="undo" label={undoLabel ? `Annulla: ${undoLabel}` : 'Annulla'} shortcut="Ctrl+Z" onClick={undo} disabled={!canUndo} />
         <IconButton icon="redo" label={redoLabel ? `Ripristina: ${redoLabel}` : 'Ripristina'} shortcut="Ctrl+Y" onClick={redo} disabled={!canRedo} />
@@ -163,6 +164,7 @@ export function TopBar() {
         <span className="tb-opt"><IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} /></span>
         <IconButton icon="settings" label="Impostazioni" onClick={() => setDock('settings')} />
         <span className="tb-opt"><PresenceStack /></span>
+        <AppsLauncher />
         <UserMenu />
       </div>
     </header>

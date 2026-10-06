@@ -63,6 +63,7 @@ const P: Record<string, string> = {
   user: 'M12 4a4 4 0 1 1-.01 0M4 21a8 8 0 0 1 16 0',
   filter: 'M3 5h18l-7 8v6l-4 2v-8z',
   grid: 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
+  apps: 'M5 5h2v2H5zM11 5h2v2h-2zM17 5h2v2h-2zM5 11h2v2H5zM11 11h2v2h-2zM17 11h2v2h-2zM5 17h2v2H5zM11 17h2v2h-2zM17 17h2v2h-2z',
   magnet: 'M6 4h4v8a2 2 0 0 0 4 0V4h4v8a6 6 0 0 1-12 0zM6 8h4M14 8h4',
   crosshair: 'M12 3a9 9 0 1 1-.01 0M12 1v6M12 17v6M1 12h6M17 12h6',
   home: 'M3 11l9-7 9 7M5 9v11h14V9',

@@ -107,7 +107,56 @@ def local_login(username: str, password: str) -> dict:
         _save_users(users)
     return {"sub": f"local:{u['username']}", "name": u.get("name") or u["username"], "username": u["username"], "role": u["role"],
             "provider": "local", "provisional": bool(u.get("provisional")), "mustChangePassword": bool(u.get("mustChangePassword")),
-            "expiresAt": u.get("expiresAt")}
+            "expiresAt": u.get("expiresAt"), "picture": local_avatar_url(u["username"])}
+
+
+# ------------------------------------------------------------------ profile photo (local accounts)
+
+AVATAR_MAX = 256 * 1024
+AVATAR_TYPES = {"image/png", "image/jpeg", "image/webp"}
+_MAGIC = {b"\x89PNG": "image/png", b"\xff\xd8\xff": "image/jpeg", b"RIFF": "image/webp"}
+
+
+def _sniff(data: bytes) -> str | None:
+    for magic, mime in _MAGIC.items():
+        if data.startswith(magic) and (mime != "image/webp" or data[8:12] == b"WEBP"):
+            return mime
+    return None
+
+
+def set_local_avatar(username: str, data: bytes | None) -> str | None:
+    """Stores (or removes, with None) the photo of a local account. Returns its URL."""
+    if data is not None:
+        if len(data) > AVATAR_MAX:
+            raise ValueError("La foto deve pesare al massimo 256 KB")
+        mime = _sniff(data)
+        if mime not in AVATAR_TYPES:
+            raise ValueError("Formato non supportato: usa PNG, JPEG o WebP")
+    with _lock:
+        users = _load_users()
+        u = next((x for x in users if x["username"] == username), None)
+        if not u:
+            raise PermissionError("Account locale inesistente")
+        if data is None:
+            u.pop("avatar", None)
+        else:
+            import base64
+            u["avatar"] = {"mime": mime, "data": base64.b64encode(data).decode("ascii"), "at": _iso(_now())}
+        _save_users(users)
+    return local_avatar_url(username)
+
+
+def local_avatar(username: str) -> tuple[bytes, str] | None:
+    import base64
+    u = next((x for x in _load_users() if x["username"] == username), None)
+    a = (u or {}).get("avatar")
+    return (base64.b64decode(a["data"]), a["mime"]) if a else None
+
+
+def local_avatar_url(username: str) -> str | None:
+    u = next((x for x in _load_users() if x["username"] == username), None)
+    a = (u or {}).get("avatar")
+    return f"/api/auth/avatar/{username}?v={a['at']}" if a else None
 
 
 def change_password(username: str, old: str, new: str) -> None:
@@ -296,6 +345,10 @@ def oidc_finish(code: str, state: str) -> tuple[dict, str, dict]:
         "username": claims.get("preferred_username") or claims.get("email") or claims.get("sub"), "email": claims.get("email"),
         "role": map_role(roles), "provider": p["id"], "providerLabel": p.get("label"),
     }
+    # Profile photo from DRIP ID / Keycloak (OIDC «picture»): only https URLs are shown.
+    pic = claims.get("picture")
+    if isinstance(pic, str) and pic.startswith("https://") and len(pic) < 2048:
+        identity["picture"] = pic
     # Subscription claims published by the DRIP platform on the DRIP ID token (see docs/PLATFORM.md).
     entitlement = {k: v for k, v in {**access_claims, **claims}.items() if k.startswith("drip_")}
     return identity, pend["next"], {"idToken": id_token, "entitlement": entitlement, "endSession": meta.get("end_session_endpoint")}

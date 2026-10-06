@@ -180,7 +180,8 @@ h1, h2, h3 { text-wrap: balance; }
 
 
 /* ------------------------------------------------------------------ top bar: narrower screens */
-@media (max-width: 1500px) { .search-btn span, .search-btn .kbd { display: none; } .mode { padding: 6px 10px; } }
+/* The search stays a labelled button («Cerca»): only the long hint and the shortcut collapse. */
+@media (max-width: 1500px) { .search-btn .search-long, .search-btn .kbd { display: none; } .mode { padding: 6px 10px; } }
 @media (max-width: 1280px) { .project-name { display: none; } .save-status { font-size: 0; gap: 0; } .lockup { --lk-h: 15px; } }
 @media (max-width: 1100px) { .lk-product { display: none; } .topbar { padding: 0 var(--s-3); } }
 

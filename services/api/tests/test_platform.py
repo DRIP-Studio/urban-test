@@ -199,3 +199,26 @@ def test_fst_reports_filtered_to_project_area_and_configurable_portal(client, mo
     client.get("/api/civic/fst/reports")
     assert seen[-1].startswith("https://comune.example.it/")
     client.put("/api/platform/config", json={"fstUrl": "https://frattamaggioresitrasforma.studiodrip.it"})
+
+
+def test_local_profile_photo_and_services_launcher(client):
+    _admin(client)
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    r = client.put("/api/auth/me/avatar", files={"file": ("me.png", png, "image/png")})
+    assert r.status_code == 200, r.text
+    url = r.json()["picture"]
+    assert url.startswith("/api/auth/avatar/admin")
+    assert client.get("/api/auth/session").json()["user"]["picture"] == url
+    img = client.get(url)
+    assert img.status_code == 200 and img.headers["content-type"] == "image/png" and img.content == png
+    # Not an image (an HTML page renamed .png) and oversized files are refused.
+    assert client.put("/api/auth/me/avatar", files={"file": ("x.png", b"<html>no</html>", "image/png")}).status_code == 400
+    assert client.put("/api/auth/me/avatar", files={"file": ("big.png", png + b"\x00" * 300_000, "image/png")}).status_code == 400
+    assert client.delete("/api/auth/me/avatar").json()["picture"] is None
+    assert client.get("/api/auth/session").json()["user"]["picture"] is None
+    # Launcher: this app and DRIP Studio known, unconfigured services have no address (never a fake link).
+    svc = {s["id"]: s for s in client.get("/api/platform/services").json()}
+    assert svc["urban"]["current"] and svc["urban"]["url"].endswith("/")
+    assert svc["site"]["url"] == "https://studiodrip.it"
+    assert svc["fiscoflow"]["url"] == ""
+    assert client.put("/api/platform/config", json={"services": [{"id": "x", "label": "X", "url": "http://insecure"}]}).status_code == 400

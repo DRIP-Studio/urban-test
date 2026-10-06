@@ -58,6 +58,20 @@ DEFAULTS: dict[str, Any] = {
     # soft: an expired/missing licence only shows a banner. strict: features outside the plan are refused.
     "licenseEnforcement": "soft",
     "trialDays": 30,
+    # DRIP services in the app launcher (top bar). Empty url = not configured on this installation:
+    # shown as such, never as a working link. «urban», «fst» and «account» are resolved from the
+    # rest of the configuration; the DRIP platform may publish the others at /v1/services.
+    "services": [
+        {"id": "urban", "label": "DRIP Urban", "description": "Pianificazione e progettazione urbana", "url": ""},
+        {"id": "account", "label": "Account DRIP", "description": "Profilo, sicurezza, abbonamenti", "url": ""},
+        {"id": "site", "label": "DRIP Studio", "description": "Studio, lavori e prodotti", "url": "https://studiodrip.it"},
+        {"id": "fst", "label": "Si Trasforma", "description": "Portale civico e segnalazioni", "url": ""},
+        {"id": "elios", "label": "Elios", "description": "Assistente AI di DRIP", "url": ""},
+        {"id": "fiscoflow", "label": "FiscoFlow", "description": "Gestionale e fiscale", "url": ""},
+        {"id": "onecontrol", "label": "OneControl", "description": "Control room dei servizi", "url": ""},
+        {"id": "mail", "label": "DRIP Mail", "description": "Posta", "url": ""},
+        {"id": "voice", "label": "DRIP Voice", "description": "Telefonia", "url": ""},
+    ],
     # Civic platform (Frattamaggiore Si Trasforma or another municipality on the same WordPress plugin).
     "fstUrl": "https://frattamaggioresitrasforma.studiodrip.it",
     # Official technical maps (WMS) served through /api/tiles/wms/<id>/… (see app/wms.py).
@@ -130,7 +144,7 @@ def load() -> dict:
     return _env_overrides(cfg)
 
 
-EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement", "fstUrl", "wms"}
+EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement", "fstUrl", "wms", "services"}
 
 
 def save(patch: dict) -> dict:
@@ -150,6 +164,18 @@ def save(patch: dict) -> dict:
             if k == "wms":
                 from app import wms
                 v = wms.validate(v)
+            if k == "services":
+                if not isinstance(v, list) or len(v) > 30:
+                    raise ValueError("Elenco servizi non valido")
+                clean = []
+                for s in v:
+                    if not isinstance(s, dict) or not str(s.get("id") or "").strip() or not str(s.get("label") or "").strip():
+                        raise ValueError("Ogni servizio richiede id e nome")
+                    url = str(s.get("url") or "").strip()
+                    if url and not url.startswith("https://"):
+                        raise ValueError(f"{s['label']}: serve un indirizzo https://")
+                    clean.append({"id": str(s["id"])[:40], "label": str(s["label"])[:40], "description": str(s.get("description") or "")[:80], "url": url})
+                v = clean
             if k == "identityProviders":
                 for p in v:
                     if p.get("issuer") and not str(p["issuer"]).startswith(("https://", "http://localhost", "http://127.0.0.1")):
