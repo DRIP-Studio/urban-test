@@ -14,6 +14,8 @@ import { useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { saveTwinKeyframe, takePendingTwinCamera } from './pending';
 import { Button, Segmented, Toggle } from '../ui/controls';
+import { DAY_PRESETS, Daylight, zonedInstant, type Lamp } from './daylight';
+import { buildingAppearance, buildingGeometry, type TwinBuilding } from './buildingMesh';
 
 type Preset = 'top' | 'perspective' | 'street' | 'junction' | 'district';
 
@@ -64,7 +66,7 @@ function draped(p: PhysicalPayload, materials: Map<string, MaterialItem>, hm: He
     }
   }
   const app = () => new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false });
-  return [surf, marks, slopes].filter((x) => x.length).map((inst) => new Cesium.Primitive({ geometryInstances: inst, appearance: app(), asynchronous: true, releaseGeometryInstances: true }));
+  return [surf, marks, slopes].filter((x) => x.length).map((inst) => new Cesium.Primitive({ geometryInstances: inst, appearance: app(), asynchronous: true, releaseGeometryInstances: true, shadows: Cesium.ShadowMode.RECEIVE_ONLY }));
 }
 
 /** Surfaces and markings: one batched primitive each, heights from the physical model (same data as the 2D map). */
@@ -94,25 +96,17 @@ function physicalPrimitives(p: PhysicalPayload, materials: Map<string, MaterialI
   }));
   const app = () => new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false });
   return [
-    new Cesium.Primitive({ geometryInstances: surf, appearance: app(), asynchronous: true, releaseGeometryInstances: true }),
-    ...(marks.length ? [new Cesium.Primitive({ geometryInstances: marks, appearance: app(), asynchronous: true, releaseGeometryInstances: true })] : []),
+    new Cesium.Primitive({ geometryInstances: surf, appearance: app(), asynchronous: true, releaseGeometryInstances: true, shadows: Cesium.ShadowMode.RECEIVE_ONLY }),
+    ...(marks.length ? [new Cesium.Primitive({ geometryInstances: marks, appearance: app(), asynchronous: true, releaseGeometryInstances: true, shadows: Cesium.ShadowMode.RECEIVE_ONLY })] : []),
   ];
 }
 
-function buildingsPrimitive(buildings: { id: string; footprint: readonly (readonly [number, number])[]; heightM: number; minHeightM: number }[], translucent: boolean, hm: HeightModel | null): Cesium.Primitive {
-  // Facade and roof colours shared with the 2D map (sources.ts): plaster tones, tiled roofs on low-rise blocks.
-  const inst: Cesium.GeometryInstance[] = [];
-  for (const b of buildings) {
-    const look = buildingLook(b.id, b.heightM);
-    const hier = new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(b.footprint.flatMap((p) => [p[0], p[1]])));
-    const vf = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
-    const col = (c: string) => Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(c).withAlpha(translucent ? 0.55 : 1));
-    // On the DTM the building stands on the lowest ground under its footprint (no floating corners).
-    const g = hm ? hm.toEllipsoid(footprintBase(hm, b.footprint)) : 0;
-    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: g + (hm && !b.minHeightM ? -1 : b.minHeightM), extrudedHeight: g + b.heightM, vertexFormat: vf }), attributes: { color: col(look.facade) } }));
-    inst.push(new Cesium.GeometryInstance({ geometry: new Cesium.PolygonGeometry({ polygonHierarchy: hier, height: g + b.heightM, extrudedHeight: g + b.heightM + look.roofH, vertexFormat: vf }), attributes: { color: col(look.roof) } }));
-  }
-  return new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent }), asynchronous: true, releaseGeometryInstances: true });
+function buildingsPrimitive(buildings: TwinBuilding[], translucent: boolean, hm: HeightModel | null): Cesium.Primitive | null {
+  // Real-scale facades (floors, windows, shutters) and coppi roofs; plaster/tile tones shared with the 2D map.
+  // On the DTM a building stands on the lowest ground under its footprint (no floating corners).
+  const geometry = buildingGeometry(buildings, (b) => (hm ? hm.toEllipsoid(footprintBase(hm, b.footprint)) - (b.minHeightM ? 0 : 1) : 0), translucent);
+  if (!geometry) return null;
+  return new Cesium.Primitive({ geometryInstances: new Cesium.GeometryInstance({ geometry }), appearance: buildingAppearance(translucent), asynchronous: false, compressVertices: false, shadows: translucent ? Cesium.ShadowMode.DISABLED : Cesium.ShadowMode.ENABLED });
 }
 
 /** Furniture from the catalogue's procedural parts — the same item ids the 2D map draws at real size. */
@@ -143,7 +137,7 @@ function furniturePrimitive(assets: Asset[], items: Map<string, FurnitureItem>, 
       inst.push(new Cesium.GeometryInstance({ id: a.id, geometry, modelMatrix: Cesium.Matrix4.multiply(base, local, new Cesium.Matrix4()), attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(mat === 'glass' || mat === 'water' ? col.withAlpha(0.5) : col) } }));
     }
   }
-  return { prim: inst.length ? new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent: true, closed: true }), asynchronous: true }) : null, ids };
+  return { prim: inst.length ? new Cesium.Primitive({ geometryInstances: inst, appearance: new Cesium.PerInstanceColorAppearance({ translucent: true, closed: true }), asynchronous: true, shadows: Cesium.ShadowMode.ENABLED }) : null, ids };
 }
 
 export function TwinView() {
@@ -166,6 +160,14 @@ export function TwinView() {
   }, [grid, useDtm, baseline, network]);
   groundAt = hm ? (lon, lat) => hm.toEllipsoid(hm.terrain(lon, lat)) : () => 0;
   const [parity, setParity] = useState<{ twin: number; map: number } | null>(null);
+  const daylight = useRef<Daylight | null>(null);
+  const [day, setDay] = useState<{ date: string; hour: number }>(() => {
+    try { const v = JSON.parse(localStorage.getItem('drip-urban:twin-day') ?? 'null'); if (v?.date && typeof v.hour === 'number') return v; } catch { /* storage unavailable */ }
+    const now = new Date();
+    return { date: now.toISOString().slice(0, 10), hour: 11 };
+  });
+  const [playing, setPlaying] = useState(false);
+  const [sunElev, setSunElev] = useState<number | null>(null);
   const [status, setStatus] = useState('Avvio del Twin');
   const layers = useRef<{ phys: Cesium.Primitive[]; bld: Cesium.Primitive | null; furn: Cesium.Primitive | null; ents: Cesium.Entity[]; models: Cesium.Model[] }>({ phys: [], bld: null, furn: null, ents: [], models: [] });
   const sim = useRef<SimFrame | null>(null);
@@ -188,6 +190,7 @@ export function TwinView() {
       if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
       viewer.scene.postProcessStages.fxaa.enabled = true;
       viewerRef.current = viewer;
+      daylight.current = new Daylight(viewer, baseline.origin);
       const [w, s, e, n] = baseline.bbox;
       const pend = takePendingTwinCamera();
       if (pend) viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(pend.lon, pend.lat, pend.height), orientation: { heading: Cesium.Math.toRadians(pend.heading), pitch: Cesium.Math.toRadians(pend.pitch), roll: 0 } });
@@ -195,8 +198,21 @@ export function TwinView() {
       setStatus('Terreno ellissoidico · immagini Esri');
       setReady(true);
     })().catch((err) => toast.error('Twin 3D', err instanceof Error ? err.message : String(err)));
-    return () => { destroyed = true; viewerRef.current?.destroy(); viewerRef.current = null; };
+    return () => { destroyed = true; daylight.current?.destroy(); daylight.current = null; viewerRef.current?.destroy(); viewerRef.current = null; };
   }, [baseline]);
+
+  // Time of day: applied on every change, remembered for this viewer; «play» runs a day in ~40 s.
+  const tz = useApp((s) => s.project?.timezone) ?? 'Europe/Rome';
+  useEffect(() => {
+    if (!ready || !daylight.current) return;
+    setSunElev(daylight.current.apply(zonedInstant(day.date, day.hour, tz)));
+    try { localStorage.setItem('drip-urban:twin-day', JSON.stringify(day)); } catch { /* storage unavailable */ }
+  }, [ready, day, tz]);
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => setDay((d) => ({ ...d, hour: (d.hour + 0.05) % 24 })), 80);
+    return () => clearInterval(id);
+  }, [playing]);
 
   // Terrain provider: DTM heightmap tiles when available, otherwise the ellipsoid.
   useEffect(() => {
@@ -239,7 +255,8 @@ export function TwinView() {
     const viewer = viewerRef.current;
     if (!ready || !viewer || !baseline) return;
     if (layers.current.bld) viewer.scene.primitives.remove(layers.current.bld);
-    layers.current.bld = viewer.scene.primitives.add(buildingsPrimitive(Object.values(baseline.buildings).filter((b) => !removedBuildings?.[b.id]), buildingsTranslucent, hm)) as Cesium.Primitive;
+    const bp = buildingsPrimitive(Object.values(baseline.buildings).filter((b) => !removedBuildings?.[b.id]), buildingsTranslucent, hm);
+    layers.current.bld = bp ? viewer.scene.primitives.add(bp) as Cesium.Primitive : null;
   }, [ready, baseline, buildingsTranslucent, removedBuildings, hm]);
 
   // Assets: furniture primitives, sign plates on poles, signal heads
@@ -254,6 +271,12 @@ export function TwinView() {
     layers.current.ents = [];
     const assets = Object.values(network.assets);
     const furn = furniturePrimitive(assets, items, materials);
+    // Street lamps light up at night: the lamp head at the luminaire height of the catalogue item.
+    const lamps: Lamp[] = assets.filter((a) => a.state !== 'removed' && a.type.startsWith('furniture.light')).map((a) => {
+      const h = (items.get(a.type)?.dims.h ?? 6) * 0.95;
+      return { lon: a.at[0], lat: a.at[1], h: groundAt(a.at[0], a.at[1]) + h };
+    });
+    daylight.current?.setLamps(lamps);
     layers.current.furn = furn.prim ? viewer.scene.primitives.add(furn.prim) as Cesium.Primitive : null;
     const rendered = new Set(furn.ids);
     // Imported glTF models (SketchUp, Blender, Revit…): real geometry, Y-up glTF on the ENU frame of the anchor.
@@ -374,6 +397,15 @@ export function TwinView() {
         <Segmented<Preset> label="Inquadratura" size="sm" value="perspective" onChange={preset}
           options={[{ value: 'top', label: 'Dall\'alto' }, { value: 'perspective', label: 'Prospettiva' }, { value: 'street', label: 'Strada' }, { value: 'junction', label: 'Incrocio' }, { value: 'district', label: 'Quartiere' }]} />
         <Toggle label="Edifici trasparenti" checked={buildingsTranslucent} onChange={setBT} />
+        <div className="twin-day" role="group" aria-label="Ora del giorno">
+          <Segmented<string> label="Momento della giornata" size="sm" value={DAY_PRESETS.find((p) => Math.abs(p.hour - day.hour) < 0.01)?.value ?? ''}
+            options={DAY_PRESETS} onChange={(v) => { setPlaying(false); setDay((d) => ({ ...d, hour: DAY_PRESETS.find((p) => p.value === v)!.hour })); }} />
+          <input type="range" min={0} max={23.99} step={0.25} value={day.hour} aria-label="Ora" aria-valuetext={fmtHour(day.hour)}
+            onChange={(e) => { setPlaying(false); setDay((d) => ({ ...d, hour: Number(e.target.value) })); }} />
+          <output className="mono">{fmtHour(day.hour)}</output>
+          <input type="date" value={day.date} aria-label="Data" onChange={(e) => e.target.value && setDay((d) => ({ ...d, date: e.target.value }))} />
+          <Button size="sm" variant="ghost" icon={playing ? 'pause' : 'play'} onClick={() => setPlaying((p) => !p)}>{playing ? 'Ferma' : 'Scorri la giornata'}</Button>
+        </div>
         {grid ? <Toggle label="Terreno DTM" checked={useDtm} onChange={setUseDtm} /> : null}
         <Button size="sm" icon="camera" onClick={() => {
           const v = viewerRef.current;
@@ -388,10 +420,13 @@ export function TwinView() {
       </div>
       <div className="twin-status">
         <span>{status}</span>
+        {sunElev !== null ? <span>{sunElev < -4 ? 'Notte · luce lunare, lampioni accesi' : sunElev < 6 ? `Sole basso (${Math.round(sunElev)}°)` : `Sole a ${Math.round(sunElev)}° · ombre reali`}</span> : null}
         {parity ? <span className={parity.twin === parity.map ? 'ok' : 'warn-line'}>Parità 2D/3D: {parity.twin}/{parity.map} oggetti</span> : null}
       </div>
     </div>
   );
 }
+
+const fmtHour = (h: number) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`;
 
 export default TwinView;

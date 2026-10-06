@@ -187,6 +187,10 @@
 .twin-canvas { position: absolute; inset: 0; }
 .twin-canvas .cesium-widget-credits { font-size: 10px; }
 .twin-toolbar { position: absolute; top: var(--s-3); left: var(--s-3); max-width: calc(100% - 2 * var(--s-3)); display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; background: var(--glass-strong); border: 1px solid var(--line-2); border-radius: var(--r-3); padding: 6px; }
+.twin-day { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; padding-left: var(--s-2); border-left: 1px solid var(--line-2); }
+.twin-day input[type=range] { width: 140px; accent-color: var(--drip-accent); }
+.twin-day input[type=date] { font: inherit; font-size: var(--fs-12); color: var(--text-1); background: var(--ink-2); border: 1px solid var(--line-2); border-radius: var(--r-2); padding: 3px 6px; color-scheme: dark light; }
+.twin-day output { min-width: 3.2em; font-size: var(--fs-12); color: var(--text-1); }
 .twin-status { position: absolute; bottom: var(--s-3); left: var(--s-3); display: flex; gap: var(--s-4); font-size: var(--fs-11); background: var(--glass-strong); border-radius: var(--r-2); padding: 5px 10px; color: var(--text-2); }
 
 /* ------------------------------------------------------------------ present & before/after */
