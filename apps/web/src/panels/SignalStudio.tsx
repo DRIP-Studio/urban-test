@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { LocalFrame, activeTurns, planIssues, type CoordinationResult, type DetectedCorridor, type PlantDesign, type JunctionAnalysis, type LaneGroup, type SignalPhase, type SignalPlan, type TurnKind } from '@drip-urban/core';
+import { LocalFrame, activeTurns, planIssues, type CoordinationResult, type DetectedCorridor, type PlantDesign, type JunctionAnalysis, type LaneGroup, type SignalPhase, type SignalPlan, type TurnKind, type ApproachControl } from '@drip-urban/core';
 import { engine } from '../engine/engine';
 import { setSignalPreview } from '../map/signalsLive';
 import { commit, newId, useApp } from '../state/store';
@@ -48,7 +48,7 @@ export function SignalStudio() {
   const propose = async (permissiveLeft: boolean) => {
     const r = await engine.job<JunctionResult | null>('junction', { nodeId, permissiveLeft });
     if (!r) return;
-    setPlan({ ...stripDesign(r.suggested), id: plan.id, disabledHeads: plan.disabledHeads, coordination: plan.coordination });
+    setPlan({ ...stripDesign(r.suggested), id: plan.id, disabledHeads: plan.disabledHeads, unsignalized: plan.unsignalized, coordination: plan.coordination });
     setDesign(r.suggested.design);
   };
   const pxPerS = (timeline.current?.getBoundingClientRect().width ?? 600) / Math.max(total, 1);
@@ -118,6 +118,7 @@ export function SignalStudio() {
         </div>
         <p className="muted">Clic sulle frecce per decidere quali direzioni hanno il verde in ogni fase (lanterne a frecce, art. 159–163 Reg. CdS). Le direzioni in conflitto con un verde già acceso sono bloccate.</p>
       </div>
+      <ApproachesSection plan={plan} analysis={a} existing={existing} />
       <HeadsSection plan={plan} analysis={a} existing={existing} onChange={(disabledHeads) => setPlan({ ...plan, disabledHeads })} />
       {plan.mode === 'actuated' || plan.mode === 'adaptive' ? (
         <Section title={plan.mode === 'actuated' ? 'Attuazione (spire / detector)' : 'Logica adattiva'}>
@@ -162,6 +163,35 @@ function TurnCell({ plan, phase, group, analysis, onChange }: { plan: SignalPlan
         );
       })}
     </div>
+  );
+}
+
+const APPROACH: { value: ApproachControl | 'signal'; label: string }[] = [
+  { value: 'signal', label: 'Semaforo' }, { value: 'give_way', label: 'Precedenza' }, { value: 'stop', label: 'STOP' }, { value: 'free', label: 'Libero' },
+];
+
+/**
+ * Approaches: each one can leave the signal control. Its heads and greens go away and its traffic stops
+ * at a give-way or STOP line (or flows freely, e.g. a right-turn slip): the stop line on the map moves too.
+ */
+function ApproachesSection({ plan, analysis, existing }: { plan: SignalPlan; analysis: JunctionAnalysis; existing?: SignalPlan }) {
+  const arms = analysis.arms.filter((x) => x.inbound > 0);
+  // Arm bearing points away from the node: traffic on it comes from that side.
+  const from = (deg: number) => `da ${['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ovest', 'ovest', 'nord-ovest'][Math.round((((deg % 360) + 360) % 360) / 45) % 8]}`;
+  return (
+    <Section title="Rami e punto di arresto" count={arms.length - Object.keys(plan.unsignalized ?? {}).length} defaultOpen>
+      {existing ? null : <p className="muted">Applica prima il piano: poi puoi togliere il semaforo da singoli rami.</p>}
+      <ul className="row-list">
+        {arms.map((arm) => (
+          <li key={arm.roadId} className="approach-row">
+            <span className="grow"><strong>{arm.name || 'senza nome'}</strong> <span className="muted">{from(arm.bearingDeg)}</span></span>
+            <Segmented<ApproachControl | 'signal'> size="sm" label={`Regolazione di ${arm.name || 'ramo'}`} value={plan.unsignalized?.[arm.roadId] ?? 'signal'} options={APPROACH}
+              disabled={!existing} onChange={(v) => { if (existing) commit('signal.setApproach', { planId: existing.id, roadId: arm.roadId, control: v }); }} />
+          </li>
+        ))}
+      </ul>
+      <p className="muted">Precedenza e STOP spostano l'arresto sulla linea corrispondente (artt. 144–145 Reg. CdS); «Libero» non ferma i veicoli (es. svolta a destra canalizzata). Fasi e lanterne del ramo vengono tolte; tornando a «Semaforo» il ramo rientra nella prima fase compatibile.</p>
+    </Section>
   );
 }
 

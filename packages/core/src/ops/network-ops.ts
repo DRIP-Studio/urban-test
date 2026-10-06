@@ -1,9 +1,9 @@
 import { LocalFrame } from '../geo/projection';
 import { add, dist, lengthOf, mul, project, slice, sub, type V } from '../geo/polyline';
 import type {
-  Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, TurnKind, Zone,
+  ApproachControl, Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, TurnKind, Zone,
 } from '../model/types';
-import { planIssues, rescalePlan } from '../analysis/junction';
+import { analyzeJunction, planIssues, rescalePlan } from '../analysis/junction';
 import { defineOperation, operationSpec, type Issue } from './registry';
 import { makeLanes } from './road-factory';
 import { extractRoundabout, insertRoundabout, planRoundabout } from './roundabout-insert';
@@ -418,6 +418,46 @@ export const signalPlanSet = defineOperation<SignalPlanSetPayload>({
       signalPlans: { ...net.signalPlans, [p.plan.id]: p.plan },
       junctions: { ...net.junctions, [p.plan.nodeId]: { ...junction, control: 'signal' } },
     };
+  },
+});
+
+/**
+ * Takes one approach out of the signal plan (or back in): its traffic then stops at a give-way or STOP
+ * line, or not at all. Its groups leave every phase; the other greens are kept.
+ */
+export const signalSetApproach = defineOperation<{ readonly planId: string; readonly roadId: string; readonly control: ApproachControl | 'signal' }>({
+  type: 'signal.setApproach',
+  label: (p) => (p.control === 'signal' ? 'Ramo di nuovo semaforizzato' : p.control === 'free' ? 'Ramo senza semaforo (libero)' : p.control === 'stop' ? 'Ramo senza semaforo (STOP)' : 'Ramo senza semaforo (dare precedenza)'),
+  validate(net, p) {
+    const plan = net.signalPlans[p.planId];
+    if (!plan) return [err('signal.missing', 'Piano inesistente')];
+    const road = net.roads[p.roadId];
+    if (!road || (road.from !== plan.nodeId && road.to !== plan.nodeId)) return [err('signal.approach', 'La strada non è un ramo di questo incrocio')];
+    return [];
+  },
+  apply(net, p) {
+    const plan = net.signalPlans[p.planId]!;
+    const unsignalized: Record<string, ApproachControl> = { ...(plan.unsignalized ?? {}) };
+    if (p.control === 'signal') delete unsignalized[p.roadId]; else unsignalized[p.roadId] = p.control;
+    // Group ids do not depend on the frame: the node itself is a valid origin.
+    const a = analyzeJunction(net, net.nodes[plan.nodeId]!.at, plan.nodeId);
+    const mine = new Set(a?.groups.filter((g) => g.roadId === p.roadId).map((g) => g.id) ?? []);
+    let phases = plan.phases;
+    if (p.control !== 'signal') {
+      phases = phases.map((ph) => ({
+        ...ph, greenGroups: ph.greenGroups.filter((g) => !mine.has(g)),
+        ...(ph.greenMovements ? { greenMovements: Object.fromEntries(Object.entries(ph.greenMovements).filter(([g]) => !mine.has(g))) } : {}),
+      }));
+    } else if (a) {
+      // Back under signal control: each group joins the first phase whose greens it does not conflict with.
+      const bad = new Set(a.incompatible.map(([x, y]) => [x, y].sort().join('|')));
+      for (const g of mine) {
+        if (phases.some((ph) => ph.greenGroups.includes(g))) continue;
+        const i = phases.findIndex((ph) => ph.greenGroups.every((x) => !bad.has([x, g].sort().join('|'))));
+        if (i >= 0) phases = phases.map((ph, j) => (j === i ? { ...ph, greenGroups: [...ph.greenGroups, g] } : ph));
+      }
+    }
+    return { ...net, signalPlans: { ...net.signalPlans, [plan.id]: { ...plan, unsignalized, phases } } };
   },
 });
 

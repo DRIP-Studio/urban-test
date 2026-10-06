@@ -275,6 +275,8 @@ export interface ProjectMeta {
 }
 
 export type JunctionControl = 'uncontrolled' | 'priority' | 'stop' | 'signal' | 'roundabout';
+/** How an approach left out of a signal plan is regulated. */
+export type ApproachControl = 'give_way' | 'stop' | 'free';
 
 /** Authored properties of a junction (a node with ≥ 3 road ends). Absent = defaults. */
 export interface JunctionSpec {
@@ -387,6 +389,11 @@ export interface SignalPlan {
   readonly permissiveLeft?: boolean;
   /** Heads not installed: lane group id, `ped:<roadId>` (both sides) or `ped:<roadId>:<0|1>`. */
   readonly disabledHeads?: readonly string[];
+  /**
+   * Approaches (road ids) taken out of the signal control: their traffic stops at a give-way line,
+   * a STOP line, or does not stop at all (free right turn slip, exit-only approach…). No heads, no green.
+   */
+  readonly unsignalized?: Readonly<Record<string, ApproachControl>>;
   readonly coordination?: SignalCoordination;
   /** Merged plant (impianto unico) this junction belongs to; mode 'plant'. */
   readonly plant?: SignalCoordination;

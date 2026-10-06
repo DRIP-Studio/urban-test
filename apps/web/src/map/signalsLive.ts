@@ -24,7 +24,7 @@ export function renderSignalHeads(): void {
   const plans = useApp.getState().network?.signalPlans ?? {};
   setSource('plan-signals', fc(heads.map((h, i): Feature => ({
     type: 'Feature', id: i, geometry: { type: 'Point', coordinates: [...h.at] },
-    properties: { id: `${h.planId}:${h.key}:${i}`, planId: h.planId, key: h.key, icon: `sig:${h.kind}:${stateOf(h, plans)}` },
+    properties: { id: `${h.planId}:${h.key}:${i}`, planId: h.planId, key: h.key, roadId: h.roadId, pedestrian: h.kind === 'pedestrian', icon: `sig:${h.kind}:${stateOf(h, plans)}` },
   }))));
 }
 

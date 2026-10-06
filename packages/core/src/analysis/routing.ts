@@ -27,6 +27,8 @@ export interface Route {
 export function junctionDelay(net: Network, nodeId: string, from: GraphEdge | null, to: GraphEdge): number {
   if (!from) return 0;
   const plan = Object.values(net.signalPlans).find((p) => p.nodeId === nodeId);
+  const own = plan?.unsignalized?.[from.roadId];
+  if (own) return own === 'stop' ? 9 : own === 'give_way' ? 5 : 1;
   if (plan) {
     const g = plan.phases.reduce((s, p) => s + p.greenS, 0) / Math.max(1, plan.phases.length);
     const r = plan.cycleS - g;

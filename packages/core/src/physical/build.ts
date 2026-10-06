@@ -379,9 +379,13 @@ function addApproachLines(
   net: Network, nodeId: string, spec: JunctionSpec, metric: MetricCache,
   setbacks: Map<string, number>, out: PhysPolygon[], toLL: (r: readonly V[]) => LngLat[],
 ): void {
+  const plan = spec.control === 'signal' ? Object.values(net.signalPlans).find((p) => p.nodeId === nodeId) : undefined;
   for (const arm of vehicularArms(net, nodeId, metric)) {
     const minor = spec.minorRoadIds.includes(arm.road.id);
-    const kind = spec.control === 'signal' ? 'stop_line' : spec.control === 'stop' && minor ? 'stop_line' : spec.control === 'priority' && minor ? 'give_way' : null;
+    // A signalised junction may leave single approaches out of the plan: their traffic stops where they say.
+    const own = plan?.unsignalized?.[arm.road.id];
+    const kind = own ? (own === 'stop' ? 'stop_line' : own === 'give_way' ? 'give_way' : null)
+      : spec.control === 'signal' ? 'stop_line' : spec.control === 'stop' && minor ? 'stop_line' : spec.control === 'priority' && minor ? 'give_way' : null;
     if (!kind) continue;
     const S = (setbacks.get(armKey(arm)) ?? 0) + (spec.crossingRoadIds.includes(arm.road.id) ? MARKING.zebraDepthM + 1.5 : 0.5);
     // Inbound half of the carriageway: in the arm frame, traffic towards the node drives on the arm's left.

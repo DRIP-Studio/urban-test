@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   FlowSimulation, LocalFrame, OperationRejected, ScenarioHistory, analyzeJunction, analyzeNetwork, auditScenario,
   SIDEWALK_PROVENANCE, estimateTraffic, geom, inferSidewalks, isochrone, layoutSection, parseCrashCsv, route, screenSafety, serviceAccess, signalState, suggestSignalPlan, planIssues, signalHeads, coordinateCorridor, detectCorridors, designPlant, optimizeNetworkSignals, rescalePlan, type SignalPlan, type SignalPhase,
-  type CityBaseline, type Network, type Scenario,
+  type CityBaseline, type Network, type Scenario, buildPhysicalModel, junctionDelay, buildGraph,
   SIM_STRIDE,
 } from '../src/index';
 
@@ -295,5 +295,38 @@ describe('existing sidewalks from building fronts', () => {
     for (const c of r.changes) for (const w of [c.left, c.right]) if (w !== null) { expect(w).toBeGreaterThanOrEqual(0.9); expect(w).toBeLessThanOrEqual(3); }
     expect(SIDEWALK_PROVENANCE.kind).toBe('derived');
     console.log(`sidewalks: ${r.roadsWithSidewalks} roads with, ${r.roadsWithout} without, ${r.totalLengthM} m, ${r.changes.length} changed, ${Math.round(ms)} ms`);
+  });
+});
+
+describe('approaches taken out of a signal plan', () => {
+  it('give way: no heads, give-way line instead of stop line, no unserved group, back to signal restores', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const node = signalisableJunction(h.network);
+    const a = analyzeJunction(h.network, baseline.origin, node)!;
+    const plan = suggestSignalPlan(h.network, a);
+    h.commit({ type: 'signal.setPlan', payload: { plan, conflicts: a.incompatible } });
+    const roadId = a.arms[0]!.roadId;
+    const lines = () => buildPhysicalModel(h.network, { origin: baseline.origin }).markings.filter((m) => m.nodeId === node && m.roadId === roadId).map((m) => m.kind);
+    expect(lines()).toContain('stop_line');
+    expect(signalHeads(h.network, baseline.origin).some((x) => x.nodeId === node && a.groups.find((g) => g.id === x.groupId)?.roadId === roadId)).toBe(true);
+
+    h.commit({ type: 'signal.setApproach', payload: { planId: plan.id, roadId, control: 'give_way' } });
+    expect(lines()).toContain('give_way');
+    const mine = a.groups.filter((x) => x.roadId === roadId).map((x) => x.id);
+    expect(h.network.signalPlans[plan.id]!.phases.every((ph) => ph.greenGroups.every((x) => !mine.includes(x)))).toBe(true);
+    expect(lines()).not.toContain('stop_line');
+    expect(signalHeads(h.network, baseline.origin).some((x) => x.nodeId === node && a.groups.find((g) => g.id === x.groupId)?.roadId === roadId)).toBe(false);
+    expect(auditScenario(h.network, baseline.origin, null).filter((i) => i.category === 'signals' && i.severity === 'error')).toHaveLength(0);
+    const g = buildGraph(h.network, new LocalFrame(baseline.origin), ctx);
+    const into = g.edges.find((e) => e.roadId === roadId && g.nodeIds[e.to] === node)!;
+    const out = g.edges.find((e) => e.roadId !== roadId && g.nodeIds[e.from] === node)!;
+    expect(junctionDelay(h.network, node, into, out)).toBe(5);
+
+    h.commit({ type: 'signal.setApproach', payload: { planId: plan.id, roadId, control: 'free' } });
+    expect(lines()).toHaveLength(0);
+    h.commit({ type: 'signal.setApproach', payload: { planId: plan.id, roadId, control: 'signal' } });
+    expect(lines()).toContain('stop_line');
+    // Back under signal: its groups have a green again and the plan is valid.
+    expect(auditScenario(h.network, baseline.origin, null).filter((i) => i.category === 'signals' && i.severity === 'error')).toHaveLength(0);
   });
 });

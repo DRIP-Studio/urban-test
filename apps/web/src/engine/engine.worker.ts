@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import {
-  FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
+  FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeSignalJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
   coordinateCorridor, detectCorridors, designPlant, groupDemand, optimizeNetworkSignals, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
@@ -83,7 +83,9 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
       return { today: routeVia(base, o, pts, ctx), project: routeVia(net, o, pts, ctx) };
     }
     case 'junction': {
-      const a = analyzeJunction(net, o, args.nodeId as string);
+      // A signalised junction is analysed as its controller sees it (approaches left out of the plan excluded).
+      const plan = Object.values(net.signalPlans).find((p) => p.nodeId === args.nodeId);
+      const a = plan ? analyzeSignalJunction(net, o, plan) : analyzeJunction(net, o, args.nodeId as string);
       if (!a) return null;
       // Webster on the DRIP traffic estimate when one has been computed, else on typical flows per road class.
       const demand = lastTraffic ? groupDemand(a, lastTraffic.flows, net) : undefined;

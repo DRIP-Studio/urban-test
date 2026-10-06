@@ -25,13 +25,13 @@ export function IconButton({ icon, label, onClick, active, disabled, shortcut, s
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange, label, size = 'md' }: {
-  value: T; options: readonly { value: T; label: string; icon?: string }[]; onChange: (v: T) => void; label: string; size?: 'sm' | 'md';
+export function Segmented<T extends string>({ value, options, onChange, label, size = 'md', disabled = false }: {
+  value: T; options: readonly { value: T; label: string; icon?: string }[]; onChange: (v: T) => void; label: string; size?: 'sm' | 'md'; disabled?: boolean;
 }) {
   return (
     <div className={`segmented seg-${size}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} className={o.value === value ? 'is-on' : ''} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} disabled={disabled} className={o.value === value ? 'is-on' : ''} onClick={() => onChange(o.value)}>
           {o.icon ? <Icon name={o.icon} size={15} /> : null}<span>{o.label}</span>
         </button>
       ))}

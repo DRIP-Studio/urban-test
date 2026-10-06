@@ -142,6 +142,13 @@ export function ContextMenu() {
   if (head?.properties.planId) {
     const plan = useApp.getState().network?.signalPlans[String(head.properties.planId)];
     if (plan) items.push({ label: 'Rimuovi questa lanterna', icon: 'signal', danger: true, run: () => { commit('signal.setHeads', { planId: plan.id, disabledHeads: [...(plan.disabledHeads ?? []), String(head.properties.key)] }); } });
+    // Vehicle heads: take the whole approach out of the signal plan, so its traffic stops elsewhere.
+    const roadId = head.properties.roadId ? String(head.properties.roadId) : '';
+    if (plan && roadId && !head.properties.pedestrian) {
+      items.push({ label: 'Ramo senza semaforo: dare precedenza', icon: 'warning', run: () => { commit('signal.setApproach', { planId: plan.id, roadId, control: 'give_way' }); } });
+      items.push({ label: 'Ramo senza semaforo: STOP', icon: 'stop', run: () => { commit('signal.setApproach', { planId: plan.id, roadId, control: 'stop' }); } });
+      items.push({ label: 'Ramo senza semaforo: libero', icon: 'route', run: () => { commit('signal.setApproach', { planId: plan.id, roadId, control: 'free' }); } });
+    }
   }
   if (hit?.kind === 'node') {
     items.push({ label: 'Apri Junction Lab', icon: 'junction', run: () => { setMode('design'); setDock('junction'); } });

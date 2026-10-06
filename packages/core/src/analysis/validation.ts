@@ -4,7 +4,7 @@ import type { LngLat, Network } from '../model/types';
 import type { Issue } from '../ops/registry';
 import { layoutSection } from '../physical/section';
 import { incidence } from '../physical/topology';
-import { analyzeJunction } from './junction';
+import { analyzeSignalJunction } from './junction';
 import type { TrafficResult } from './traffic';
 
 export type AuditCategory = 'geometry' | 'topology' | 'signals' | 'traffic' | 'safety' | 'accessibility';
@@ -62,7 +62,7 @@ export function auditScenario(net: Network, origin: LngLat, traffic: TrafficResu
     if (!enters || !exits) out.push({ category: 'topology', code: 'node.trap', severity: 'error', message: !enters ? 'Nodo da cui si può solo uscire: sensi unici incoerenti' : 'Nodo in cui si entra senza poter uscire: sensi unici incoerenti', targetIds: veh.map((e) => e.road.id), at: net.nodes[nodeId]?.at });
   }
   for (const plan of Object.values(net.signalPlans)) {
-    const a = analyzeJunction(net, origin, plan.nodeId);
+    const a = analyzeSignalJunction(net, origin, plan);
     const at = net.nodes[plan.nodeId]?.at;
     if (!a) { out.push({ category: 'signals', code: 'signal.node', severity: 'error', message: `${plan.name}: l'incrocio non esiste più`, at }); continue; }
     const groups = new Set(a.groups.map((g) => g.id));

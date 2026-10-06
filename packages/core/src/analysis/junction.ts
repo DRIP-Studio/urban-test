@@ -108,6 +108,26 @@ function segIntersect(a: V, b: V, c: V, d: V): V | null {
   return t > 0 && t < 1 && u > 0 && u < 1 ? add(a, mul(r, t)) : null;
 }
 
+/**
+ * The junction as the signal controller sees it: groups of approaches taken out of the plan
+ * (`SignalPlan.unsignalized`) are dropped together with every conflict that involves them.
+ * Heads, timing design, validation and simulation all go through here.
+ */
+export function analyzeSignalJunction(net: Network, frameOrigin: LngLat, plan: Pick<SignalPlan, 'nodeId' | 'unsignalized'>): JunctionAnalysis | null {
+  const a = analyzeJunction(net, frameOrigin, plan.nodeId);
+  const out = plan.unsignalized;
+  if (!a || !out || !Object.keys(out).length) return a;
+  const groups = a.groups.filter((g) => !out[g.roadId]);
+  const keep = new Set(groups.map((g) => g.id));
+  const pair = (x: string, y: string) => keep.has(x.split(':')[0]!) && keep.has(y.split(':')[0]!);
+  return {
+    ...a, groups,
+    incompatible: a.incompatible.filter(([x, y]) => keep.has(x) && keep.has(y)),
+    movementConflicts: a.movementConflicts.filter(([x, y]) => pair(x, y)),
+    permissivePairs: a.permissivePairs.filter(([x, y]) => pair(x, y)),
+  };
+}
+
 export function analyzeJunction(net: Network, frameOrigin: LngLat, nodeId: string): JunctionAnalysis | null {
   const node = net.nodes[nodeId];
   if (!node) return null;
@@ -410,6 +430,8 @@ export interface SignalHead {
   readonly nodeId: string;
   /** Lane group id for vehicle heads, `ped:<roadId>` for pedestrian heads. */
   readonly groupId: string;
+  /** Approach the head controls. */
+  readonly roadId: string;
   /** Key used to switch the head off (SignalPlan.disabledHeads). */
   readonly key: string;
   /** Turn controlled by a directional (arrow) head. */
@@ -431,7 +453,7 @@ export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
   const metric = new MetricCache(frame);
   const out: SignalHead[] = [];
   for (const plan of Object.values(net.signalPlans)) {
-    const a = analyzeJunction(net, frameOrigin, plan.nodeId);
+    const a = analyzeSignalJunction(net, frameOrigin, plan);
     if (!a) continue;
     const off = new Set(plan.disabledHeads ?? []);
     for (const g of a.groups) {
@@ -446,13 +468,13 @@ export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
           const key = `${g.id}:${turn}`;
           if (off.has(key)) return;
           const p = add(stop, mul(right, (i - (g.turns.length - 1) / 2) * 0.9));
-          out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, key, turn, kind: ARROW[turn], at: frame.toLngLat(p), bearingDeg: g.bearingDeg });
+          out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, roadId: g.roadId, key, turn, kind: ARROW[turn], at: frame.toLngLat(p), bearingDeg: g.bearingDeg });
         });
         continue;
       }
       const only = g.turns.length === 1 ? g.turns[0] : null;
       const kind = only === 'left' ? 'arrow_left' : only === 'right' ? 'arrow_right' : 'vehicle';
-      out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, key: g.id, kind, at: g.stopAt, bearingDeg: g.bearingDeg });
+      out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: g.id, roadId: g.roadId, key: g.id, kind, at: g.stopAt, bearingDeg: g.bearingDeg });
     }
     const pedRoads = new Set(plan.phases.flatMap((p) => p.pedestrianRoadIds));
     if (!pedRoads.size) continue;
@@ -466,7 +488,7 @@ export function signalHeads(net: Network, frameOrigin: LngLat): SignalHead[] {
       [arm.cwLeft + 0.6, arm.cwRight - 0.6].forEach((o, side) => {
         const key = `ped:${arm.road.id}:${side}`;
         if (off.has(key)) return;
-        out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: `ped:${arm.road.id}`, key, kind: 'pedestrian', at: frame.toLngLat(add(p, mul(leftNormal(t), o))), bearingDeg: 0 });
+        out.push({ planId: plan.id, nodeId: plan.nodeId, groupId: `ped:${arm.road.id}`, roadId: arm.road.id, key, kind: 'pedestrian', at: frame.toLngLat(add(p, mul(leftNormal(t), o))), bearingDeg: 0 });
       });
     }
   }
@@ -504,11 +526,11 @@ export interface SignalOptimization {
 export function optimizeNetworkSignals(net: Network, frameOrigin: LngLat, demandFor?: (a: JunctionAnalysis) => Readonly<Record<string, number>> | undefined): SignalOptimization[] {
   const out: SignalOptimization[] = [];
   for (const plan of Object.values(net.signalPlans)) {
-    const a = analyzeJunction(net, frameOrigin, plan.nodeId);
+    const a = analyzeSignalJunction(net, frameOrigin, plan);
     if (!a || !a.groups.length) continue;
     const { design, ...s } = suggestSignalPlan(net, a, { demand: demandFor?.(a), permissiveLeft: plan.permissiveLeft });
     out.push({
-      plan: { ...s, id: plan.id, name: plan.name, mode: plan.mode, offsetS: plan.offsetS, actuation: plan.actuation, permissiveLeft: plan.permissiveLeft, disabledHeads: plan.disabledHeads, coordination: plan.coordination, plant: plan.plant },
+      plan: { ...s, id: plan.id, name: plan.name, mode: plan.mode, offsetS: plan.offsetS, actuation: plan.actuation, permissiveLeft: plan.permissiveLeft, disabledHeads: plan.disabledHeads, unsignalized: plan.unsignalized, coordination: plan.coordination, plant: plan.plant },
       analysis: a, beforeCycleS: plan.cycleS, design,
     });
   }

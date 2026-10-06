@@ -178,6 +178,18 @@ export class FlowSimulation {
     const nodeId = this.g.nodeIds[e.to]!;
     const stopS = L - this.roadSetback(e.roadId, !e.forward) - 1;
     const plan = Object.values(this.net.signalPlans).find((p) => p.nodeId === nodeId);
+    // Approach left out of the signal plan: free flow, or yield/STOP to the signalised approaches.
+    const own = plan?.unsignalized?.[e.roadId];
+    if (own === 'free') return Infinity;
+    if (own) {
+      const busy = this.vehicles.some((o) => {
+        if (o === veh || o.inJunction) return false;
+        const oe = this.g.edges[o.path[o.k]!]!;
+        if (oe.roadId === e.roadId || oe.to !== e.to || plan!.unsignalized?.[oe.roadId]) return false;
+        return this.edgeLen(oe) - o.s < 25 && o.v > 0.5;
+      });
+      return busy || (own === 'stop' && veh.v > 0.3) ? stopS : Infinity;
+    }
     if (plan) {
       const a = this.analysis(nodeId);
       const road = this.net.roads[e.roadId]!;
