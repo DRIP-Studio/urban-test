@@ -56,7 +56,26 @@ function maneuverFor(turn: number, enteringRoundabout: boolean): RouteStep['mane
   return t > -45 ? 'slight_left' : 'left';
 }
 
-export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLat, ctx: RoutingContext, prebuilt?: RoadGraph): Route {
+/**
+ * Edge costs for a route: `travel` gives the real travel time of an edge (free flow by default, or with
+ * congestion); `search` is what the path search minimises (the same, unless alternatives penalise edges).
+ */
+export interface RouteCosts {
+  readonly travel?: (e: GraphEdge) => number;
+  readonly search?: (e: GraphEdge) => number;
+}
+
+/** Travel time with congestion from a DRIP traffic estimate (BPR: t = t0 · (1 + 0,15 · (v/c)^4), capped ×6). */
+export function congestedTravel(flows: readonly { roadId: string; forward: boolean; vc: number }[]): (e: GraphEdge) => number {
+  const vc = new Map(flows.map((f) => [`${f.roadId}|${f.forward ? 1 : 0}`, f.vc]));
+  return (e) => e.costS * Math.min(6, 1 + 0.15 * Math.pow(vc.get(`${e.roadId}|${e.forward ? 1 : 0}`) ?? 0, 4));
+}
+
+export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLat, ctx: RoutingContext, prebuilt?: RoadGraph, costs: RouteCosts = {}): Route {
+  const travel = costs.travel ?? ((e: GraphEdge) => e.costS);
+  const search = costs.search ?? travel;
+  /** Ratio real/free-flow time of an edge (applies to the partial first and last edges). */
+  const slow = (e: GraphEdge) => (e.costS > 0 ? travel(e) / e.costS : 1);
   const frame = new LocalFrame(frameOrigin);
   const g = prebuilt ?? buildGraph(net, frame, ctx);
   const empty = (w: string[]): Route => ({ found: false, distanceM: 0, durationS: 0, line: [], roadIds: [], steps: [], warnings: w, mode: ctx.mode });
@@ -69,22 +88,22 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
   const ra = net.roads[a.roadId]!, rb = net.roads[b.roadId]!;
   const sources: { node: number; cost: number }[] = [];
   const ef = speedOf(a.roadId, true), eb = speedOf(a.roadId, false);
-  if (ef) sources.push({ node: g.index.get(ra.to)!, cost: (a.length - a.along) / (ef.speedKmh / 3.6) });
-  if (eb) sources.push({ node: g.index.get(ra.from)!, cost: a.along / (eb.speedKmh / 3.6) });
+  if (ef) sources.push({ node: g.index.get(ra.to)!, cost: ((a.length - a.along) / (ef.speedKmh / 3.6)) * slow(ef) });
+  if (eb) sources.push({ node: g.index.get(ra.from)!, cost: (a.along / (eb.speedKmh / 3.6)) * slow(eb) });
   const turnPenalty = (p: GraphEdge | null, e: GraphEdge) => junctionDelay(net, g.nodeIds[e.from]!, p, e);
-  const { dist, prev } = dijkstra(g, sources, { turnPenalty });
+  const { dist, prev } = dijkstra(g, sources, { turnPenalty, costOf: search });
 
   // Same road, reachable directly along it?
   let best = Infinity;
   let endVia: { node: number; fwd: boolean } | null = null;
   let direct: { fwd: boolean } | null = null;
   if (a.roadId === b.roadId) {
-    if (ef && b.along >= a.along) { best = (b.along - a.along) / (ef.speedKmh / 3.6); direct = { fwd: true }; }
-    if (eb && b.along <= a.along) { best = (a.along - b.along) / (eb.speedKmh / 3.6); direct = { fwd: false }; }
+    if (ef && b.along >= a.along) { best = ((b.along - a.along) / (ef.speedKmh / 3.6)) * slow(ef); direct = { fwd: true }; }
+    if (eb && b.along <= a.along) { best = ((a.along - b.along) / (eb.speedKmh / 3.6)) * slow(eb); direct = { fwd: false }; }
   }
   const bf = speedOf(b.roadId, true), bb = speedOf(b.roadId, false);
-  if (bf) { const n = g.index.get(rb.from)!; const c = dist[n]! + b.along / (bf.speedKmh / 3.6); if (c < best) { best = c; endVia = { node: n, fwd: true }; direct = null; } }
-  if (bb) { const n = g.index.get(rb.to)!; const c = dist[n]! + (b.length - b.along) / (bb.speedKmh / 3.6); if (c < best) { best = c; endVia = { node: n, fwd: false }; direct = null; } }
+  if (bf) { const n = g.index.get(rb.from)!; const c = dist[n]! + (b.along / (bf.speedKmh / 3.6)) * slow(bf); if (c < best) { best = c; endVia = { node: n, fwd: true }; direct = null; } }
+  if (bb) { const n = g.index.get(rb.to)!; const c = dist[n]! + ((b.length - b.along) / (bb.speedKmh / 3.6)) * slow(bb); if (c < best) { best = c; endVia = { node: n, fwd: false }; direct = null; } }
   if (!Number.isFinite(best)) {
     const reasons = [...new Set(g.blocked.values())];
     return empty(['Nessun percorso disponibile con le regole dello scenario', ...reasons.slice(0, 4)]);
@@ -93,11 +112,13 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
   const axisM = (id: string) => net.roads[id]!.axis.map((q) => frame.toMetric(q) as V);
   const toLL = (pts: V[]) => pts.map((q) => frame.toLngLat(q));
   const pieces: { roadId: string; pts: LngLat[]; lengthM: number; durationS: number }[] = [];
+  let delayS = 0;
   if (direct) {
     const s = Math.min(a.along, b.along), e = Math.max(a.along, b.along);
     let pts = toLL(slice(axisM(a.roadId), s, e));
     if (!direct.fwd) pts = pts.reverse();
-    pieces.push({ roadId: a.roadId, pts, lengthM: e - s, durationS: best });
+    const ed = direct.fwd ? ef! : eb!;
+    pieces.push({ roadId: a.roadId, pts, lengthM: e - s, durationS: ((e - s) / (ed.speedKmh / 3.6)) * slow(ed) });
   } else {
     const chain: GraphEdge[] = [];
     let n = endVia!.node;
@@ -106,16 +127,19 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
     const firstFwd = chain.length ? g.nodeIds[chain[0]!.from] === ra.to : endVia!.node === g.index.get(ra.to);
     const startPts = firstFwd ? toLL(slice(axisM(a.roadId), a.along, a.length)) : toLL(slice(axisM(a.roadId), 0, a.along)).reverse();
     const sp = firstFwd ? ef! : eb!;
-    pieces.push({ roadId: a.roadId, pts: startPts, lengthM: firstFwd ? a.length - a.along : a.along, durationS: (firstFwd ? a.length - a.along : a.along) / (sp.speedKmh / 3.6) });
+    pieces.push({ roadId: a.roadId, pts: startPts, lengthM: firstFwd ? a.length - a.along : a.along, durationS: ((firstFwd ? a.length - a.along : a.along) / (sp.speedKmh / 3.6)) * slow(sp) });
+    let before: GraphEdge | null = sp;
     for (const e of chain) {
+      delayS += turnPenalty(before, e);
+      before = e;
       let pts = [...net.roads[e.roadId]!.axis];
       if (!e.forward) pts = pts.reverse();
-      pieces.push({ roadId: e.roadId, pts, lengthM: e.lengthM, durationS: e.costS });
+      pieces.push({ roadId: e.roadId, pts, lengthM: e.lengthM, durationS: travel(e) });
     }
     const endPts = endVia!.fwd ? toLL(slice(axisM(b.roadId), 0, b.along)) : toLL(slice(axisM(b.roadId), b.along, b.length)).reverse();
     const ep = endVia!.fwd ? bf! : bb!;
     const endLen = endVia!.fwd ? b.along : b.length - b.along;
-    pieces.push({ roadId: b.roadId, pts: endPts, lengthM: endLen, durationS: endLen / (ep.speedKmh / 3.6) });
+    pieces.push({ roadId: b.roadId, pts: endPts, lengthM: endLen, durationS: (endLen / (ep.speedKmh / 3.6)) * slow(ep) });
   }
 
   const line: LngLat[] = [];
@@ -140,7 +164,9 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
   }
   steps.push({ roadName: '', distanceM: 0, durationS: 0, maneuver: 'arrive', instruction: 'Arrivo a destinazione', at: line[line.length - 1] ?? to });
   const distanceM = pieces.reduce((s, p) => s + p.lengthM, 0);
-  return { found: true, distanceM, durationS: best, line, roadIds: [...new Set(pieces.map((p) => p.roadId))], steps, warnings, mode: ctx.mode };
+  // Real travel time of the path found (search costs may include penalties): pieces plus junction delays.
+  const durationS = pieces.reduce((t, p) => t + p.durationS, 0) + delayS;
+  return { found: true, distanceM, durationS, line, roadIds: [...new Set(pieces.map((p) => p.roadId))], steps, warnings, mode: ctx.mode };
 }
 
 
@@ -148,10 +174,10 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
  * Route through several points in order (origin, stops…, destination): one graph, one leg per pair.
  * Steps of intermediate arrivals become "Tappa" steps; the route is found only if every leg is.
  */
-export function routeVia(net: Network, frameOrigin: LngLat, points: readonly LngLat[], ctx: RoutingContext): Route & { legs: readonly { distanceM: number; durationS: number; found: boolean }[] } {
+export function routeVia(net: Network, frameOrigin: LngLat, points: readonly LngLat[], ctx: RoutingContext, costs: RouteCosts = {}, prebuilt?: RoadGraph): Route & { legs: readonly { distanceM: number; durationS: number; found: boolean }[] } {
   const frame = new LocalFrame(frameOrigin);
-  const g = buildGraph(net, frame, ctx);
-  const legs = points.slice(1).map((to, i) => route(net, frameOrigin, points[i]!, to, ctx, g));
+  const g = prebuilt ?? buildGraph(net, frame, ctx);
+  const legs = points.slice(1).map((to, i) => route(net, frameOrigin, points[i]!, to, ctx, g, costs));
   const found = legs.every((l) => l.found);
   const line: LngLat[] = [];
   const steps: RouteStep[] = [];
@@ -170,4 +196,30 @@ export function routeVia(net: Network, frameOrigin: LngLat, points: readonly Lng
     warnings: [...new Set(legs.flatMap((l, i) => l.warnings.map((w) => (legs.length > 1 && !l.found ? `Tratto ${i + 1}: ${w}` : w))))],
     legs: legs.map((l) => ({ distanceM: l.distanceM, durationS: l.durationS, found: l.found })),
   };
+}
+
+export type ViaRoute = ReturnType<typeof routeVia>;
+
+/**
+ * Best route plus up to two real alternatives (penalty method): the roads of the routes already found
+ * cost 1,8× in the search; an alternative is kept if it shares under 70 % of its length with the others
+ * and takes at most 40 % longer. Times are real (with congestion when `costs.travel` has it).
+ */
+export function routeAlternatives(net: Network, frameOrigin: LngLat, points: readonly LngLat[], ctx: RoutingContext, costs: RouteCosts = {}): ViaRoute[] {
+  const g = buildGraph(net, new LocalFrame(frameOrigin), ctx);
+  const travel = costs.travel ?? ((e: GraphEdge) => e.costS);
+  const best = routeVia(net, frameOrigin, points, ctx, costs, g);
+  if (!best.found) return [best];
+  const out: ViaRoute[] = [best];
+  const used = new Set(best.roadIds);
+  const lengthOn = (r: ViaRoute, ids: ReadonlySet<string>) => r.roadIds.reduce((t, id) => t + (ids.has(id) ? 1 : 0), 0) / Math.max(1, r.roadIds.length);
+  for (let k = 0; k < 4 && out.length < 3; k++) {
+    const alt = routeVia(net, frameOrigin, points, ctx, { travel, search: (e) => travel(e) * (used.has(e.roadId) ? 1.8 : 1) }, g);
+    if (!alt.found) break;
+    alt.roadIds.forEach((id) => used.add(id));
+    if (alt.durationS > best.durationS * 1.4) continue;
+    if (out.some((r) => lengthOn(alt, new Set(r.roadIds)) > 0.7)) continue;
+    out.push(alt);
+  }
+  return out;
 }

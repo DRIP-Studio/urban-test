@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import {
-  FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeSignalJunction, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
+  FlowSimulation, NetworkReplayer, PhysicalCache, analyzeJunction, analyzeSignalJunction, congestedTravel, routeAlternatives, analyzeNetwork, auditScenario, buildPhysicalModel, estimateTraffic,
   coordinateCorridor, detectCorridors, designPlant, groupDemand, optimizeNetworkSignals, sidewalkCoverage, isochrone, route, routeVia, screenSafety, serviceAccess, signalHeads, suggestSignalPlan,
   type CityBaseline, type Network, type Operation, type PhysLine, type PhysPolygon, type TrafficResult,
 } from '@drip-urban/core';
@@ -13,6 +13,8 @@ let baseline: CityBaseline | null = null;
 const replayer = new NetworkReplayer();
 let net: Network | null = null;
 let lastTraffic: TrafficResult | null = null;
+/** Traffic estimate of the existing city (for «today» with congestion); the baseline never changes in a session. */
+let baseTraffic: TrafficResult | null = null;
 let sim: FlowSimulation | null = null;
 let simTimer: ReturnType<typeof setInterval> | null = null;
 let simSpeed = 4;
@@ -80,7 +82,16 @@ function runJob(kind: string, args: Record<string, unknown>): unknown {
       // Origin, optional stops (navigatore a tappe), destination.
       const pts = [args.from, ...((args.via as [number, number][] | undefined) ?? []), args.to] as [number, number][];
       const ctx = args.ctx as Parameters<typeof route>[4];
-      return { today: routeVia(base, o, pts, ctx), project: routeVia(net, o, pts, ctx) };
+      // With traffic: real times from the DRIP estimate (BPR), for today and for the project alike.
+      let todayCost = {}, projectCost = {};
+      if (args.traffic) {
+        if (!lastTraffic) lastTraffic = estimateTraffic(net, baseline);
+        if (!baseTraffic) baseTraffic = estimateTraffic(base, baseline);
+        todayCost = { travel: congestedTravel(baseTraffic.flows) };
+        projectCost = { travel: congestedTravel(lastTraffic.flows) };
+      }
+      const alternatives = routeAlternatives(net, o, pts, ctx, projectCost);
+      return { today: routeVia(base, o, pts, ctx, todayCost), project: alternatives[0]!, alternatives };
     }
     case 'junction': {
       // A signalised junction is analysed as its controller sees it (approaches left out of the plan excluded).
@@ -151,7 +162,7 @@ self.onmessage = (ev: MessageEvent<EngineRequest>) => {
   const m = ev.data;
   try {
     if (m.type === 'init') {
-      baseline = m.baseline; replayer.derive(baseline, []); net = null; lastTraffic = null;
+      baseline = m.baseline; replayer.derive(baseline, []); net = null; lastTraffic = null; baseTraffic = null;
       prev.surfaces.clear(); prev.markings.clear(); prev.lines.clear();
       post({ type: 'ready' }); return;
     }

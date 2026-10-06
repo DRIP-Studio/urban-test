@@ -338,3 +338,24 @@ describe('junction.set payload shape', () => {
     expect(() => h.commit({ type: 'junction.set', payload: { spec: { nodeId: node, control: 'priority', cornerRadiusM: 6, minorRoadIds: [] } } })).toThrow(OperationRejected);
   });
 });
+
+describe('navigator: alternatives and congestion', () => {
+  it('finds distinct alternatives no more than 40 % slower, and congestion never makes a trip faster', async () => {
+    const { routeAlternatives, congestedTravel, routeVia } = await import('../src/index');
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const [w, s, e, n] = baseline.bbox;
+    const A: [number, number] = [w + (e - w) * 0.2, s + (n - s) * 0.3], B: [number, number] = [w + (e - w) * 0.8, s + (n - s) * 0.7];
+    const alts = routeAlternatives(h.network, baseline.origin, [A, B], ctx);
+    expect(alts[0]!.found).toBe(true);
+    expect(alts.length).toBeGreaterThanOrEqual(2);
+    for (const r of alts.slice(1)) {
+      expect(r.durationS).toBeLessThanOrEqual(alts[0]!.durationS * 1.4 + 1e-6);
+      expect(r.roadIds.join()).not.toBe(alts[0]!.roadIds.join());
+    }
+    const free = routeVia(h.network, baseline.origin, [A, B], ctx);
+    const traffic = estimateTraffic(h.network, baseline);
+    const jam = routeVia(h.network, baseline.origin, [A, B], ctx, { travel: congestedTravel(traffic.flows) });
+    expect(jam.found).toBe(true);
+    expect(jam.durationS).toBeGreaterThanOrEqual(free.durationS - 1e-6);
+  });
+});

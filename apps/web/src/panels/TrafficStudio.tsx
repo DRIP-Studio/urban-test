@@ -278,9 +278,12 @@ function Simulation() {
 }
 
 export function TrafficStudio() {
-  const [tab, setTab] = useState<Tab>('estimate');
+  const tool = useApp((s) => s.tool);
+  // The Navigator tool (P) opens its tab; leaving the tab leaves the tool.
+  const [tab, setTab] = useState<Tab>(() => (useApp.getState().tool === 'route' ? 'navigator' : 'estimate'));
   useEffect(() => { toggleLayer('traffic', true); return () => setSource('traffic', null); }, []);
-  useEffect(() => { if (tab === 'navigator') setTool('route'); else setTool('select'); }, [tab]);
+  useEffect(() => { if (tool === 'route' && tab !== 'navigator') setTab('navigator'); }, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab === 'navigator') setTool('route'); else if (useApp.getState().tool === 'route') setTool('select'); }, [tab]);
   return (
     <div className="panel-stack">
       <Segmented<Tab> label="Fonte traffico" size="sm" value={tab} onChange={(v) => { setTab(v); if (v !== 'live') { setLiveAuto(false); setSource('incidents', null); } if (v !== 'live' && v !== 'estimate') setSource('traffic', null); }}

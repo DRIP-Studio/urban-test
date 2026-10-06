@@ -1,5 +1,6 @@
 @import './components.css';
 @import './panels.css';
+@import '../panels/panels.css';
 
 /* ------------------------------------------------------------------ base */
 *, *::before, *::after { box-sizing: border-box; }

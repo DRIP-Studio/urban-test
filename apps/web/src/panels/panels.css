@@ -6,3 +6,16 @@
 .task-list { list-style: none; margin: 0; padding: 0; display: grid; gap: calc(10 * var(--px)); }
 .task-list li { display: grid; gap: calc(6 * var(--px)); padding-bottom: calc(10 * var(--px)); border-bottom: 1px solid var(--line-1); }
 .task-head { display: grid; grid-template-columns: 1fr auto auto; gap: calc(6 * var(--px)); align-items: center; }
+
+/* Navigator */
+.nav-place { display: flex; align-items: center; gap: var(--s-2); }
+.nav-place input { flex: 1; min-width: 0; width: 100%; font: inherit; font-size: var(--fs-12); background: var(--ink-2); border: 1px solid var(--line-2); border-radius: var(--r-2); padding: calc(6 * var(--px)) calc(8 * var(--px)); color: var(--text-1); }
+.nav-place input::placeholder { color: var(--text-2); }
+.nav-via { display: flex; align-items: center; gap: var(--s-2); }
+.alt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-1); }
+.alt-card { width: 100%; display: grid; gap: 2px; text-align: left; font: inherit; color: var(--text-1); background: var(--ink-2); border: 1px solid transparent; border-radius: var(--r-2); padding: var(--s-2) var(--s-3); cursor: pointer; }
+.alt-card span { font-size: var(--fs-12); color: var(--text-2); }
+.alt-card.is-on { border-color: var(--drip-accent); }
+.step-btn { width: 100%; font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.step-btn span:nth-child(2) { flex: 1; }
+.step-btn:hover span:nth-child(2) { text-decoration: underline; }

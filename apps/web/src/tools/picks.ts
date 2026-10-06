@@ -24,7 +24,13 @@ interface PicksState {
   addingVia: boolean;
   /** Truck profile used when mode = truck (or any vehicle limits). */
   vehicle: { weightT: number; heightM: number; widthM: number; lengthM: number; axleLoadT: number; hazmat: boolean };
-  result: { today: Route; project: Route } | null;
+  result: { today: Route; project: Route; alternatives: Route[] } | null;
+  /** Index of the alternative shown as «project» route. */
+  altIndex: number;
+  /** Times with the DRIP traffic estimate (congestion) instead of free flow. */
+  traffic: boolean;
+  selectAlternative(i: number): void;
+  swapEnds(): void;
   routing: boolean;
   isoAt: LngLat | null;
   isoMode: TravelMode;
@@ -49,7 +55,7 @@ const scenarioId = () => useApp.getState().scenario?.id ?? 'baseline';
 let transitVersion = 0;
 
 export const usePicks = create<PicksState>((set, get) => ({
-  mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, via: [], addingVia: false, result: null, routing: false,
+  mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, via: [], addingVia: false, result: null, routing: false, altIndex: 0, traffic: false,
   vehicle: { weightT: 18, heightM: 3.8, widthM: 2.55, lengthM: 10, axleLoadT: 8, hazmat: false },
   isoAt: null, isoMode: 'walk', isoMinutes: null, transit: {}, selectedRouteId: null, newLineMode: 'bus',
 
@@ -61,19 +67,32 @@ export const usePicks = create<PicksState>((set, get) => ({
     drawRoutePins();
   },
   async runRoute() {
-    const { from, to, via, mode, departure, vehicle } = get();
+    const { from, to, via, mode, departure, vehicle, traffic } = get();
     if (!from || !to) return;
     set({ routing: true });
     try {
       const veh = mode === 'truck' ? vehicle : undefined;
-      const r = await engine.job<{ today: Route; project: Route }>('compareRoute', { from, to, via, ctx: { mode, day: departure.day, minutes: departure.minutes, ...(veh ? { vehicle: veh } : {}) } });
-      set({ result: r });
-      setSource('route', r.project.found ? fc([{ type: 'Feature', geometry: { type: 'LineString', coordinates: r.project.line.map((p) => [...p]) }, properties: {} }]) : null);
+      const r = await engine.job<{ today: Route; project: Route; alternatives: Route[] }>('compareRoute', { from, to, via, traffic, ctx: { mode, day: departure.day, minutes: departure.minutes, ...(veh ? { vehicle: veh } : {}) } });
+      set({ result: r, altIndex: 0 });
+      drawRoutes();
       setSource('compare', r.today.found ? fc([{ type: 'Feature', geometry: { type: 'LineString', coordinates: r.today.line.map((p) => [...p]) }, properties: {} }]) : null);
       if (!r.project.found) toast.warn('Percorso non trovato', r.project.warnings.join(' · '));
     } catch (e) {
       toast.error('Navigatore', e instanceof Error ? e.message : String(e));
     } finally { set({ routing: false }); }
+  },
+  selectAlternative(i) {
+    const r = get().result;
+    if (!r?.alternatives[i]) return;
+    set({ altIndex: i, result: { ...r, project: r.alternatives[i]! } });
+    drawRoutes();
+  },
+  swapEnds() {
+    const { from, to, via } = get();
+    if (!from || !to) return;
+    set({ from: to, to: from, via: [...via].reverse() });
+    drawRoutePins();
+    void get().runRoute();
   },
   pickIsochrone(ll) { set({ isoAt: ll }); void get().runIsochrone(); },
   async runIsochrone() {
@@ -174,4 +193,12 @@ export function drawTransit(): void {
   setSource('transit-stops', fc(stops));
   const bs = transit.bikeshare?.[scenarioId()];
   setSource('bike-stations', fc((bs?.stations ?? []).map((st): Feature => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [...st.at] }, properties: { id: st.id, name: st.name, docks: st.docks } }))));
+}
+
+/** Selected route on top (DRIP blue), the other alternatives underneath in a quieter tone. */
+function drawRoutes(): void {
+  const { result, altIndex } = usePicks.getState();
+  if (!result?.project.found) { setSource('route', null); return; }
+  const feats: Feature[] = result.alternatives.map((r, i) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.line.map((p) => [...p]) }, properties: { alt: i !== altIndex, rank: i === altIndex ? 1 : 0 } }));
+  setSource('route', fc(feats));
 }

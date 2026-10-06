@@ -107,7 +107,8 @@
 .od div { display: flex; gap: calc(8 * var(--px)); align-items: center; }
 .pin { display: inline-flex; width: calc(20 * var(--px)); height: calc(20 * var(--px)); border-radius: 50%; align-items: center; justify-content: center; background: var(--drip-accent); color: var(--ink-0); font-weight: 800; font-size: calc(11 * var(--px)); flex: none; }
 .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(6 * var(--px)); font-size: var(--fs-12); }
-.steps li { display: grid; grid-template-columns: calc(22 * var(--px)) 1fr auto; gap: calc(6 * var(--px)); align-items: center; }
+.steps li { display: block; }
+.steps li > .step-btn { display: grid; grid-template-columns: calc(22 * var(--px)) 1fr auto; gap: calc(6 * var(--px)); align-items: center; }
 .steps .hint { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-11); }
 .route-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(4 * var(--px)); font-size: var(--fs-12); }
 .route-list li { display: flex; gap: calc(6 * var(--px)); align-items: center; }
