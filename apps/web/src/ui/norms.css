@@ -1,20 +1,20 @@
 /* Normativa e verifiche: inline citations and the sheet. */
-.norm-ref { display: inline; background: none; border: 0; padding: 0 2px; margin: 0; font: inherit; font-size: var(--fs-12); color: var(--drip-accent); text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; white-space: nowrap; }
+.norm-ref { display: inline; background: none; border: 0; padding: 0 calc(2 * var(--px)); margin: 0; font: inherit; font-size: var(--fs-12); color: var(--drip-accent); text-decoration: underline dotted; text-underline-offset: calc(2 * var(--px)); cursor: help; white-space: nowrap; }
 .norm-ref:hover { text-decoration-style: solid; }
 
 .norms-tabs { margin-bottom: var(--s-3); }
 .norms-counts { display: flex; gap: var(--s-2); flex-wrap: wrap; margin: var(--s-2) 0; }
-.norms-count { border: 0; border-radius: var(--r-2); padding: 6px 10px; font-size: var(--fs-12); font-weight: 600; background: var(--ink-2); color: var(--text-3); }
+.norms-count { border: 0; border-radius: var(--r-2); padding: calc(6 * var(--px)) calc(10 * var(--px)); font-size: var(--fs-12); font-weight: 600; background: var(--ink-2); color: var(--text-3); }
 .norms-count.is-on.error { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
 .norms-count.is-on.warning { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
 .norms-count.is-on.info { color: var(--drip-accent); background: var(--drip-accent-soft); }
 .norms-group { margin: var(--s-3) 0; }
 .norms-group > header { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--fs-12); color: var(--text-2); margin-bottom: var(--s-1); }
 .norms-group > header strong { color: var(--text-1); }
-.norms-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.norms-item { display: grid; grid-template-columns: 8px 1fr; gap: var(--s-2); width: 100%; text-align: left; background: none; border: 0; padding: 6px 4px; border-radius: var(--r-2); color: var(--text-2); font-size: var(--fs-12); }
+.norms-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(2 * var(--px)); }
+.norms-item { display: grid; grid-template-columns: calc(8 * var(--px)) 1fr; gap: var(--s-2); width: 100%; text-align: left; background: none; border: 0; padding: calc(6 * var(--px)) calc(4 * var(--px)); border-radius: var(--r-2); color: var(--text-2); font-size: var(--fs-12); }
 .norms-item:hover { background: var(--ink-2); }
-.norms-item .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: var(--drip-accent); }
+.norms-item .dot { width: calc(8 * var(--px)); height: calc(8 * var(--px)); border-radius: 50%; margin-top: calc(4 * var(--px)); background: var(--drip-accent); }
 .norms-item.error .dot { background: var(--err); }
 .norms-item.warning .dot { background: var(--warn); }
 .norms-item strong { display: block; color: var(--text-1); font-weight: 600; }
@@ -22,10 +22,10 @@
 .norms-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; margin: var(--s-2) 0; }
 .norm-card { border: 1px solid var(--ink-3); border-radius: var(--r-2); padding: var(--s-2) var(--s-3); margin-bottom: var(--s-2); font-size: var(--fs-12); color: var(--text-2); }
 .norm-card.is-focus { border-color: var(--drip-accent); }
-.norm-card h4 { margin: 0 0 2px; font-size: var(--fs-13, 13px); color: var(--text-1); }
-.norm-card .title { color: var(--text-2); margin: 0 0 4px; }
-.norm-card dl { margin: 4px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--s-2); }
+.norm-card h4 { margin: 0 0 calc(2 * var(--px)); font-size: var(--fs-13, calc(13 * var(--px))); color: var(--text-1); }
+.norm-card .title { color: var(--text-2); margin: 0 0 calc(4 * var(--px)); }
+.norm-card dl { margin: calc(4 * var(--px)) 0 0; display: grid; grid-template-columns: max-content 1fr; gap: calc(2 * var(--px)) var(--s-2); }
 .norm-card dt { color: var(--text-1); font-weight: 600; }
 .norm-card dd { margin: 0; }
-.norm-card .status { color: var(--text-3); font-style: italic; margin: 4px 0 0; }
+.norm-card .status { color: var(--text-3); font-style: italic; margin: calc(4 * var(--px)) 0 0; }
 .norm-card a { color: var(--drip-accent); }

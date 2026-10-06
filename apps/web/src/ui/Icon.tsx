@@ -1,3 +1,4 @@
+import { UI_SCALE } from './theme';
 /**
  * One icon family: 24 px optical grid, 1.6 stroke, round caps/joins, no fills.
  * Paths are authored for DRIP Urban; add new glyphs here only.
@@ -116,8 +117,9 @@ export type IconName = keyof typeof P;
 
 export function Icon({ name, size = 18, title, className }: { name: IconName | string; size?: number; title?: string; className?: string }) {
   const d = P[name];
+  const px = Math.round(size * UI_SCALE * 2) / 2;
   return (
-    <svg className={`icon ${className ?? ''}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
+    <svg className={`icon ${className ?? ''}`} width={px} height={px} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
       {title ? <title>{title}</title> : null}
       {d ? <path d={d} /> : <rect x="5" y="5" width="14" height="14" />}
     </svg>

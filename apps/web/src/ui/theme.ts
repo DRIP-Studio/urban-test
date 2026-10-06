@@ -47,3 +47,6 @@ export function installTheme(): void {
     if (pref === 'system') { const theme = resolve(pref); useTheme.setState({ theme }); apply(theme); }
   });
 }
+
+/** Interface scale, same as --px in tokens.css: icon and other sizes set from code follow it. */
+export const UI_SCALE = 0.85;

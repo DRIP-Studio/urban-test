@@ -13,6 +13,8 @@
 @font-face { font-family: 'Ginto Nord'; src: url('/fonts/ginto-nord-900.woff2') format('woff2'); font-weight: 900; font-display: swap; }
 
 :root {
+  /* Interface scale: every length in the UI stylesheets is a multiple of --px (0.85 = 85 %). Map and Twin are not scaled. */
+  --px: 0.85px;
   /* Surfaces — DRIP product system: off-black base, one warm-neutral family (no cool/warm mix). */
   --ink-0: #0d0d0d;            /* chrome: top bar, rail, status */
   --ink-1: #141414;            /* panels */
@@ -83,15 +85,15 @@
   --font-display: 'Ginto Nord', 'Ginto', system-ui, sans-serif;
   --font-editorial: 'Playfair Display', Georgia, serif;
   --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  --fs-10: 10px;
-  --fs-11: 11px;
-  --fs-12: 12px;
-  --fs-13: 13px;
-  --fs-14: 15px;   /* Ginto loses the dot of "i" at exactly 14px (hinting): the step is 15px */
-  --fs-16: 16px;
-  --fs-20: 21px;
-  --fs-28: 34px;   /* φ steps above the UI size */
-  --fs-40: 55px;
+  --fs-10: calc(10 * var(--px));
+  --fs-11: calc(11 * var(--px));
+  --fs-12: calc(12 * var(--px));
+  --fs-13: calc(13 * var(--px));
+  --fs-14: calc(15 * var(--px));   /* Ginto loses the dot of "i" at exactly calc(14 * var(--px)) (hinting): the step is calc(15 * var(--px)) */
+  --fs-16: calc(16 * var(--px));
+  --fs-20: calc(21 * var(--px));
+  --fs-28: calc(34 * var(--px));   /* φ steps above the UI size */
+  --fs-40: calc(55 * var(--px));
   --lh-tight: 1.1;
   --lh-ui: 1.45;
   --lh-text: 1.6;
@@ -99,20 +101,20 @@
   --tracking-display: -0.02em;
 
   /* Spacing — Fibonacci/golden steps (each ≈ φ × the previous). */
-  --s-1: 5px;
-  --s-2: 8px;
-  --s-3: 13px;
-  --s-4: 21px;
-  --s-5: 26px;
-  --s-6: 34px;
-  --s-8: 42px;
-  --s-12: 55px;
+  --s-1: calc(5 * var(--px));
+  --s-2: calc(8 * var(--px));
+  --s-3: calc(13 * var(--px));
+  --s-4: calc(21 * var(--px));
+  --s-5: calc(26 * var(--px));
+  --s-6: calc(34 * var(--px));
+  --s-8: calc(42 * var(--px));
+  --s-12: calc(55 * var(--px));
 
   /* Radii — tighter inside, softer outside. */
-  --r-1: 5px;
-  --r-2: 8px;
-  --r-3: 13px;
-  --r-4: 21px;
+  --r-1: calc(5 * var(--px));
+  --r-2: calc(8 * var(--px));
+  --r-3: calc(13 * var(--px));
+  --r-4: calc(21 * var(--px));
 
   /* Motion — springs as linear() curves sampled from a damped-spring model (see docs/DESIGN-SYSTEM.md).
      Transitions restart from the on-screen value, so they stay interruptible. */
@@ -126,23 +128,23 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Layout — chrome heights on the golden scale; inspector ≈ viewport / φ³. */
-  --topbar-h: 55px;
-  --statusbar-h: 29px;
-  --rail-w: 60px;
-  --inspector-w: 356px;
+  --topbar-h: calc(55 * var(--px));
+  --statusbar-h: calc(29 * var(--px));
+  --rail-w: calc(60 * var(--px));
+  --inspector-w: calc(356 * var(--px));
   --dock-h: 34vh;
 
   /* Elevation — tinted, single light source from above. */
-  --shadow-pop: 0 13px 34px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line-2);
-  --shadow-float: 0 8px 21px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--line-1);
+  --shadow-pop: 0 calc(13 * var(--px)) calc(34 * var(--px)) rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line-2);
+  --shadow-float: 0 calc(8 * var(--px)) calc(21 * var(--px)) rgba(0, 0, 0, 0.35), 0 0 0 1px var(--line-1);
 
   /* Glass surfaces (popover, toasts, map overlays) and modal backdrop. */
   --glass: rgba(27, 27, 28, 0.94);
   --glass-strong: rgba(13, 13, 13, 0.86);
   --glass-tip: rgba(20, 20, 20, 0.96);
   --backdrop: rgba(5, 5, 6, 0.55);
-  --shadow-sheet: -21px 0 55px rgba(0, 0, 0, 0.4);
-  --shadow-thumb: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sheet: calc(-21 * var(--px)) 0 calc(55 * var(--px)) rgba(0, 0, 0, 0.4);
+  --shadow-thumb: 0 1px calc(2 * var(--px)) rgba(0, 0, 0, 0.4);
   --hi-line: rgba(255, 255, 255, 0.06);
   --drip-orange-soft-2: rgba(232, 119, 46, 0.22);
   --map-ctrl-invert: invert(0.9);
@@ -193,10 +195,10 @@
   --glass-strong: rgba(250, 249, 246, 0.9);
   --glass-tip: rgba(29, 29, 27, 0.94);
   --backdrop: rgba(29, 29, 27, 0.28);
-  --shadow-pop: 0 13px 34px rgba(29, 29, 27, 0.16), 0 0 0 1px var(--line-2);
-  --shadow-float: 0 8px 21px rgba(29, 29, 27, 0.12), 0 0 0 1px var(--line-1);
-  --shadow-sheet: -21px 0 55px rgba(29, 29, 27, 0.12);
-  --shadow-thumb: 0 1px 2px rgba(29, 29, 27, 0.18);
+  --shadow-pop: 0 calc(13 * var(--px)) calc(34 * var(--px)) rgba(29, 29, 27, 0.16), 0 0 0 1px var(--line-2);
+  --shadow-float: 0 calc(8 * var(--px)) calc(21 * var(--px)) rgba(29, 29, 27, 0.12), 0 0 0 1px var(--line-1);
+  --shadow-sheet: calc(-21 * var(--px)) 0 calc(55 * var(--px)) rgba(29, 29, 27, 0.12);
+  --shadow-thumb: 0 1px calc(2 * var(--px)) rgba(29, 29, 27, 0.18);
   --hi-line: rgba(255, 255, 255, 0.7);
   --map-ctrl-invert: none;
 
