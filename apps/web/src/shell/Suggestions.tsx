@@ -3,12 +3,21 @@ import { installSuggestions, dismissSuggestion, useSuggest } from '../state/sugg
 import { useApp } from '../state/store';
 import { flyTo } from '../map/mapStore';
 import { Icon } from '../ui/Icon';
+import { toast } from '../state/toasts';
 
 /**
  * Next-step suggestions after an edit (bottom right of the map), each with norm and one-click action.
  * Advisory only: one card open at a time, the others on one line, the whole panel can be folded so it
  * never hides the drawing. Opening a card frames its place on the map.
  */
+/** An action never fails silently: an unexpected error is reported and the card stays. */
+function runAction(a: { label: string; run: () => void }): void {
+  try { a.run(); } catch (e) {
+    console.error('[suggestion]', a.label, e);
+    toast.error(`«${a.label}» non applicato`, e instanceof Error ? e.message : String(e));
+  }
+}
+
 export function Suggestions() {
   useEffect(() => installSuggestions(), []);
   const items = useSuggest((s) => s.items);
@@ -41,7 +50,7 @@ export function Suggestions() {
                 <p>{s.detail}</p>
                 {s.ref ? <span className="suggest-ref"><Icon name="law" size={11} />{s.ref}</span> : null}
                 <div className="suggest-actions">
-                  {s.actions.filter((a) => a.label !== 'Ignora').map((a) => <button key={a.label} type="button" className={`btn btn-sm ${a.primary ? 'btn-primary' : 'btn-ghost'}`} onClick={a.run}>{a.label}</button>)}
+                  {s.actions.filter((a) => a.label !== 'Ignora').map((a) => <button key={a.label} type="button" className={`btn btn-sm ${a.primary ? 'btn-primary' : 'btn-ghost'}`} onClick={() => runAction(a)}>{a.label}</button>)}
                 </div>
               </>
             ) : null}

@@ -5,7 +5,7 @@ import { fc } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
 import { plateOnPoleOps } from '../state/actions';
 import { commit, newId, select, useApp } from '../state/store';
-import type { NetworkIndex } from './snap';
+import { objectSnap, type NetworkIndex } from './snap';
 import { useTool } from './toolState';
 import type { ToolContext, ToolEvent, ToolHandler } from './types';
 
@@ -42,7 +42,7 @@ function makePlaceTool(kind: 'furniture' | 'sign'): ToolHandler {
   const preview = (e: ToolEvent, ctx: ToolContext) => {
     const idx = ctx.index();
     if (!idx) return;
-    const al = e.alt ? { at: e.lngLat, bearing: null } : alignToRoad(idx, e.lngLat);
+    const al = objectSnap(e) ? alignToRoad(idx, e.lngLat) : { at: e.lngLat, bearing: null };
     autoBearing = al.bearing === null ? null : Math.round(al.bearing) + 90;
     const { w, d } = dims();
     ghost(idx, al.at, w, d, rotation());

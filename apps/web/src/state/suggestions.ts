@@ -137,8 +137,9 @@ function forNewRoads(roads: readonly Road[]): Suggestion[] {
       key, icon: 'warning', at, title: `Limite ${fast[0]!.speedKmh} km/h in ambito urbano`, ref: 'art. 142 CdS',
       detail: 'Nei centri abitati il limite generale è 50 km/h; limiti superiori (fino a 70) solo su strade con caratteristiche adeguate.',
       actions: [{ label: 'Porta a 50 km/h', primary: true, run: () => {
-        commit('batch', { label: 'Limite 50 km/h', ops: fast.map((r) => ({ type: 'road.update', payload: { roadId: r.id, changes: { speedKmh: 50 } } })) });
-        dismissSuggestion(key);
+        const n = useApp.getState().network!;
+        const ops = fast.filter((r) => (n.roads[r.id]?.speedKmh ?? 0) > 50).map((r) => ({ type: 'road.update', payload: { roadId: r.id, changes: { speedKmh: 50 } } }));
+        if (!ops.length || commit('batch', { label: 'Limite 50 km/h', ops }).ok) dismissSuggestion(key);
       } }, { label: 'Ignora', run: done(key) }],
       valid: (n) => fast.some((r) => (n.roads[r.id]?.speedKmh ?? 0) > 50),
     });
@@ -158,7 +159,13 @@ function forRoad(net: Network, road: Road): Suggestion[] {
       key, icon: 'junction', at: net.nodes[nodeId]?.at, title: withName ? `Regola l'incrocio con ${withName}` : 'Regola il nuovo incrocio', ref: 'artt. 145, 37 CdS',
       detail: `Incrocio a ${arms} rami senza regolazione: precedenza a destra. Imposta dare precedenza o STOP sulla strada nuova, una rotatoria o un impianto semaforico.`,
       actions: [
-        { label: 'Dare precedenza sulla nuova', primary: true, run: () => { commit('junction.set', { spec: { nodeId, control: 'priority', cornerRadiusM: 6, minorRoadIds: [road.id] } }); dismissSuggestion(key); } },
+        { label: 'Dare precedenza sulla nuova', primary: true, run: () => {
+          // Every new tract reaching the node yields (a road drawn across arrives as two pieces).
+          const n = useApp.getState().network!;
+          const minor = Object.values(n.roads).filter((r) => (r.from === nodeId || r.to === nodeId) && r.provenance.geometry?.kind === 'project' && !r.tags?.roundabout).map((r) => r.id);
+          const prev = n.junctions[nodeId];
+          if (commit('junction.set', { spec: { nodeId, control: 'priority', cornerRadiusM: prev?.cornerRadiusM ?? 6, minorRoadIds: minor.length ? minor : [road.id], crossingRoadIds: prev?.crossingRoadIds ?? [], ...(prev?.laneConnections ? { laneConnections: prev.laneConnections } : {}) } }).ok) dismissSuggestion(key);
+        } },
         { label: 'Apri incrocio', run: () => { select({ kind: 'node', ids: [nodeId] }); dismissSuggestion(key); } },
       ],
       valid: (n) => !n.junctions[nodeId],
@@ -167,8 +174,10 @@ function forRoad(net: Network, road: Road): Suggestion[] {
   return out;
 }
 
-function forCrossing(net: Network, areaId: string): Suggestion[] {
-  const a = net.areas[areaId]!;
+/** A crossing drawn as an area or as a horizontal marking (zebra, bike crossing): same advice. */
+interface CrossingSource { readonly id: string; readonly polygon: readonly LngLat[]; readonly exists: (n: Network) => boolean }
+
+function forCrossing(net: Network, a: CrossingSource): Suggestion[] {
   if (a.polygon.length < 2) return [];
   const f = frame();
   const c: geom.V = (() => { const p = f.toMetric(a.polygon[0]!), q = f.toMetric(a.polygon[1]!); return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; })();
@@ -185,8 +194,11 @@ function forCrossing(net: Network, areaId: string): Suggestion[] {
   out.push({
     key: kSign, icon: 'sign', at: f.toLngLat(c), title: 'Segnala l\'attraversamento', ref: 'art. 135 Reg. fig. II.303 · art. 88 fig. II.14',
     detail: 'Segnale di indicazione «attraversamento pedonale» su entrambi i lati; su strade veloci o poco visibili anche il pericolo (fig. II.14) a 150 m fuori dai centri, 50 m in città.',
-    actions: [{ label: 'Posiziona i segnali', primary: true, run: () => { commit('asset.add', { assets: approachSigns(net, road, along, 1, 'it.sign.attraversamento_pedonale', { crossingId: a.id }) }); dismissSuggestion(kSign); } }, { label: 'Ignora', run: done(kSign) }],
-    valid: (n) => !!n.areas[a.id] && !Object.values(n.assets).some((x) => x.properties.crossingId === a.id),
+    actions: [{ label: 'Posiziona i segnali', primary: true, run: () => {
+      const n = useApp.getState().network!, cur = n.roads[road.id] ?? road;
+      if (commit('asset.add', { assets: approachSigns(n, cur, along, 1, 'it.sign.attraversamento_pedonale', { crossingId: a.id }) }).ok) dismissSuggestion(kSign);
+    } }, { label: 'Ignora', run: done(kSign) }],
+    valid: (n) => a.exists(n) && !Object.values(n.assets).some((x) => x.properties.crossingId === a.id),
   });
   if (road.speedKmh <= 50 && !Object.values(net.features ?? {}).some((x) => x.roadId === road.id && Math.abs((x.station ?? 0) - along) < 6)) {
     const key = `xr:${a.id}`;
@@ -194,10 +206,10 @@ function forCrossing(net: Network, areaId: string): Suggestion[] {
       key, icon: 'calming', at: f.toLngLat(c), title: 'Rialza l\'attraversamento', ref: 'art. 179 Reg. · DM 236/1989',
       detail: 'Su strade urbane fino a 50 km/h l\'attraversamento rialzato abbassa le velocità e dà continuità al percorso pedonale senza rampe.',
       actions: [{ label: 'Rialza (10 cm, rampe 1,20 m)', primary: true, run: () => {
-        commit('feature.set', { feature: { id: newId('f'), kind: 'raised_crossing', roadId: road.id, station: Math.round(along * 10) / 10, lengthM: 4, rampM: 1.2, heightM: 0.1, state: 'project', properties: {}, provenance: PROJECT } });
-        dismissSuggestion(key);
+        if (!useApp.getState().network!.roads[road.id]) { toast.warn('Strada modificata', "La strada dell'attraversamento è stata cambiata: rialzalo con lo strumento Moderazione (D)."); dismissSuggestion(key); return; }
+        if (commit('feature.set', { feature: { id: newId('f'), kind: 'raised_crossing', roadId: road.id, station: Math.round(along * 10) / 10, lengthM: 4, rampM: 1.2, heightM: 0.1, state: 'project', properties: {}, provenance: PROJECT } }).ok) dismissSuggestion(key);
       } }, { label: 'Ignora', run: done(key) }],
-      valid: (n) => !!n.areas[a.id],
+      valid: (n) => a.exists(n),
     });
   }
   return out;
@@ -210,7 +222,7 @@ function forZone(zone: Zone): Suggestion[] {
   const out: Suggestion[] = [{
     key, icon: gated ? 'led' : 'sign', at: zone.polygon[0], title: gated ? 'Varchi elettronici agli ingressi' : 'Segnali Zona 30 agli ingressi', ref: gated ? 'art. 7 c. 9 e 133-bis CdS · DPR 250/1999' : 'art. 135 Reg. fig. II.323/a',
     detail: gated ? 'Ogni ingresso veicolare della zona richiede un varco con pannello «varco attivo/non attivo» e il segnale di inizio zona con gli orari.' : 'Segnale di inizio Zona 30 a ogni ingresso; valuta interventi di moderazione sulle strade interne.',
-    actions: [{ label: gated ? 'Genera i varchi' : 'Posiziona i segnali', primary: true, run: () => { if (generateZoneGates(zone)) dismissSuggestion(key); } }, { label: 'Ignora', run: done(key) }],
+    actions: [{ label: gated ? 'Genera i varchi' : 'Posiziona i segnali', primary: true, run: () => { const z = useApp.getState().network!.zones[zone.id]; if (z && generateZoneGates(z)) dismissSuggestion(key); } }, { label: 'Ignora', run: done(key) }],
     valid: (n) => !!n.zones[zone.id] && !Object.values(n.assets).some((a) => a.properties.zoneId === zone.id && a.state !== 'removed'),
   }];
   if (zone.kind === 'zone30' || zone.kind === 'school') {
@@ -241,7 +253,11 @@ function forFeature(net: Network, id: string): Suggestion[] {
   const out: Suggestion[] = [{
     key, icon: 'sign', title: 'Segnale di preavviso «dosso»', ref: 'art. 85 Reg. fig. II.2 · art. 179 c. 7',
     detail: 'I rallentatori vanno presegnalati con il segnale di pericolo «dosso» prima dell\'elemento, in entrambi i sensi di marcia.',
-    actions: [{ label: 'Posiziona a 30 m', primary: true, run: () => { commit('asset.add', { assets: approachSigns(net, road, ft.station ?? 0, 30, 'it.sign.dosso', { featureId: id }) }); dismissSuggestion(key); } }, { label: 'Ignora', run: done(key) }],
+    actions: [{ label: 'Posiziona a 30 m', primary: true, run: () => {
+      const n = useApp.getState().network!, f = n.features?.[id], cur = f?.roadId ? n.roads[f.roadId] : undefined;
+      if (!f || !cur) { dismissSuggestion(key); return; }
+      if (commit('asset.add', { assets: approachSigns(n, cur, f.station ?? 0, 30, 'it.sign.dosso', { featureId: id }) }).ok) dismissSuggestion(key);
+    } }, { label: 'Ignora', run: done(key) }],
     valid: (n) => !!n.features?.[id] && !Object.values(n.assets).some((a) => a.properties.featureId === id),
   }];
   if ((ft.kind === 'speed_hump' || ft.kind === 'speed_cushion') && road.speedKmh > 30 && humpLimits(30)) {
@@ -249,7 +265,7 @@ function forFeature(net: Network, id: string): Suggestion[] {
     out.push({
       key: k2, icon: 'warning', title: 'Abbassa il limite a 30 km/h', ref: 'art. 179 c. 6 Reg.',
       detail: `Con ${road.speedKmh} km/h il dosso è limitato a ${Math.round((humpLimits(road.speedKmh)?.maxHeightM ?? 0) * 100)} cm; a 30 km/h può arrivare a 7 cm ed è più efficace.`,
-      actions: [{ label: 'Imposta 30 km/h', primary: true, run: () => { commit('road.update', { roadId: road.id, changes: { speedKmh: 30 } }); dismissSuggestion(k2); } }, { label: 'Ignora', run: done(k2) }],
+      actions: [{ label: 'Imposta 30 km/h', primary: true, run: () => { if (!useApp.getState().network!.roads[road.id] || commit('road.update', { roadId: road.id, changes: { speedKmh: 30 } }).ok) dismissSuggestion(k2); } }, { label: 'Ignora', run: done(k2) }],
       valid: (n) => (n.roads[road.id]?.speedKmh ?? 0) > 30 && !!n.features?.[id],
     });
   }
@@ -295,7 +311,11 @@ export function suggestFor(before: Network, after: Network): Suggestion[] {
     .filter((r) => !r.tags?.roundabout && r.provenance.geometry?.kind === 'project' && !isSplitPiece(before, after, r));
   out.push(...forNewRoads(fresh));
   for (const r of fresh) out.push(...forRoad(after, r));
-  for (const id of added(before.areas, after.areas)) if (after.areas[id]!.kind === 'crossing') out.push(...forCrossing(after, id));
+  for (const id of added(before.areas, after.areas)) if (after.areas[id]!.kind === 'crossing') out.push(...forCrossing(after, { id, polygon: after.areas[id]!.polygon, exists: (n) => !!n.areas[id] }));
+  for (const id of added(before.markings, after.markings)) {
+    const mk = after.markings![id]!;
+    if (mk.kind === 'zebra' || mk.kind === 'bike_crossing') out.push(...forCrossing(after, { id, polygon: mk.geometry, exists: (n) => !!n.markings?.[id] }));
+  }
   for (const id of Object.keys(after.zones)) if (!before.zones[id] || before.zones[id]!.kind !== after.zones[id]!.kind) out.push(...forZone(after.zones[id]!));
   for (const id of added(before.features, after.features)) out.push(...forFeature(after, id));
   for (const id of added(before.signalPlans, after.signalPlans)) out.push(...forSignals(after, id));

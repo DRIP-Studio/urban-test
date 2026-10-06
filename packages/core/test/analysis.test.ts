@@ -330,3 +330,11 @@ describe('approaches taken out of a signal plan', () => {
     expect(auditScenario(h.network, baseline.origin, null).filter((i) => i.category === 'signals' && i.severity === 'error')).toHaveLength(0);
   });
 });
+
+describe('junction.set payload shape', () => {
+  it('an incomplete spec (e.g. from an older client or Elios) is rejected with a message, not a crash', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const node = signalisableJunction(h.network);
+    expect(() => h.commit({ type: 'junction.set', payload: { spec: { nodeId: node, control: 'priority', cornerRadiusM: 6, minorRoadIds: [] } } })).toThrow(OperationRejected);
+  });
+});

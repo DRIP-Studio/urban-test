@@ -2,6 +2,7 @@ import { LocalFrame, geom, humpLimits, layoutSection, type LngLat, type Marking,
 import { commit, newId, select, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { makeDrawTool } from './draw';
+import { objectSnap } from './snap';
 import { useTool } from './toolState';
 import type { ToolHandler } from './types';
 
@@ -94,8 +95,8 @@ export const markingTool: ToolHandler = {
     const { t: tan } = geom.sampleAt(road.axis.map((q) => idx.frame.toMetric(q) as geom.V), near.along);
     const off = tan[0] * (p[1] - near.at[1]) - tan[1] * (p[0] - near.at[0]);
     const sign = road.oneway === 'forward' ? 1 : road.oneway === 'backward' ? -1 : off > 0 ? -1 : 1;
-    // Centre on the clicked lane.
-    const lane = layoutSection(road).elements.find((x) => x.el.kind === 'lane' && x.right <= off && off <= x.left);
+    // Centre on the clicked lane (object snap); otherwise exactly where clicked.
+    const lane = objectSnap(e) ? layoutSection(road).elements.find((x) => x.el.kind === 'lane' && x.right <= off && off <= x.left) : undefined;
     const c = lane ? (lane.left + lane.right) / 2 : off;
     const at: geom.V = [near.at[0] - tan[1] * c, near.at[1] + tan[0] * c];
     saveMarking([{ at: idx.frame.toLngLat(at) }, { at: idx.frame.toLngLat([at[0] + tan[0] * sign, at[1] + tan[1] * sign]) }]);

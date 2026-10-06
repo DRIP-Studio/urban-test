@@ -91,6 +91,7 @@ export function StatusBar() {
         Griglia {gridM.toString().replace('.', ',')} m
       </button>
       <button type="button" className={`sb-item sb-toggle ${snap.angle ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, angle: !s.snap.angle } }))}>Angolo 15°</button>
+      <button type="button" className={`sb-item sb-toggle ${snap.objects ? 'is-on' : ''}`} aria-pressed={snap.objects} title="Arredo e cartelli allineati alla strada, segnaletica centrata sulla corsia · F9 spegne tutti gli agganci" onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, objects: !s.snap.objects } }))}>Aggancio elementi</button>
       <LiveToggle />
       <WorkAreaControl />
       <span className="sb-spacer" />

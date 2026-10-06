@@ -14,7 +14,8 @@ interface MapUiState {
   ready: boolean;
   /** Metres per pixel at the current zoom (status bar scale). */
   mpp: number;
-  snap: { node: boolean; edge: boolean; grid: boolean; angle: boolean };
+  /** objects: furniture and signs align to the road, point markings centre on the lane. */
+  snap: { node: boolean; edge: boolean; grid: boolean; angle: boolean; objects: boolean };
   gridM: number;
   /** Focus mode: tool rail and inspector hidden, map edge to edge. */
   focus: boolean;
@@ -27,7 +28,7 @@ export const useMapUi = create<MapUiState>(() => ({
   visible: { ...Object.fromEntries(LAYERS.map((l) => [l.id, l.defaultVisible])), ...(persisted.visible ?? {}) },
   opacity: persisted.opacity ?? {},
   zoom: 15, center: [14.2745, 40.9416], pointer: null, ready: false, mpp: 1,
-  snap: persisted.snap ?? { node: true, edge: true, grid: false, angle: true },
+  snap: { node: true, edge: true, grid: false, angle: true, objects: true, ...(persisted.snap ?? {}) },
   gridM: persisted.gridM ?? 1,
   focus: false,
 }));

@@ -8,6 +8,7 @@ import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
 import { importExistingSidewalks } from '../state/existingState';
 import { useTool } from '../tools/toolState';
+import { toggleAllSnaps } from '../tools/snap';
 
 export interface Command {
   readonly id: string;
@@ -60,6 +61,8 @@ export const COMMANDS: Command[] = [
   { id: 'settings', label: 'Impostazioni e chiavi API', group: 'Sistema', when: () => true, run: () => setDock('settings') },
   { id: 'qa', label: 'Diagnostica sviluppatore', group: 'Sistema', shortcut: 'Ctrl+Shift+D', when: () => true, run: () => setDock('qa') },
   { id: 'snapGrid', label: 'Snap alla griglia on/off', group: 'Vista', when: inProject, run: () => useMapUi.setState((s) => ({ snap: { ...s.snap, grid: !s.snap.grid } })) },
+  { id: 'snapAll', label: 'Tutti gli agganci on/off (nodi, strade, elementi, angoli)', group: 'Vista', shortcut: 'F9', when: inProject, run: () => { const on = toggleAllSnaps(); toast.info(on ? 'Agganci attivi' : 'Agganci disattivati', on ? 'Nodi, strade, elementi e angoli di 15°.' : 'Si disegna e si posiziona esattamente dove si clicca.'); } },
+  { id: 'snapObjects', label: 'Aggancio elementi on/off (arredo e cartelli allineati alla strada, segnaletica centrata sulla corsia)', group: 'Vista', when: inProject, run: () => useMapUi.setState((s) => ({ snap: { ...s.snap, objects: !s.snap.objects } })) },
   { id: 'shortcuts', label: 'Scorciatoie da tastiera', group: 'Aiuto', shortcut: '?', when: () => true, run: () => useShortcuts.getState().toggle() },
   { id: 'search', label: 'Cerca comandi, luoghi, strade', group: 'Vista', shortcut: '/', when: () => true, run: () => usePalette.getState().toggle() },
   { id: 'frame', label: 'Inquadra la selezione', group: 'Vista', shortcut: 'Shift+F', when: () => !!useApp.getState().selection, run: frameSelection },
@@ -114,6 +117,7 @@ export function installShortcuts(toolKey: (e: KeyboardEvent) => boolean): () => 
     if (ctrl && k === 's') return run('snapshot');
     if (ctrl && k === 'l') return run('layers');
     if (ctrl && k === 'e') return run('export');
+    if (e.key === 'F9') return run('snapAll');
     if (!ctrl && !e.altKey) {
       if (e.key === '?') return run('shortcuts');
       if (e.key === '/') return run('search');

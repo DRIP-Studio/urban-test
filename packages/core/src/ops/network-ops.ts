@@ -365,6 +365,12 @@ export const junctionSet = defineOperation<{ readonly spec: JunctionSpec }>({
   type: 'junction.set',
   label: () => 'Regolazione incrocio',
   validate(net, p) {
+    // Payloads also come from Elios and the public API: check the shape before reading it.
+    const s = p.spec as Partial<JunctionSpec> | undefined;
+    if (!s || typeof s.nodeId !== 'string' || !Array.isArray(s.minorRoadIds) || !Array.isArray(s.crossingRoadIds)
+      || !['uncontrolled', 'priority', 'stop', 'signal', 'roundabout'].includes(String(s.control))) {
+      return [err('junction.shape', 'Regolazione incompleta: servono nodeId, control, cornerRadiusM, minorRoadIds e crossingRoadIds')];
+    }
     if (!net.nodes[p.spec.nodeId]) return [err('node.missing', 'Incrocio inesistente', [p.spec.nodeId])];
     if (!(p.spec.cornerRadiusM >= 0 && p.spec.cornerRadiusM <= 25)) return [err('junction.radius', 'Raggio di raccordo fuori intervallo 0–25 m')];
     const bad = [...p.spec.minorRoadIds, ...p.spec.crossingRoadIds].filter((id) => { const r = net.roads[id]; return !r || (r.from !== p.spec.nodeId && r.to !== p.spec.nodeId); });

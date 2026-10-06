@@ -98,6 +98,17 @@ export class NetworkIndex {
 }
 
 /** Snap a pointer position. `from` enables angle snapping for drawing tools. */
+/** Objects (furniture, signs, point markings) align to the road unless Alt is held or object snap is off. */
+export const objectSnap = (e: { alt: boolean }): boolean => !e.alt && useMapUi.getState().snap.objects;
+
+/** Every snap on or off at once (F9, as in CAD): if any is on, all go off. */
+export function toggleAllSnaps(): boolean {
+  const s = useMapUi.getState().snap;
+  const on = !(s.node || s.edge || s.objects || s.grid || s.angle);
+  useMapUi.setState({ snap: { ...s, node: on, edge: on, objects: on, angle: on, grid: on ? s.grid : false } });
+  return on;
+}
+
 export function snap(map: MLMap, idx: NetworkIndex, lngLat: LngLat, opts: { from?: LngLat; disable?: boolean } = {}): SnapResult {
   const s = useMapUi.getState();
   const free: SnapResult = { at: lngLat, kind: 'free' };
