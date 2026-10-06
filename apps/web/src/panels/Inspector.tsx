@@ -3,11 +3,12 @@ import { FunctionalClassField } from './PlansSheet';
 import { BuildingInspector, FeatureInspector, MarkingInspector, PreselectionSection, StructureSection } from './StreetscapePanels';
 import { ztlZones } from '../ztl/link';
 import { sanitizeVms, useLive, vmsMessage } from '../traffic/live';
+import { vmsPages, type VmsPictogram } from '../map/ledPanels';
 import { commit, openDock, select, setDock, setTool, useApp } from '../state/store';
 import { deleteSelection, duplicateSelection, movePlate, plateOnPoleOps, polePlates } from '../state/actions';
 import { useMemo, useState } from 'react';
 import { flyTo } from '../map/mapStore';
-import { Button, Empty, Field, IconButton, NumberField, ProvBadge, Section, Segmented, Select, Stat, TextField, Toggle } from '../ui/controls';
+import { Button, Empty, Field, IconButton, NumberField, ProvBadge, Section, Segmented, Select, Stat, TextField, Toggle, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { NormRef } from '../ui/NormRef';
 import { ToolSettings } from './ToolSettings';
@@ -117,7 +118,22 @@ function PoleSection({ assetId }: { assetId: string }) {
   );
 }
 
-/** PMV: manual text (3 × 16 characters) or automatic from live traffic (incidents, closures, queues). */
+/** Ready-made PMV messages (circulation information only, art. 78 Reg. CdS); pages separated by an empty line. */
+const VMS_PRESETS: { label: string; text: string; pic: VmsPictogram }[] = [
+  { label: 'Incidente', text: 'INCIDENTE\nA 500 M\n\nRIDURRE\nLA VELOCITÀ', pic: 'danger' },
+  { label: 'Lavori in corso', text: 'LAVORI IN CORSO\nCORSIA RIDOTTA\n\nPRUDENZA', pic: 'works' },
+  { label: 'Coda', text: 'CODA\nA 300 M\n\nRIDURRE\nLA VELOCITÀ', pic: 'queue' },
+  { label: 'Strada chiusa', text: 'STRADA CHIUSA\n\nSEGUIRE\nDEVIAZIONE', pic: 'danger' },
+  { label: 'ZTL attiva', text: 'ZTL ATTIVA\nDALLE 8 ALLE 20', pic: 'none' },
+  { label: 'Ghiaccio', text: 'PERICOLO\nGHIACCIO\n\nRIDURRE\nLA VELOCITÀ', pic: 'ice' },
+  { label: 'Evento', text: 'EVENTO IN CORSO\nTRAFFICO\nRALLENTATO', pic: 'none' },
+  { label: 'Allerta meteo', text: 'ALLERTA METEO\n\nGUIDARE\nCON PRUDENZA', pic: 'danger' },
+];
+const PICTOS: { value: VmsPictogram; label: string }[] = [
+  { value: 'none', label: 'Nessuno' }, { value: 'danger', label: 'Pericolo' }, { value: 'works', label: 'Lavori' }, { value: 'queue', label: 'Coda' }, { value: 'ice', label: 'Ghiaccio' },
+];
+
+/** PMV: manual text (up to 4 pages of 3 × 16 characters) or automatic from live traffic (incidents, closures, queues). */
 function VmsSection({ asset }: { asset: Asset }) {
   const live = useLive();
   const mode = asset.properties.vmsMode === 'live' ? 'live' : 'manual';
@@ -125,10 +141,17 @@ function VmsSection({ asset }: { asset: Asset }) {
   return (
     <Section title="Pannello a messaggio variabile">
       <Segmented<string> label="Modalità PMV" value={mode} onChange={(v) => set({ vmsMode: v })} options={[{ value: 'manual', label: 'Testo manuale' }, { value: 'live', label: 'Da traffico live' }]} />
-      <Field label={mode === 'live' ? 'Testo di riserva (se il live non è disponibile)' : 'Messaggio (max 3 righe × 16 caratteri)'}>
+      {mode === 'manual' ? (
+        <Field label="Messaggi pronti">
+          <Select value="" ariaLabel="Messaggi pronti" options={[{ value: '', label: 'Scegli un messaggio…' }, ...VMS_PRESETS.map((p) => ({ value: p.label, label: p.label }))]}
+            onChange={(v) => { const p = VMS_PRESETS.find((x) => x.label === v); if (p) set({ vmsText: sanitizeVms(p.text), vmsPictogram: p.pic }); }} />
+        </Field>
+      ) : null}
+      <FieldGroup label="Pittogramma"><Segmented<VmsPictogram> label="Pittogramma" size="sm" value={(asset.properties.vmsPictogram as VmsPictogram) ?? 'none'} options={PICTOS} onChange={(v) => set({ vmsPictogram: v })} /></FieldGroup>
+      <Field label={mode === 'live' ? 'Testo di riserva (se il live non è disponibile)' : 'Messaggio: 3 righe × 16 caratteri; una riga vuota separa le pagine (max 4)'}>
         <TextField multiline value={String(asset.properties.vmsText ?? '')} ariaLabel="Messaggio PMV" onCommit={(v) => set({ vmsText: sanitizeVms(v) })} placeholder={'ZTL ATTIVA\nDALLE 8 ALLE 20'} />
       </Field>
-      <pre className="vms-text">{vmsMessage(asset, live)}</pre>
+      <div className="vms-pages">{vmsPages(vmsMessage(asset, live)).map((p, i) => <pre key={i} className="vms-text" aria-label={`Pagina ${i + 1}`}>{p}</pre>)}</div>
       {mode === 'live' && live.status !== 'ok' ? <p className="muted">Avvia il traffico live (Traffico → Live, anche in automatico) per aggiornare il messaggio.</p> : null}
       <p className="muted">Art. 78 Reg. CdS: messaggi brevi, solo informazioni sulla circolazione.</p>
     </Section>

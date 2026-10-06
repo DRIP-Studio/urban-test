@@ -2,6 +2,7 @@ import type { FurnitureItem, MaterialItem } from '../api/types';
 import { furnitureSprite } from './furnitureSprite';
 import { patternImage } from './patterns';
 import type { Map as MLMap } from 'maplibre-gl';
+import { canvasData, ledCanvas, vmsCanvas, type VmsPictogram } from './ledPanels';
 
 /** Images are generated or rasterised on demand (styleimagemissing) — never placeholders. */
 
@@ -61,27 +62,6 @@ function signalImage(kind: string, state: string): ImageData {
   return g.getImageData(0, 0, W * s, H * s);
 }
 
-/** LED variable-message panel of a ZTL gate: amber dot-matrix text on black, red when active. */
-function ledImage(state: string): ImageData {
-  const W = 120, H = 64, s = 2;
-  const c = document.createElement('canvas');
-  c.width = W * s; c.height = H * s;
-  const g = c.getContext('2d')!;
-  g.scale(s, s);
-  g.fillStyle = '#26282b'; g.beginPath(); g.roundRect(1, 1, W - 2, H - 2, 6); g.fill();
-  g.fillStyle = '#050505'; g.beginPath(); g.roundRect(6, 6, W - 12, H - 12, 3); g.fill();
-  const on = state === 'on';
-  const col = on ? '#ff3b2f' : '#3fdc6a';
-  g.shadowColor = col; g.shadowBlur = 6; g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = '800 20px "Ginto", system-ui, sans-serif'; g.fillText('ZTL', W / 2, 24);
-  g.font = '700 11px "Ginto", system-ui, sans-serif'; g.fillText(on ? 'ATTIVA' : 'NON ATTIVA', W / 2, 44);
-  g.shadowBlur = 0;
-  // Dot-matrix grain.
-  g.fillStyle = 'rgba(0,0,0,0.35)';
-  for (let y = 7; y < H - 7; y += 2) g.fillRect(7, y, W - 14, 0.6);
-  return g.getImageData(0, 0, W * s, H * s);
-}
-
 /** Sign pole for the plan view: galvanised tube from the base up to the middle of the top plate (same units as the plates). */
 function poleImage(n: number): ImageData {
   const W = 10, H = 40 + (n - 1) * 50 + 24, s = 2;
@@ -93,25 +73,6 @@ function poleImage(n: number): ImageData {
   grad.addColorStop(0, '#6d7277'); grad.addColorStop(0.45, '#c9cdd1'); grad.addColorStop(1, '#5c6166');
   g.fillStyle = grad; g.fillRect(3, 0, 4, H - 3);
   g.fillStyle = '#4b4f53'; g.beginPath(); g.ellipse(5, H - 3, 4.5, 2.5, 0, 0, Math.PI * 2); g.fill();
-  return g.getImageData(0, 0, W * s, H * s);
-}
-
-/** PMV: amber dot-matrix text, up to three lines, on a black panel. */
-function vmsImage(text: string): ImageData {
-  const lines = text.split('\n').slice(0, 3);
-  const W = 150, H = 26 + lines.length * 17, s = 2;
-  const c = document.createElement('canvas');
-  c.width = W * s; c.height = H * s;
-  const g = c.getContext('2d')!;
-  g.scale(s, s);
-  g.fillStyle = '#26282b'; g.beginPath(); g.roundRect(1, 1, W - 2, H - 2, 6); g.fill();
-  g.fillStyle = '#050505'; g.beginPath(); g.roundRect(6, 6, W - 12, H - 12, 3); g.fill();
-  g.shadowColor = '#ffb020'; g.shadowBlur = 5; g.fillStyle = '#ffb020'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = '700 12px "Ginto", system-ui, sans-serif';
-  lines.forEach((l, i) => g.fillText(l, W / 2, 21 + i * 17, W - 18));
-  g.shadowBlur = 0;
-  g.fillStyle = 'rgba(0,0,0,0.35)';
-  for (let y = 7; y < H - 7; y += 2) g.fillRect(7, y, W - 14, 0.6);
   return g.getImageData(0, 0, W * s, H * s);
 }
 
@@ -156,11 +117,13 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
       return;
     }
     if (id.startsWith('vms:')) {
-      map.addImage(id, vmsImage(decodeURIComponent(id.slice(4))), { pixelRatio: 2 });
+      // vms:<pictogram>:<page text>
+      const rest = id.slice(4), i = rest.indexOf(':');
+      map.addImage(id, canvasData(vmsCanvas(decodeURIComponent(rest.slice(i + 1)), rest.slice(0, i) as VmsPictogram)), { pixelRatio: 2 });
       return;
     }
     if (id.startsWith('led:')) {
-      map.addImage(id, ledImage(id.slice(4)), { pixelRatio: 2 });
+      map.addImage(id, canvasData(ledCanvas(id.slice(4) === 'on')), { pixelRatio: 2 });
       return;
     }
     if (id.startsWith('sig:')) {

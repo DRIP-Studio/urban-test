@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { MapMouseEvent, RasterSourceSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useLive } from '../traffic/live';
+import { useLive, vmsMessage } from '../traffic/live';
+import { VMS_PAGE_MS } from './ledPanels';
 import { engine } from '../engine/engine';
 import { useApp } from '../state/store';
 import { selectionFC } from '../tools/select';
@@ -121,6 +122,12 @@ export function MapView() {
       setSource('signs3d', { ...signs3dBase, features: signs3dBase.features.map((f) => ({ ...f, properties: { ...f.properties, off: [0, -Number(f.properties.hm) * k] } })) });
     };
     map.on('pitch', () => { cancelAnimationFrame(signsRaf); signsRaf = requestAnimationFrame(updateSigns3d); });
+    // Multi-page PMV: the signal layer is refreshed when the page changes (only if some panel has pages).
+    const vmsTimer = setInterval(() => {
+      const { network } = useApp.getState();
+      if (!network || !Object.values(network.assets).some((x) => x.type === 'traffic.vms' && /\n\s*\n/.test(vmsMessage(x)))) return;
+      syncSource('signals', assetsFC(network, baseline.origin, furnitureById).signals);
+    }, VMS_PAGE_MS);
     const pushNetwork = () => {
       const { network, selection } = useApp.getState();
       if (!network) return;
@@ -267,7 +274,7 @@ export function MapView() {
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(el.current);
     return () => {
-      offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); window.clearInterval(ledTimer); offLive();
+      offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); window.clearInterval(ledTimer); clearInterval(vmsTimer); offLive();
       canvas.removeEventListener('wheel', onWheel, { capture: true });
       useMapUi.setState({ ready: false });
       setMapInstance(null);

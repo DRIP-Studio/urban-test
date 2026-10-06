@@ -4,7 +4,7 @@ import { VEHICLE_CLASSES, paintIndex, vehicleGlbUrl } from '../models/vehicles';
 import { buildingLook } from '../models/buildings';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import { SIM_STRIDE, pedestrianState, signalState, type Asset, type LngLat, type SignalHead, type SimFrame } from '@drip-urban/core';
+import { SIM_STRIDE, localDayMinutes, pedestrianState, signalState, zoneActiveAt, type Asset, type LngLat, type SignalHead, type SimFrame } from '@drip-urban/core';
 import { HeightModel, MARKING_LIFT_M, corridorSlopes, densifyRing, footprintBase, geoidUndulation, heightmapTile, ringHeights } from './heights';
 import { loadTerrain, useTerrain } from '../state/terrain';
 import type { FurnitureItem, MaterialItem } from '../api/types';
@@ -15,6 +15,8 @@ import { toast } from '../state/toasts';
 import { saveTwinKeyframe, takePendingTwinCamera } from './pending';
 import { Button, Segmented, Toggle } from '../ui/controls';
 import { DAY_PRESETS, Daylight, zonedInstant, type Lamp } from './daylight';
+import { VMS_PAGE_MS, ledCanvas, vmsCanvas, vmsPages, type VmsPictogram } from '../map/ledPanels';
+import { vmsMessage } from '../traffic/live';
 import { buildingAppearance, buildingGeometry, type TwinBuilding } from './buildingMesh';
 
 type Preset = 'top' | 'perspective' | 'street' | 'junction' | 'district';
@@ -23,6 +25,33 @@ const colorOf = (materials: Map<string, MaterialItem>, id: string, fallback = '#
   const m = materials.get(id);
   return Cesium.Color.fromCssColorString(m?.color ?? fallback).withAlpha(m?.opacity ?? 1);
 };
+
+const SIGN_SIZE: Record<string, number> = { warning: 0.9, priority: 0.9, temporary: 0.9, prohibition: 0.6, mandatory: 0.6, parking: 0.6, information: 0.6, ztl: 0.6, direction: 0.9 };
+const signRasters = new Map<string, Promise<{ canvas: HTMLCanvasElement; aspect: number } | null>>();
+/**
+ * Sign SVGs rasterised once (WebGL cannot upload an SVG without intrinsic size): 512 px on the long
+ * side, with the drawing's own proportions so rectangular plates are not squeezed into a square.
+ */
+function signRaster(url: string): Promise<{ canvas: HTMLCanvasElement; aspect: number } | null> {
+  let p = signRasters.get(url);
+  if (!p) {
+    p = new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = aspect >= 1 ? 512 : Math.round(512 * aspect);
+        canvas.height = aspect >= 1 ? Math.round(512 / aspect) : 512;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve({ canvas, aspect });
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+    signRasters.set(url, p);
+  }
+  return p;
+}
 
 /** Ellipsoidal ground height under a point (0 without DTM); set by the Twin when the height model changes. */
 let groundAt: (lon: number, lat: number) => number = () => 0;
@@ -279,6 +308,37 @@ export function TwinView() {
     daylight.current?.setLamps(lamps);
     layers.current.furn = furn.prim ? viewer.scene.primitives.add(furn.prim) as Cesium.Primitive : null;
     const rendered = new Set(furn.ids);
+    // LED faces of PMV and ZTL panels: the same texture as the 2D map, pages changing in turn.
+    for (const a of assets) {
+      const item = items.get(a.type);
+      if (!item?.led || a.state === 'removed') continue;
+      const base = enuMatrix(a.at[0], a.at[1], (a.elevationM ?? 0) + groundAt(a.at[0], a.at[1]), a.rotationDeg);
+      const rotation = Cesium.Quaternion.fromRotationMatrix(Cesium.Matrix4.getMatrix3(base, new Cesium.Matrix3()));
+      let image: Cesium.CallbackProperty;
+      if (item.led.kind === 'vms') {
+        const pic = (a.properties.vmsPictogram as VmsPictogram) ?? 'none';
+        const pages = vmsPages(vmsMessage(a)).map((t) => vmsCanvas(t, pic, 4));
+        image = new Cesium.CallbackProperty(() => pages[Math.floor(Date.now() / VMS_PAGE_MS) % pages.length]!, false);
+      } else {
+        const zone = network.zones[String(a.properties.zoneId ?? '')];
+        const now = localDayMinutes(new Date());
+        const canvas = ledCanvas(zone ? zoneActiveAt(zone, now.day, now.minutes) : false, 4);
+        image = new Cesium.CallbackProperty(() => canvas, true);
+      }
+      for (const part of item.model.filter((x) => x.mat === 'display' && x.size)) {
+        const [sx, sy, sz] = part.size!;
+        const thinY = sy <= sx;
+        const c = partCenter(part);
+        // Just in front of the display box, on its outer side.
+        const local = thinY ? new Cesium.Cartesian3(c[0], c[1] + Math.sign(part.at[1] || 1) * (sy / 2 + 0.004), c[2]) : new Cesium.Cartesian3(c[0] + Math.sign(part.at[0] || 1) * (sx / 2 + 0.004), c[1], c[2]);
+        const position = Cesium.Matrix4.multiplyByPoint(base, local, new Cesium.Cartesian3());
+        const facing = thinY ? (part.at[1] >= 0 ? Cesium.Cartesian3.UNIT_Y : Cesium.Cartesian3.negate(Cesium.Cartesian3.UNIT_Y, new Cesium.Cartesian3())) : (part.at[0] >= 0 ? Cesium.Cartesian3.UNIT_X : Cesium.Cartesian3.negate(Cesium.Cartesian3.UNIT_X, new Cesium.Cartesian3()));
+        layers.current.ents.push(viewer.entities.add({
+          id: `led:${a.id}:${item.model.indexOf(part)}`, position, orientation: rotation,
+          plane: { plane: new Cesium.Plane(facing, 0), dimensions: new Cesium.Cartesian2(thinY ? sx : sy, sz), material: new Cesium.ImageMaterialProperty({ image }) },
+        }));
+      }
+    }
     // Imported glTF models (SketchUp, Blender, Revit…): real geometry, Y-up glTF on the ENU frame of the anchor.
     for (const m of layers.current.models) viewer.scene.primitives.remove(m);
     layers.current.models = [];
@@ -307,11 +367,25 @@ export function TwinView() {
         rendered.add(a.id);
         const heading = Cesium.Math.toRadians(a.rotationDeg + 180);
         const pos = Cesium.Cartesian3.fromDegrees(a.at[0], a.at[1], groundAt(a.at[0], a.at[1]) + top - 0.45 - i * 0.95);
-        layers.current.ents.push(viewer.entities.add({
-          id: `sign:${a.id}`, position: pos,
-          orientation: Cesium.Transforms.headingPitchRollQuaternion(pos, new Cesium.HeadingPitchRoll(heading, 0, 0)),
-          plane: { plane: new Cesium.Plane(Cesium.Cartesian3.UNIT_Y, 0), dimensions: new Cesium.Cartesian2(0.9, 0.9), material: new Cesium.ImageMaterialProperty({ image: `/signs/${encodeURIComponent(sign.file)}`, transparent: true }) },
-        }));
+        const orientation = Cesium.Transforms.headingPitchRollQuaternion(pos, new Cesium.HeadingPitchRoll(heading, 0, 0));
+        // Formato normale (art. 80 Reg. CdS): triangles 90 cm, discs and squares 60 cm; plates keep their proportions.
+        const size = SIGN_SIZE[sign.family] ?? 0.6;
+        const url = `/signs/${encodeURIComponent(sign.file)}`;
+        const back = Cesium.Cartesian3.add(pos, Cesium.Matrix3.multiplyByVector(Cesium.Matrix3.fromQuaternion(orientation), new Cesium.Cartesian3(0, -0.01, 0), new Cesium.Cartesian3()), new Cesium.Cartesian3());
+        const ents = layers.current.ents;
+        void signRaster(url).then((r) => {
+          if (!r || viewer.isDestroyed() || layers.current.ents !== ents) return;
+          const dims = r.aspect >= 1 ? new Cesium.Cartesian2(size, size / r.aspect) : new Cesium.Cartesian2(size * r.aspect, size);
+          ents.push(viewer.entities.add({
+            id: `sign:${a.id}`, position: pos, orientation,
+            plane: { plane: new Cesium.Plane(Cesium.Cartesian3.UNIT_Y, 0), dimensions: dims, material: new Cesium.ImageMaterialProperty({ image: r.canvas, transparent: true }) },
+          }));
+          // Back of the plate: grey aluminium with the same outline, 1 cm behind.
+          ents.push(viewer.entities.add({
+            position: back, orientation,
+            plane: { plane: new Cesium.Plane(Cesium.Cartesian3.negate(Cesium.Cartesian3.UNIT_Y, new Cesium.Cartesian3()), 0), dimensions: dims, material: new Cesium.ImageMaterialProperty({ image: r.canvas, transparent: true, color: Cesium.Color.fromCssColorString('#8e9398') }) },
+          }));
+        });
       });
     }
     // Signal assets (existing OSM signals and placed ones) and signal-plan heads with live state.

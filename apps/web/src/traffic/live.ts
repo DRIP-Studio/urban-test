@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { VMS_CHARS, vmsPages } from '../map/ledPanels';
 import type { Asset, LngLat } from '@drip-urban/core';
 import { api } from '../api/client';
 import { fc, type Feature } from '../engine/geojson';
@@ -128,6 +129,7 @@ export function vmsMessage(asset: Asset, live: LiveState = useLive.getState()): 
   return 'TRAFFICO\nREGOLARE';
 }
 
+/** Upper case, up to 4 pages (separated by an empty line) of 3 lines × 16 characters. */
 export function sanitizeVms(text: string): string {
-  return text.toUpperCase().split('\n').slice(0, 3).map((l) => l.slice(0, 16)).join('\n');
+  return vmsPages(text.toUpperCase()).map((p) => p.split('\n').map((l) => l.slice(0, VMS_CHARS)).join('\n')).join('\n\n');
 }

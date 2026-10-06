@@ -1,6 +1,7 @@
 import { LocalFrame, geom, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, SIM_STRIDE } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
+import { vmsPageAt } from './ledPanels';
 import { partPrints } from '../models/parts';
 import { PX_PER_M } from './furnitureSprite';
 import { buildingLook } from '../models/buildings';
@@ -126,7 +127,7 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
     const item = furniture.get(a.type);
     if (item?.led?.kind === 'vms') {
       // PMV: manual text or the live-traffic message (art. 78 Reg. CdS).
-      sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `vms:${encodeURIComponent(vmsMessage(a))}` } });
+      sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `vms:${String(a.properties.vmsPictogram ?? 'none')}:${encodeURIComponent(vmsPageAt(vmsMessage(a)))}` } });
       continue;
     }
     if (item?.led) {
