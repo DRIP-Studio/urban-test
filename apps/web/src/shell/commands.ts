@@ -3,7 +3,10 @@ import { flushSave, navigate, redo, setDock, setMode, setTool, undo, useApp, typ
 import { api } from '../api/client';
 import { toast } from '../state/toasts';
 import { TOOLS } from '../tools/registry';
-import { fitBounds, useMapUi } from '../map/mapStore';
+import { fitBounds, getMap, useMapUi } from '../map/mapStore';
+import { toggleElios } from '../elios/Elios';
+import { setLive, useLive } from '../state/live';
+import { toggleSuggestionsFolded } from '../state/suggestions';
 import { usePalette } from './palette';
 import { useShortcuts } from './shortcutsState';
 import { importExistingSidewalks } from '../state/existingState';
@@ -64,6 +67,16 @@ export const COMMANDS: Command[] = [
   { id: 'snapAll', label: 'Tutti gli agganci on/off (nodi, strade, elementi, angoli)', group: 'Vista', shortcut: 'F9', when: inProject, run: () => { const on = toggleAllSnaps(); toast.info(on ? 'Agganci attivi' : 'Agganci disattivati', on ? 'Nodi, strade, elementi e angoli di 15°.' : 'Si disegna e si posiziona esattamente dove si clicca.'); } },
   { id: 'snapObjects', label: 'Aggancio elementi on/off (arredo e cartelli allineati alla strada, segnaletica centrata sulla corsia)', group: 'Vista', when: inProject, run: () => useMapUi.setState((s) => ({ snap: { ...s.snap, objects: !s.snap.objects } })) },
   { id: 'shortcuts', label: 'Scorciatoie da tastiera', group: 'Aiuto', shortcut: '?', when: () => true, run: () => useShortcuts.getState().toggle() },
+  { id: 'help', label: 'Scorciatoie da tastiera (F1)', group: 'Aiuto', shortcut: 'F1', when: () => true, run: () => useShortcuts.getState().toggle() },
+  { id: 'find', label: 'Cerca (Ctrl+F)', group: 'Vista', shortcut: 'Ctrl+F', when: () => true, run: () => usePalette.getState().toggle() },
+  { id: 'elios', label: 'Elios, assistente AI', group: 'Assistente', shortcut: 'Ctrl+J', when: inProject, run: toggleElios },
+  { id: 'historyKey', label: 'Cronologia e versioni', group: 'Progetto', shortcut: 'Ctrl+H', when: inProject, run: () => setDock('history') },
+  { id: 'settingsKey', label: 'Impostazioni', group: 'Sistema', shortcut: 'Ctrl+,', when: () => true, run: () => setDock('settings') },
+  { id: 'gridKey', label: 'Snap alla griglia on/off', group: 'Vista', shortcut: 'Shift+G', when: inProject, run: () => useMapUi.setState((s) => ({ snap: { ...s.snap, grid: !s.snap.grid } })) },
+  { id: 'angleKey', label: 'Angoli di 15° on/off', group: 'Vista', shortcut: 'Shift+A', when: inProject, run: () => useMapUi.setState((s) => ({ snap: { ...s.snap, angle: !s.snap.angle } })) },
+  { id: 'liveKey', label: 'Aggiornamento Live delle analisi on/off', group: 'Analisi', shortcut: 'F7', when: inProject, run: () => setLive(!useLive.getState().enabled) },
+  { id: 'north', label: 'Mappa orientata a nord, vista dall\'alto', group: 'Vista', shortcut: 'Shift+N', when: inProject, run: () => getMap()?.easeTo({ bearing: 0, pitch: 0, duration: 500 }) },
+  { id: 'nextSteps', label: 'Prossimi passi: mostra/riduci', group: 'Vista', shortcut: 'Shift+S', when: inProject, run: toggleSuggestionsFolded },
   { id: 'search', label: 'Cerca comandi, luoghi, strade', group: 'Vista', shortcut: '/', when: () => true, run: () => usePalette.getState().toggle() },
   { id: 'frame', label: 'Inquadra la selezione', group: 'Vista', shortcut: 'Shift+F', when: () => !!useApp.getState().selection, run: frameSelection },
   { id: 'frameAll', label: 'Inquadra tutto il progetto', group: 'Vista', shortcut: '0', when: inProject, run: () => { const b = useApp.getState().baseline; if (b) fitBounds(b.bbox); } },
@@ -103,7 +116,9 @@ export function installShortcuts(toolKey: (e: KeyboardEvent) => boolean): () => 
   const onKey = (e: KeyboardEvent) => {
     if (isTyping(e.target)) return;
     const ctrl = e.ctrlKey || e.metaKey;
-    if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); usePalette.getState().toggle(); return; }
+    if (ctrl && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'f')) { e.preventDefault(); usePalette.getState().toggle(); return; }
+    if (e.key === 'F1') { e.preventDefault(); useShortcuts.getState().toggle(); return; }
+    if (ctrl && e.key === ',') { e.preventDefault(); setDock('settings'); return; }
     if (!useApp.getState().project) return;
     if (toolKey(e)) { e.preventDefault(); return; }
     const k = e.key.toLowerCase();
@@ -117,6 +132,13 @@ export function installShortcuts(toolKey: (e: KeyboardEvent) => boolean): () => 
     if (ctrl && k === 's') return run('snapshot');
     if (ctrl && k === 'l') return run('layers');
     if (ctrl && k === 'e') return run('export');
+    if (ctrl && k === 'j') return run('elios');
+    if (ctrl && k === 'h') return run('historyKey');
+    if (e.key === 'F7') return run('liveKey');
+    if (!ctrl && !e.altKey && e.shiftKey && k === 'g') return run('gridKey');
+    if (!ctrl && !e.altKey && e.shiftKey && k === 'a') return run('angleKey');
+    if (!ctrl && !e.altKey && e.shiftKey && k === 'n') return run('north');
+    if (!ctrl && !e.altKey && e.shiftKey && k === 's') return run('nextSteps');
     if (e.key === 'F9') return run('snapAll');
     if (!ctrl && !e.altKey) {
       if (e.key === '?') return run('shortcuts');

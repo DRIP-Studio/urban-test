@@ -23,7 +23,8 @@ export function Suggestions() {
   const items = useSuggest((s) => s.items);
   const mode = useApp((s) => s.mode);
   const [open, setOpen] = useState<string | null>(null);
-  const [folded, setFolded] = useState(false);
+  const folded = useSuggest((s) => s.folded);
+  const setFolded = (f: boolean | ((v: boolean) => boolean)) => useSuggest.setState((s) => ({ folded: typeof f === 'function' ? f(s.folded) : f }));
   // A new batch of suggestions opens its first card and unfolds the panel.
   const first = items[0]?.key ?? null;
   useEffect(() => { setOpen(first); if (first) setFolded(false); }, [first]);

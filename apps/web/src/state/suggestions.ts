@@ -24,8 +24,9 @@ export interface Suggestion {
   readonly valid: (net: Network) => boolean;
 }
 
-interface SuggestState { items: Suggestion[]; enabled: boolean; dismissed: Set<string> }
-export const useSuggest = create<SuggestState>(() => ({ items: [], enabled: true, dismissed: new Set() }));
+interface SuggestState { items: Suggestion[]; enabled: boolean; dismissed: Set<string>; folded: boolean }
+export const useSuggest = create<SuggestState>(() => ({ items: [], enabled: true, dismissed: new Set(), folded: false }));
+export const toggleSuggestionsFolded = () => useSuggest.setState((s) => ({ folded: !s.folded }));
 
 const PROJECT = { kind: 'project' as const, source: 'DRIP Urban scenario' };
 const MAX = 4;
