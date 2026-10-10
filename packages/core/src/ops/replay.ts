@@ -43,6 +43,7 @@ export class NetworkReplayer {
   private start: Network | null = null;
   /** checkpoints[i] = network after operations[0..i]. */
   private ops: Operation[] = [];
+  private opKeys: string[] = [];
   private checkpoints: Network[] = [];
   private failed: { op: Operation; issues: readonly Issue[] }[] = [];
   private warnings: { opId: string; issue: Issue }[] = [];
@@ -54,7 +55,9 @@ export class NetworkReplayer {
       this.truncate(0);
     }
     let shared = 0;
-    while (shared < this.ops.length && shared < operations.length && this.ops[shared] === operations[shared]) shared++;
+    // postMessage recreates object identities; immutable operation content still shares checkpoints.
+    const keys = operations.map((op, i) => this.ops[i] === op ? this.opKeys[i]! : JSON.stringify(op));
+    while (shared < this.ops.length && shared < operations.length && this.opKeys[shared] === keys[shared]) shared++;
     this.truncate(shared);
 
     let net = shared === 0 ? this.start! : this.checkpoints[shared - 1]!;
@@ -72,6 +75,7 @@ export class NetworkReplayer {
         this.failed.push({ op, issues });
       }
       this.ops.push(op);
+      this.opKeys.push(keys[i]!);
       this.checkpoints.push(net);
     }
     return { net, failed: [...this.failed], warnings: [...this.warnings] };
@@ -80,6 +84,7 @@ export class NetworkReplayer {
   private truncate(n: number): void {
     const dropped = new Set(this.ops.slice(n).map((o) => o.id));
     this.ops.length = n;
+    this.opKeys.length = n;
     this.checkpoints.length = n;
     this.failed = this.failed.filter((f) => !dropped.has(f.op.id));
     this.warnings = this.warnings.filter((w) => !dropped.has(w.opId));

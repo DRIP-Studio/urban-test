@@ -13,7 +13,7 @@ export const WEB_PORT = 5190;
 
 function killTree(p: ChildProcess): void {
   if (p.pid === undefined || p.exitCode !== null) return;
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
+  if (process.platform === 'win32') spawnSync(join(process.env.SystemRoot ?? 'C:/Windows', 'System32', 'taskkill.exe'), ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
   else p.kill('SIGTERM');
 }
 
@@ -38,9 +38,9 @@ export default async function globalSetup(): Promise<() => void> {
   const log = process.env.DRIP_E2E_VERBOSE ? 'inherit' : 'ignore';
   const api = spawn(py, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(API_PORT)], {
     cwd: join(root, 'services', 'api'), stdio: log,
-    env: { ...process.env, DRIP_URBAN_AUTH: 'open', DRIP_PLATFORM_URL: 'http://127.0.0.1:9', DRIP_URBAN_DATA: data, DRIP_URBAN_LEGACY_DATA: join(__dirname, '.no-legacy') },
+    env: { ...process.env, DRIP_URBAN_AUTH: process.env.DRIP_E2E_AUTH ?? 'open', DRIP_PLATFORM_URL: 'http://127.0.0.1:9', DRIP_URBAN_DATA: data, DRIP_URBAN_LEGACY_DATA: join(__dirname, '.no-legacy') },
   });
-  const web = spawn(process.execPath, [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--port', String(WEB_PORT), '--strictPort'], {
+  const web = spawn(process.execPath, [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '127.0.0.1', '--port', String(WEB_PORT), '--strictPort'], {
     cwd: join(root, 'apps', 'web'), stdio: log,
     env: { ...process.env, DRIP_URBAN_API: `http://127.0.0.1:${API_PORT}` },
   });
@@ -48,7 +48,7 @@ export default async function globalSetup(): Promise<() => void> {
   process.once('exit', stop);
   try {
     await waitFor(`http://127.0.0.1:${API_PORT}/api/health`, api, 'API');
-    await waitFor(`http://localhost:${WEB_PORT}/`, web, 'Vite');
+    await waitFor(`http://127.0.0.1:${WEB_PORT}/`, web, 'Vite');
   } catch (e) { stop(); throw e; }
   return stop;
 }

@@ -1,3 +1,4 @@
+import {captureEliosScope} from './scope';
 import { api } from '../api/client';
 import { flyTo } from '../map/mapStore';
 import { newId, useApp } from '../state/store';
@@ -7,11 +8,12 @@ const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({
 interface Report { id: number; title: string; category: string; status: string; workflow_label?: string; location_text?: string; created_at?: string; geometry: { type: string; coordinates: number[] } }
 
 async function reportsInArea(): Promise<Report[]> {
+  const guard=captureEliosScope();
   const p = useApp.getState().project;
   if (!p) throw new Error('Apri un progetto');
   const r = await api.get<{ status: string; message?: string; items: Report[] }>(`/api/civic/fst/reports?bbox=${p.bbox.join(',')}`);
   if (r.status !== 'ok') throw new Error(r.message ?? 'Piattaforma FST non raggiungibile');
-  return r.items;
+  guard.assert();return r.items;
 }
 
 registerEliosTools([
@@ -30,16 +32,17 @@ registerEliosTools([
     description: 'Trasforma una segnalazione FST in attività di progetto dello scenario attivo e centra la mappa sul luogo; la pubblicazione civica potrà rispondere alla segnalazione.',
     parameters: OBJ({ reportId: { type: 'NUMBER', description: 'Id della segnalazione' }, note: { type: 'STRING', description: 'Nota di progetto' } }, ['reportId']),
     async run(a) {
+      const guard=captureEliosScope();
       const { project, scenario } = useApp.getState();
       if (!project || !scenario) throw new Error('Apri un progetto');
       const r = (await reportsInArea()).find((x) => x.id === Number(a.reportId));
       if (!r || r.geometry?.type !== 'Point') throw new Error(`Segnalazione #${String(a.reportId)} non trovata nell'area del progetto`);
       const doc = (await api.get<{ tasks?: { reportId: number }[] } | null>(`/api/projects/${project.id}/docs/civic`).catch(() => null)) ?? {};
-      const tasks = doc.tasks ?? [];
+      guard.assert();const tasks = doc.tasks ?? [];
       if (tasks.some((t) => t.reportId === r.id)) return { already: true, reportId: r.id };
       const at = r.geometry.coordinates as [number, number];
       await api.put(`/api/projects/${project.id}/docs/civic`, { ...doc, tasks: [...tasks, { id: newId('task'), reportId: r.id, title: r.title, category: r.category, at, createdAt: new Date().toISOString(), scenarioId: scenario.id, note: String(a.note ?? ''), status: 'aperta' }] });
-      flyTo(at, 19);
+      guard.assert();flyTo(at, 19);
       return { created: true, reportId: r.id, scenario: scenario.name };
     },
   },

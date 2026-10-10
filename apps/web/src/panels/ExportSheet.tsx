@@ -223,7 +223,7 @@ export function ExportSheet() {
     ['traffic', 'CSV traffico (stima)', 'Flussi stimati per strada e verso, ore 8', trafficCsv],
     ['safety', 'CSV sicurezza', 'Classifica incroci con fattori e base dei dati', safetyCsv],
     ['scenario', 'Scenario (JSON)', 'Elenco delle operazioni, reimportabile', scenarioJson],
-    ['package', 'Pacchetto progetto (.zip)', 'Città, scenari, documenti: portabile su un altro computer', () => { window.location.href = `/api/projects/${encodeURIComponent(project.id)}/package`; }],
+    ['package', 'Progetto DRIP Urban (.dripu)', 'Manifest v2, integrità SHA-256, città, scenari, modelli e texture', () => { window.location.href = `/api/projects/${encodeURIComponent(project.id)}/package`; }],
   ];
   return (
     <Section title="Esporta">

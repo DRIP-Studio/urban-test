@@ -166,3 +166,32 @@ def test_xyz_and_laz_and_upload_route(client):
     assert "LAS" in r.json()["source"]
     bad = client.post(f"/api/projects/{pid}/terrain/upload?epsg=32633", files={"file": ("x.laz", b"LASF", "application/octet-stream")})
     assert bad.status_code == 400 and "LAZ" in bad.text
+
+@pytest.mark.parametrize('corruption',['truncated','zero-record','invalid-scale','header'])
+def test_las_corruption_rejected(corruption):
+    import struct
+    from app.terrain import read_las
+    raw=bytearray(_las([(1,2,3,2)]))
+    if corruption=='truncated':raw=raw[:-1]
+    elif corruption=='zero-record':struct.pack_into('<H',raw,105,0)
+    elif corruption=='invalid-scale':struct.pack_into('<d',raw,131,float('nan'))
+    else:struct.pack_into('<H',raw,94,600)
+    with pytest.raises(ValueError):read_las(bytes(raw))
+
+def test_actual_laz_compression_decodes_same_ground_dtm_as_las():
+    from io import BytesIO
+    import laspy
+    import numpy as np
+    from app.terrain import read_laz,read_las,grid_from_points
+    bbox=[14.27,40.93,14.275,40.935]
+    points,_=_plane_points(bbox)
+    header=laspy.LasHeader(version='1.2',point_format=0)
+    cloud=laspy.LasData(header)
+    cloud.x=np.array([p[0] for p in points]);cloud.y=np.array([p[1] for p in points]);cloud.z=np.array([p[2] for p in points]);cloud.classification=np.array([p[3] for p in points])
+    output=BytesIO();cloud.write(output,do_compress=True)
+    decoded=read_laz(output.getvalue())
+    assert len(decoded[0])==len(points)
+    actual=grid_from_points(*decoded,32633,bbox,8,label='LAZ')
+    expected=grid_from_points(*read_las(_las(points)),32633,bbox,8,label='LAS')
+    assert actual['z']==pytest.approx(expected['z'],abs=.02)
+    with pytest.raises(ValueError):read_laz(output.getvalue()[:240])

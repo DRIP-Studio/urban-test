@@ -141,7 +141,7 @@ export function Hub() {
         <TechnicalLockup />
         <div className="hub-actions">
           <IconButton icon={theme === 'dark' ? 'sun' : 'moon'} label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} onClick={toggleTheme} />
-          <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPkg(f); e.target.value = ''; }} />
+          <input ref={file} type="file" accept=".dripu,.zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPkg(f); e.target.value = ''; }} />
           <Button icon="import" onClick={() => file.current?.click()}>Importa progetto</Button>
           <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>Nuovo progetto</Button>
           <UserMenu />

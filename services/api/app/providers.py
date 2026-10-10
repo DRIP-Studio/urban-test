@@ -7,6 +7,7 @@ labelled as such — never presented as live data.
 from __future__ import annotations
 
 import json
+import math
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -23,6 +24,51 @@ PROVIDERS = {
     "gemini": {"label": "Google Gemini", "kind": "key", "use": "Elios, l'assistente AI: capisce le richieste e modifica il progetto"},
 }
 _cache: dict[str, tuple[float, Any]] = {}
+_health: dict[str, dict] = {}
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _capture_time(value: Any) -> str | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc).isoformat() if parsed.tzinfo else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _number(value: Any, maximum: float) -> float | None:
+    return float(value) if isinstance(value, (float, int)) and not isinstance(value, bool) and math.isfinite(value) and 0 <= value <= maximum else None
+
+
+def _provider_get(name: str, url: str, **kwargs) -> httpx.Response:
+    """Bounded retries for idempotent reads; rate-limit cooldown is not bypassed by UI refresh."""
+    health = _health.setdefault(name, {})
+    if health.get("retryAfterEpoch", 0) > time.time():
+        raise ValueError("Limite richieste del provider: attendere il termine indicato")
+    started = time.monotonic()
+    for attempt in range(2):
+        try:
+            response = httpx.get(url, timeout=12, **kwargs)
+            if response.status_code == 429:
+                try:
+                    delay = max(1, min(3600, float(response.headers.get("Retry-After", 60))))
+                except ValueError:
+                    delay = 60
+                health["retryAfterEpoch"] = time.time() + delay
+            response.raise_for_status()
+            health.update(connected=True, lastSuccess=_utc_now(), lastError=None, latencyMs=round((time.monotonic()-started)*1000), rateLimited=False)
+            return response
+        except httpx.HTTPError as exc:
+            code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+            health.update(connected=False, lastError={"at": _utc_now(), "message": redact(str(exc))[:300]}, latencyMs=round((time.monotonic()-started)*1000), rateLimited=code == 429)
+            if attempt == 0 and (code is None or code in (502,503,504)):
+                time.sleep(.15)
+                continue
+            raise
+    raise RuntimeError("Provider request incomplete")
 
 
 def _path():
@@ -56,6 +102,7 @@ def status() -> list[dict]:
             "id": key, **meta, "configured": bool(v),
             "hint": (v[:3] + "…" + v[-4:]) if len(v) > 10 and meta["kind"] != "url" else (v if meta["kind"] == "url" else ""),
             "lastTest": (data.get(key) or {}).get("lastTest"),
+            "health": _health.get(key, {}),
         })
     return out
 
@@ -72,6 +119,7 @@ def save(name: str, value: str | None) -> None:
     else:
         data.pop(name, None)
     atomic_write_json(_path(), data)
+    _cache.clear()
 
 
 def _record_test(name: str, ok: bool, message: str) -> dict:
@@ -112,6 +160,8 @@ def _cached(key: str, ttl: float, fn):
         return hit[1]
     val = fn()
     _cache[key] = (time.time(), val)
+    while len(_cache) > 128:
+        _cache.pop(next(iter(_cache)))
     return val
 
 
@@ -122,25 +172,37 @@ def here_flow(bbox: list[float]) -> dict:
     w, s, e, n = bbox
 
     def fetch():
-        r = httpx.get("https://data.traffic.hereapi.com/v7/flow", timeout=20,
+        r = _provider_get("here", "https://data.traffic.hereapi.com/v7/flow",
                       params={"in": f"bbox:{w},{s},{e},{n}", "locationReferencing": "shape", "apiKey": key})
         r.raise_for_status()
         data = r.json()
+        if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+            raise ValueError("Risposta traffico priva dell’elenco delle osservazioni")
+        captured_at = _capture_time(data.get("sourceUpdated"))
+        retrieved_at = _utc_now()
         feats = []
-        for res in data.get("results", []):
+        for ri, res in enumerate(data["results"]):
             cur = res.get("currentFlow") or {}
-            for link in ((res.get("location") or {}).get("shape") or {}).get("links", []):
-                pts = [[p["lng"], p["lat"]] for p in link.get("points", [])]
+            speed, free = _number(cur.get("speed"), 90), _number(cur.get("freeFlow"), 90)
+            if speed is None and cur.get("traversability") != "closed":
+                continue
+            for li, link in enumerate(((res.get("location") or {}).get("shape") or {}).get("links", [])):
+                pts = [[p.get("lng"), p.get("lat")] for p in link.get("points", [])]
+                if any(not all(isinstance(v, (int,float)) and math.isfinite(v) for v in p) or abs(p[0])>180 or abs(p[1])>90 for p in pts):
+                    continue
                 if len(pts) >= 2:
                     feats.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": pts}, "properties": {
-                        "speedKmh": round((cur.get("speed") or 0) * 3.6, 1), "freeFlowKmh": round((cur.get("freeFlow") or 0) * 3.6, 1),
-                        "jamFactor": cur.get("jamFactor"), "confidence": cur.get("confidence"), "traversability": cur.get("traversability")}})
-        return {"status": "ok", "provider": "HERE Traffic API v7", "provenance": "live", "capturedAt": data.get("sourceUpdated") or datetime.now(timezone.utc).isoformat(),
-                "features": feats}
+                        "id": f"here:{ri}:{li}", "capturedAt": captured_at, "retrievedAt": retrieved_at,
+                        "speedKmh": round(speed * 3.6, 1) if speed is not None else None, "freeFlowKmh": round(free*3.6,1) if free is not None else None,
+                        "flowVph": None, "densityVehKm": None, "jamFactor": _number(cur.get("jamFactor"), 10), "confidence": _number(cur.get("confidence"), 1), "traversability": cur.get("traversability")}})
+        age = (datetime.now(timezone.utc)-datetime.fromisoformat(captured_at)).total_seconds() if captured_at else None
+        return {"status": "ok", "provider": "HERE Traffic API v7", "provenance": "live", "capturedAt": captured_at, "retrievedAt": retrieved_at,
+                "freshness": "unknown" if age is None else "fresh" if -30 <= age <= 300 else "stale", "features": feats}
 
     try:
         return _cached(f"here:{w:.4f},{s:.4f},{e:.4f},{n:.4f}", 120, fetch)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        _health.setdefault("here", {}).update(connected=False,lastError={"at":_utc_now(),"message":redact(str(exc))[:300]})
         return {"status": "error", "provider": "HERE", "message": redact(str(exc))[:300], "features": []}
 
 
@@ -157,11 +219,14 @@ def here_incidents(bbox: list[float]) -> dict:
     w, s, e, n = bbox
 
     def fetch():
-        r = httpx.get("https://data.traffic.hereapi.com/v7/incidents", timeout=20,
+        r = _provider_get("here", "https://data.traffic.hereapi.com/v7/incidents",
                       params={"in": f"bbox:{w},{s},{e},{n}", "locationReferencing": "shape", "apiKey": key})
         r.raise_for_status()
         feats = []
-        for res in r.json().get("results", []):
+        data = r.json()
+        if not isinstance(data,dict) or not isinstance(data.get("results"),list):
+            raise ValueError("Risposta incidenti priva dell’elenco atteso")
+        for res in data["results"]:
             d = res.get("incidentDetails") or {}
             pts = [[p["lng"], p["lat"]] for link in ((res.get("location") or {}).get("shape") or {}).get("links", []) for p in link.get("points", [])]
             if not pts:
@@ -171,40 +236,61 @@ def here_incidents(bbox: list[float]) -> dict:
                           "properties": {"id": str(d.get("id") or len(feats)), "kind": kind, "label": INCIDENT_IT.get(kind, kind),
                                          "description": ((d.get("description") or {}).get("value") or (d.get("summary") or {}).get("value") or "")[:300],
                                          "criticality": d.get("criticality"), "roadClosed": bool(d.get("roadClosed")),
-                                         "start": d.get("startTime"), "end": d.get("endTime")}})
-        return {"status": "ok", "provider": "HERE Traffic API v7 (incidents)", "features": feats}
+                                         "start": d.get("startTime"), "end": d.get("endTime"), "capturedAt": _capture_time(d.get("lastUpdated") or data.get("sourceUpdated")), "retrievedAt": _utc_now()}})
+        return {"status": "ok", "provider": "HERE Traffic API v7 (incidents)", "provenance": "live", "retrievedAt": datetime.now(timezone.utc).isoformat(), "features": feats}
 
     try:
         return _cached(f"herei:{w:.4f},{s:.4f},{e:.4f},{n:.4f}", 120, fetch)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
         return {"status": "error", "provider": "HERE", "message": redact(str(exc))[:300], "features": []}
 
 
 def weather_and_air(lat: float, lon: float) -> dict:
-    """Open-Meteo forecast + CAMS air quality (modelled, not measured at street level)."""
+    """Independent model products: an unavailable CAMS service does not erase usable weather."""
+    if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat) > 90 or abs(lon) > 180:
+        return {"status": "error", "message": "Coordinate meteo non valide"}
+
+    def product(kind: str) -> dict:
+        weather = kind == "weather"
+        url = "https://api.open-meteo.com/v1/forecast" if weather else "https://air-quality-api.open-meteo.com/v1/air-quality"
+        variables = "temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,weather_code,cloud_cover" if weather else "pm10,pm2_5,nitrogen_dioxide,ozone,european_aqi"
+        response = _provider_get(kind, url, params={"latitude": lat, "longitude": lon, "timezone": "UTC", "timeformat": "unixtime", "current": variables})
+        payload = response.json()
+        values = payload.get("current") if isinstance(payload, dict) else None
+        if not isinstance(values, dict):
+            raise ValueError("Risposta ambientale priva dei valori attesi")
+        raw_time = values.get("time")
+        valid_at = datetime.fromtimestamp(raw_time, timezone.utc).isoformat() if isinstance(raw_time, (int, float)) and not isinstance(raw_time, bool) and math.isfinite(raw_time) and 0 < raw_time < 253402300799 else _capture_time(raw_time)
+        source = "Open-Meteo (modelli meteorologici nazionali ed ECMWF)" if weather else "Copernicus CAMS via Open-Meteo"
+        return {"values": values, "units": payload.get("current_units") or {}, "provenance": "modelled", "source": source,
+                "url": "https://open-meteo.com/en/docs" if weather else "https://atmosphere.copernicus.eu",
+                "validAt": valid_at, "retrievedAt": _utc_now(),
+                **({} if weather else {"resolutionKm": 11, "note": "Modello di fondo urbano, non misura a livello strada"})}
 
     def fetch():
-        with httpx.Client(timeout=15, headers={"User-Agent": SETTINGS.user_agent}) as c:
-            w = c.get("https://api.open-meteo.com/v1/forecast", params={
-                "latitude": lat, "longitude": lon, "timezone": "Europe/Rome",
-                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,precipitation",
-                "hourly": "temperature_2m", "forecast_days": 1}).json()
-            a = c.get("https://air-quality-api.open-meteo.com/v1/air-quality", params={
-                "latitude": lat, "longitude": lon, "timezone": "Europe/Rome",
-                "current": "pm10,pm2_5,nitrogen_dioxide,ozone,european_aqi"}).json()
-        return {
-            "status": "ok",
-            "weather": {"values": w.get("current"), "units": w.get("current_units"), "provenance": "modelled",
-                        "source": "Open-Meteo (modelli meteorologici nazionali ed ECMWF)", "url": "https://open-meteo.com"},
-            "air": {"values": a.get("current"), "units": a.get("current_units"), "provenance": "modelled",
-                    "source": "Copernicus CAMS European air quality forecast via Open-Meteo", "url": "https://atmosphere.copernicus.eu",
-                    "resolutionKm": 11, "note": "Modello a ~11 km: valore di fondo urbano, non misura a livello strada"},
-        }
+        from concurrent.futures import ThreadPoolExecutor
+        result: dict[str, Any] = {}
+        errors = {}
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            jobs = {kind: executor.submit(product, kind) for kind in ("weather", "air")}
+            for kind, job in jobs.items():
+                try:
+                    result[kind] = job.result()
+                except (httpx.HTTPError, ValueError, TypeError, AttributeError, OverflowError) as exc:
+                    errors[kind] = redact(str(exc))[:300]
+                    _health.setdefault(kind, {}).update(connected=False, lastError={"at": _utc_now(), "message": errors[kind]})
+        result["status"] = "ok" if not errors else "partial" if result else "error"
+        result["errors"] = errors
+        result["message"] = " · ".join(f"{kind}: {message}" for kind, message in errors.items())
+        result["health"] = {kind: dict(_health.get(kind, {})) for kind in ("weather", "air")}
+        return result
 
-    try:
-        return _cached(f"env:{lat:.3f},{lon:.3f}", 900, fetch)
-    except (httpx.HTTPError, json.JSONDecodeError) as exc:
-        return {"status": "error", "message": f"Servizio meteo/aria non raggiungibile: {exc}"[:300]}
+    cache_key = f"env:{lat:.3f},{lon:.3f}"
+    result = _cached(cache_key, 900, fetch)
+    # Failed products can recover immediately; successful full responses retain their TTL.
+    if result.get("status") != "ok":
+        _cache.pop(cache_key, None)
+    return result
 
 
 def geocode(q: str, bbox: list[float] | None) -> list[dict]:

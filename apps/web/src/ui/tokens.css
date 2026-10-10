@@ -120,12 +120,28 @@
      Transitions restart from the on-screen value, so they stay interruptible. */
   --spring: linear(0, 0.029, 0.099, 0.189, 0.285, 0.381, 0.47, 0.552, 0.624, 0.687, 0.741, 0.786, 0.825, 0.857, 0.884, 0.906, 0.924, 0.938, 0.951, 0.96, 0.968, 0.975, 0.98, 0.984, 0.987, 0.99, 0.992, 0.994, 0.995, 0.996, 0.997, 0.997, 1);
   --spring-bounce: linear(0, 0.027, 0.096, 0.188, 0.291, 0.397, 0.499, 0.593, 0.676, 0.749, 0.811, 0.862, 0.903, 0.936, 0.961, 0.98, 0.993, 1.003, 1.009, 1.013, 1.015, 1.015, 1.015, 1.014, 1.012, 1.011, 1.009, 1.007, 1.006, 1.005, 1.004, 1.003, 1);
-  --t-spring: 470ms;           /* damping 1.0, response 0.35 s */
+  --t-spring: 260ms;           /* damping 1.0, response 0.35 s */
   --t-fast: 120ms;
   --t-std: 200ms;
-  --t-panel: 320ms;
+  --t-panel: 260ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Semantic public aliases retain the existing DRIP palette and motion curves. */
+  --duration-fast: var(--t-fast);
+  --duration-medium: var(--t-std);
+  --duration-slow: var(--t-panel);
+  --easing-standard: var(--ease);
+  --easing-emphasised: var(--ease-out);
+  --easing-spring: var(--spring);
+  --color-brand: var(--drip-blue);
+  --color-action: var(--drip-accent);
+  --color-selection: var(--drip-accent-soft);
+  --color-surface: var(--ink-1);
+  --color-text: var(--text-1);
+  --color-success: var(--ok);
+  --color-warning: var(--warn);
+  --color-error: var(--err);
 
   /* Layout — chrome heights on the golden scale; inspector ≈ viewport / φ³. */
   --topbar-h: calc(55 * var(--px));
@@ -209,4 +225,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root { --t-fast: 0ms; --t-std: 0ms; --t-panel: 0ms; --t-spring: 0ms; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: var(--ink-2); --glass-strong: var(--ink-1); --glass-tip: var(--ink-1); }
+}
+@media (prefers-contrast: more) {
+  :root { --line-1: var(--text-3); --line-2: var(--text-2); --text-3: var(--text-2); }
 }

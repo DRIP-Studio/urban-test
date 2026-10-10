@@ -3,9 +3,11 @@ import { DEFAULT_TRAFFIC, LocalFrame, NetworkReplayer, geom, layoutSection, oper
 import { api } from '../api/client';
 import type { StoredScenario } from '../api/types';
 import { engine } from '../engine/engine';
-import { selectScenario, useApp } from '../state/store';
+import { commit, flushSave, selectScenario, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { Button, Field, NumberField, Section, Select, Stat } from '../ui/controls';
+import { ScenarioLab } from './ScenarioLab';
+import { getProjectTime } from '../state/projectTime';
 
 interface Metrics { roadsChanged: number; newRoadM: number; oneway: number; roundabouts: number; signals: number; zones: number; greenM2: number; parkingM2: number; trees: number; assets: number; areaM2: Record<string, number> }
 
@@ -70,7 +72,7 @@ export function ComparePanel() {
     setBusy(true);
     try {
       for (const id of [a, b]) {
-        const r = await engine.job<{ totals: { vehHours: number; avgSpeedKmh: number; overCapacity: number }; crossingConflicts: number }>('scenarioMetrics', { ops: ops[id] ?? [], params: DEFAULT_TRAFFIC });
+        const r = await engine.job<{ totals: { vehHours: number; avgSpeedKmh: number; overCapacity: number }; crossingConflicts: number }>('scenarioMetrics', { ops: ops[id] ?? [], params: { ...DEFAULT_TRAFFIC, day: getProjectTime().day, hour: getProjectTime().hour, holiday: getProjectTime().holiday, date: getProjectTime().date } });
         setTraffic((t) => ({ ...t, [id]: r }));
       }
     } catch (e) { toast.error('Confronto', e instanceof Error ? e.message : String(e)); }
@@ -86,20 +88,37 @@ export function ComparePanel() {
   };
   const onlyInB = (ops[b] ?? []).filter((o) => !(ops[a] ?? []).some((x) => x.id === o.id));
   const scA = project.scenarios.find((s) => s.id === a);
+  const namesForMerge = () => project.scenarios.find((s) => s.id === b)?.name ?? b;
   const merge = async () => {
     const chosen = onlyInB.filter((o) => pick.has(o.id));
     if (!chosen.length || !scA || scA.isBaseline || scA.locked) return;
+    await flushSave();
     const full = await api.get<StoredScenario>(`/api/projects/${project.id}/scenarios/${a}`);
     try {
-      await api.put(`/api/projects/${project.id}/scenarios/${a}`, { scenario: { operations: [...full.operations, ...chosen] }, baseRevision: full.revision });
+      // Validate the entire merge before any server write; preserve one undoable history operation.
+      const inputs = chosen.flatMap((o) => o.type === 'batch' ? (o.payload as { ops: { type: string; payload: unknown }[] }).ops : [{ type: o.type, payload: o.payload }]);
+      const payload = { label: `Unione da ${namesForMerge()}`, ops: inputs };
+      const before = new NetworkReplayer().derive(baseline, full.operations);
+      if (before.failed.length) throw new Error('Scenario di destinazione con operazioni non applicabili');
+      const issues = operationSpec('batch').validate(before.net, payload);
+      if (issues.some((i) => i.severity === 'error')) throw new Error(issues.map((i) => i.message).join(' · '));
+      if (current?.id === a) {
+        if (!commit('batch', payload).ok) return;
+        await flushSave();
+        setOps((o) => ({ ...o, [a]: [...useApp.getState().scenario!.operations] }));
+      } else {
+        const merged: Operation = { id: crypto.randomUUID(), type: 'batch', payload, author: useApp.getState().user?.name ?? 'Utente locale', at: new Date().toISOString() };
+        await api.put(`/api/projects/${project.id}/scenarios/${a}`, { scenario: { operations: [...full.operations, merged] }, baseRevision: full.revision });
+        setOps((o) => ({ ...o, [a]: [...full.operations, merged] }));
+      }
       toast.success('Modifiche unite', `${chosen.length} operazioni copiate in ${scA.name}`);
-      setOps((o) => ({ ...o, [a]: [...full.operations, ...chosen] }));
       setPick(new Set());
-      if (current?.id === a) await selectScenario(a);
+
     } catch (e) { toast.error('Unione non riuscita', e instanceof Error ? e.message : String(e)); }
   };
   return (
     <div className="panel-stack">
+      <ScenarioLab />
       <Section title="Confronta scenari">
         <div className="grid-2">
           <Field label="Scenario A"><Select value={a} ariaLabel="Scenario A" options={opts} onChange={setA} /></Field>
@@ -124,7 +143,7 @@ export function ComparePanel() {
             <tr><td>Tratti oltre capacità</td><td className="mono">{traffic[a]!.totals.overCapacity}</td><td className="mono">{traffic[b]!.totals.overCapacity}</td></tr>
             <tr><td>Conflitti di attraversamento negli incroci</td><td className="mono">{traffic[a]!.crossingConflicts}</td><td className="mono">{traffic[b]!.crossingConflicts}</td></tr>
           </tbody></table>
-        ) : <p className="muted">Stima DRIP con la stessa domanda per entrambi gli scenari (ore 8, giorno feriale).</p>}
+        ) : <p className="muted">Stima DRIP con la stessa domanda per entrambi gli scenari (data e ora del clock globale).</p>}
       </Section>
       <Section title="Costi indicativi" defaultOpen={hasCosts}>
         {!hasCosts ? <p className="muted">Nessun costo mostrato finché non inserisci prezzi unitari con la loro fonte (prezzario regionale, computo, preventivo).</p> : null}

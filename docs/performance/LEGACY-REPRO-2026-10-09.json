@@ -1,0 +1,16 @@
+{
+  "source": "git HEAD vehiclesFC before geometry LOD",
+  "rendererHeapLimitMB": 512,
+  "legacyRequestedAgents": 50000,
+  "crashed": false,
+  "stalled": true,
+  "reason": "Historical geometry did not return within 30 seconds",
+  "bounded": {
+    "simulated": 50000,
+    "drawn": 2000,
+    "features": 2000,
+    "elapsedMs": 3,
+    "serializedBytes": 703827
+  },
+  "caveat": "Controlled resource reproduction of the original geometry path; does not identify the user hardware or exact original workload."
+}

@@ -1,6 +1,6 @@
 import { LocalFrame } from '../geo/projection';
 import type { CityBaseline, LngLat, Network, TravelMode } from '../model/types';
-import { buildGraph, dijkstra, snapToGraph } from './graph';
+import { buildGraph, dijkstra, snapToGraph, type RoutingContext } from './graph';
 
 export interface NetworkStats {
   readonly components: number;
@@ -13,9 +13,9 @@ export interface NetworkStats {
   readonly centrality: Readonly<Record<string, number>>;
 }
 
-export function analyzeNetwork(net: Network, origin: LngLat, samples = 60): NetworkStats {
+export function analyzeNetwork(net: Network, origin: LngLat, samples = 60, ctx: RoutingContext = { mode: 'car', day: 1, minutes: 600 }): NetworkStats {
   const frame = new LocalFrame(origin);
-  const g = buildGraph(net, frame, { mode: 'car', day: 1, minutes: 600 });
+  const g = buildGraph(net, frame, ctx);
   const n = g.nodeIds.length;
   // Undirected adjacency for components and bridges.
   const adj: { to: number; road: string }[][] = Array.from({ length: n }, () => []);
@@ -110,9 +110,9 @@ export interface AccessResult {
 }
 
 /** "Città dei 7 minuti": multi-source shortest paths from each service category on the walk graph. */
-export function serviceAccess(net: Network, baseline: CityBaseline, minutes = 7, mode: TravelMode = 'walk'): AccessResult {
+export function serviceAccess(net: Network, baseline: CityBaseline, minutes = 7, mode: TravelMode = 'walk', ctx: Omit<RoutingContext, 'mode'> = { day: 1, minutes: 600 }): AccessResult {
   const frame = new LocalFrame(baseline.origin);
-  const g = buildGraph(net, frame, { mode, day: 1, minutes: 600 });
+  const g = buildGraph(net, frame, { ...ctx, mode });
   const byRoad: Record<string, Record<string, number | null>> = {};
   const catCov: Record<string, number> = {};
   const counts: Record<string, number> = {};
@@ -120,6 +120,7 @@ export function serviceAccess(net: Network, baseline: CityBaseline, minutes = 7,
   for (const e of g.edges) roadLen.set(e.roadId, e.lengthM);
   const residential = [...roadLen.keys()].filter((id) => ['residential', 'living_street', 'tertiary', 'unclassified', 'pedestrian', 'footway'].includes(net.roads[id]?.roadClass ?? ''));
   const totalRes = residential.reduce((s, id) => s + roadLen.get(id)!, 0) || 1;
+  const residentialSet=new Set(residential);
   const allOk = new Set(residential);
   for (const [cat, def] of Object.entries(SERVICE_CATEGORIES)) {
     const pts = Object.values(baseline.features).filter((f) => def.match(f.kind, f.category)).map((f) => f.coords[0]!);
@@ -141,7 +142,7 @@ export function serviceAccess(net: Network, baseline: CityBaseline, minutes = 7,
       const a = g.index.get(r.from), b = g.index.get(r.to);
       const t = Math.min(a !== undefined ? dist[a]! : Infinity, b !== undefined ? dist[b]! : Infinity) / 60;
       (byRoad[id] ??= {})[cat] = Number.isFinite(t) ? Math.round(t * 10) / 10 : null;
-      if (Number.isFinite(t) && t <= minutes) { if (allOk.has(id)) ok += roadLen.get(id)!; }
+      if (Number.isFinite(t) && t <= minutes) { if (residentialSet.has(id)) ok += roadLen.get(id)!; }
       else allOk.delete(id);
     }
     catCov[cat] = Math.round((ok / totalRes) * 1000) / 10;
@@ -151,9 +152,9 @@ export function serviceAccess(net: Network, baseline: CityBaseline, minutes = 7,
 }
 
 /** Isochrone: travel minutes to every reachable road from a point. */
-export function isochrone(net: Network, origin: LngLat, at: LngLat, mode: TravelMode, maxMinutes: number): Record<string, number> {
+export function isochrone(net: Network, origin: LngLat, at: LngLat, mode: TravelMode, maxMinutes: number, ctx: Omit<RoutingContext, 'mode'> = { day: 1, minutes: 600 }): Record<string, number> {
   const frame = new LocalFrame(origin);
-  const g = buildGraph(net, frame, { mode, day: 1, minutes: 600 });
+  const g = buildGraph(net, frame, { ...ctx, mode });
   const s = snapToGraph(net, g, frame, at);
   if (!s) return {};
   const r = net.roads[s.roadId]!;

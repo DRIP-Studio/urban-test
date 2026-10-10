@@ -212,7 +212,18 @@ def services(request: Request) -> list[dict]:
         # Keycloak account console of the DRIP realm.
         "account": f"{drip['issuer'].rstrip('/')}/account" if drip else "",
     }
-    return [{**s, "url": s.get("url") or known.get(s["id"], ""), "current": s["id"] == "urban"} for s in cfg.get("services", [])]
+    entitlement = license.status()
+    result = []
+    for s in cfg.get("services", []):
+        feature = s.get("requiredFeature") or ("design" if s["id"] == "urban" else None)
+        state = "unknown"
+        if feature:
+            if entitlement["status"] in {"active", "offline_grace", "trialing"} and feature in entitlement["features"]:
+                state = "trial" if entitlement["status"] == "trialing" else "active"
+            else:
+                state = "unavailable"
+        result.append({**s, "url": s.get("url") or known.get(s["id"], ""), "current": s["id"] == "urban", "entitlement": state})
+    return result
 
 
 @router.get("/api/platform/config")
@@ -226,7 +237,7 @@ def put_config(body: dict = Body(...)) -> dict:
     _require("admin")
     try:
         return config.public_view(config.save(body))
-    except ValueError as exc:
+    except (ValueError, PermissionError) as exc:
         raise _bad(exc) from exc
 
 
@@ -240,7 +251,7 @@ def keys() -> list[dict]:
 def new_key(body: dict = Body(...)) -> dict:
     me = _require("admin")
     try:
-        return integrations.create_key(str(body.get("name") or ""), str(body.get("role") or "viewer"), me["name"])
+        return integrations.create_key(str(body.get("name") or ""), str(body.get("role") or "viewer"), me["name"], body.get("scopes"), body.get("expiresAt"))
     except ValueError as exc:
         raise _bad(exc) from exc
 
@@ -350,6 +361,14 @@ def update_apply() -> dict:
 
 
 # ------------------------------------------------------------------ API v1 (stable contract for the DRIP platform)
+
+@router.post("/api/update/rollback")
+def update_rollback() -> dict:
+    _require("admin")
+    try:
+        return updates.rollback()
+    except ValueError as exc:
+        raise _bad(exc) from exc
 
 @router.get("/api/v1/info")
 def v1_info() -> dict:

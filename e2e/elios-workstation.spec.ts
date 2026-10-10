@@ -1,0 +1,27 @@
+import {test,expect} from '@playwright/test';
+import {createProject,openWorkspace} from './helpers';
+test('agent tools use native clock, weather, presentation and municipal solver',async({page,request})=>{
+  await openWorkspace(page,await createProject(request,'Elios workstation'));
+  const state=await page.evaluate(async()=>{
+    const t='/src/elios/tools.ts',s='/src/state/store.ts';const {toolByName}=await import(t),store=await import(s);
+    await toolByName('set_project_time').run({date:'2026-10-09',minutes:780});
+    await toolByName('set_twin_environment').run({weather:'rain',intensity:.7});
+    const scene=await toolByName('create_presentation_scene').run({title:'Analisi comunale',text:'Scenario di studio',durationS:12});
+    const document=store.useApp.getState().network.presentation;
+    store.undo();
+    const undone=store.useApp.getState().network.presentation?.scenes?.length??0;
+    await toolByName('start_municipal_simulation').run({mode:'hybrid',dailyTrips:60000,pedestrianDemandPerHour:7200,seed:19});
+    return {scene,document,undone,environment:store.useApp.getState().network.environment};
+  });
+  expect(state.document.scenes).toHaveLength(1);
+  expect(state.document.scenes[0].title).toBe('Analisi comunale');
+  expect(state.document.scenes[0].camera.center).toHaveLength(2);
+  expect(state.undone).toBe(0);
+  expect(state.environment.weather).toBe('rain');
+  await expect(page.getByLabel('Ora progetto',{exact:true})).toHaveValue('13:00');
+  await expect.poll(()=>page.evaluate(async()=>{const p='/src/elios/tools.ts';return (await (await import(p)).toolByName('control_simulation').run({action:'inspect'})).metrics?.t??0;})).toBeGreaterThan(1);
+  const metrics=await page.evaluate(async()=>{const p='/src/elios/tools.ts';return (await import(p)).toolByName('control_simulation').run({action:'pause'});});
+  expect(metrics.paused).toBe(true);
+  expect(metrics.pedestrians.demandPerHour).toBe(7200);
+  await page.evaluate(async()=>{const p='/src/elios/tools.ts';await (await import(p)).toolByName('control_simulation').run({action:'stop'});});
+});

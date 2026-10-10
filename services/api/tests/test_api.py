@@ -176,3 +176,15 @@ def test_large_city_tiling_covers_the_box():
     assert all(m.area_km2(*t) <= m.TILE_KM2 * 1.05 for t in tiles)
     assert abs(sum(m.area_km2(*t) for t in tiles) - km2) < 1
     assert min(t[0] for t in tiles) == w and max(t[2] for t in tiles) == e
+
+def test_scenario_created_atomically_with_native_operations(client):
+    pid = client.post("/api/projects", json={"template": "frattamaggiore", "name": "AI alternatives"}).json()["id"]
+    op = {"id": "ai-op", "type": "batch", "payload": {"label": "Native AI", "ops": []}, "at": "2026-10-09T00:00:00Z", "author": "test"}
+    response = client.post(f"/api/projects/{pid}/scenarios", json={"name": "Evaluated alternative", "operations": [op], "description": "Declared evaluation"})
+    assert response.status_code == 200, response.text
+    sid = response.json()["id"]
+    saved = client.get(f"/api/projects/{pid}/scenarios/{sid}").json()
+    assert saved["revision"] == 0 and saved["operations"] == [op]
+    before = len(client.get(f"/api/projects/{pid}").json()["scenarios"])
+    assert client.post(f"/api/projects/{pid}/scenarios", json={"operations": [op, op]}).status_code == 400
+    assert len(client.get(f"/api/projects/{pid}").json()["scenarios"]) == before

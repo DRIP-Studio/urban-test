@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getProjectTime } from '../state/projectTime';
 import { LocalFrame, SERVICE_CATEGORIES, geom, parseCrashCsv, type AccessResult, type AuditItem, type CrashRecord, type NetworkStats, type SafetyScore } from '@drip-urban/core';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
@@ -112,7 +113,7 @@ function Network() {
   const run = async () => {
     setBusy(true);
     try {
-      const r = await engine.job<NetworkStats>('network');
+      const r = await engine.job<NetworkStats>('network', { ctx: getProjectTime() });
       setRes(r);
       if (net) setSource('traffic', fc(Object.entries(r.centrality).filter(([id]) => net.roads[id]).map(([id, c]): Feature => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: net.roads[id]!.axis.map((p) => [...p]) }, properties: { ratio: 1 - Math.min(1, c * 1.6) } }))));
       toggleLayer('traffic', true);
@@ -141,7 +142,7 @@ function Access() {
   const { isoMinutes, isoMode } = usePicks();
   const run = async () => {
     setBusy(true);
-    try { setRes(await engine.job<AccessResult>('access', { minutes: Number(minutes), mode: 'walk' })); } finally { setBusy(false); }
+    try { setRes(await engine.job<AccessResult>('access', { minutes: Number(minutes), mode: 'walk', ctx: getProjectTime() })); } finally { setBusy(false); }
   };
   useEffect(() => {
     if (!res || !net) return;
@@ -187,7 +188,10 @@ function Environment() {
   const [env, setEnv] = useState<EnvResult | null>(null);
   useEffect(() => {
     if (!baseline) return;
-    api.get<EnvResult>(`/api/environment?lat=${baseline.origin[1]}&lon=${baseline.origin[0]}`).then(setEnv).catch((e) => setEnv({ status: 'error', message: String(e) }));
+    let active = true;
+    setEnv(null);
+    api.get<EnvResult>(`/api/environment?lat=${baseline.origin[1]}&lon=${baseline.origin[0]}`).then(value => { if (active) setEnv(value); }).catch((e) => { if (active) setEnv({ status: 'error', message: String(e) }); });
+    return () => { active = false; };
   }, [baseline]);
   const f = baseline ? new LocalFrame(baseline.origin) : null;
   const areaOf = (pts: readonly (readonly [number, number])[]) => (f ? Math.abs(geom.ringArea(pts.map((p) => f.toMetric(p) as geom.V))) : 0);
@@ -199,11 +203,12 @@ function Environment() {
   return (
     <>
       <Section title="Aria e clima (adesso)">
-        {env?.status === 'ok' && v && w ? (
+        {env && (v || w) ? (
           <>
-            <div className="stats-row"><Stat label="PM2.5" value={v.pm2_5 ?? '—'} unit={u?.pm2_5} prov="estimated" /><Stat label="PM10" value={v.pm10 ?? '—'} unit={u?.pm10} /><Stat label="NO₂" value={v.nitrogen_dioxide ?? '—'} unit={u?.nitrogen_dioxide} /></div>
-            <div className="stats-row"><Stat label="O₃" value={v.ozone ?? '—'} unit={u?.ozone} /><Stat label="Temperatura" value={w.temperature_2m ?? '—'} unit="°C" /><Stat label="Umidità" value={w.relative_humidity_2m ?? '—'} unit="%" /></div>
-            <p className="muted"><ProvBadge kind="estimated" title="Modellato" /> {env.air!.source}. {env.air!.note}. Meteo: {env.weather!.source}. CO₂ non disponibile senza sensori: non viene stimata.</p>
+            {v ? <div className="stats-row"><Stat label="PM2.5" value={v.pm2_5 ?? '—'} unit={u?.pm2_5} prov="estimated" /><Stat label="PM10" value={v.pm10 ?? '—'} unit={u?.pm10} /><Stat label="NO₂" value={v.nitrogen_dioxide ?? '—'} unit={u?.nitrogen_dioxide} /><Stat label="O₃" value={v.ozone ?? '—'} unit={u?.ozone} /></div> : null}
+            {w ? <div className="stats-row"><Stat label="Temperatura" value={w.temperature_2m ?? '—'} unit="°C" /><Stat label="Umidità" value={w.relative_humidity_2m ?? '—'} unit="%" /></div> : null}
+            <p className="muted"><ProvBadge kind="estimated" title="Modellato" /> {env.air ? `${env.air.source}. ${env.air.note}. ` : ''}{env.weather ? `Meteo: ${env.weather.source}. ` : ''}CO₂ non disponibile senza sensori: non viene stimata.</p>
+            {env.status === 'partial' ? <p className="warn-line">Disponibilità parziale: {env.message}</p> : null}
           </>
         ) : env?.status === 'error' ? <Empty icon="warning" title="Dati ambientali non disponibili">{env.message}</Empty> : <Skeleton lines={3} />}
       </Section>

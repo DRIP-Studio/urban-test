@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  horizontalAlignment,
+  verticalExtrema, horizontalAlignment,
   checkVertical, crossSection, designElevation, earthworks, groundProfile, proposeVertical, sizeCurves, stationing, verticalRules,
   type Road, type TerrainGrid, type VerticalPVI, type VerticalProfile,
 } from '@drip-urban/core';
@@ -29,14 +29,14 @@ function TerrainSetup() {
   return (
     <div className="profile-setup">
       <Empty icon="profile" title="Serve il modello del terreno (DTM)">
-        <span>Scarica Copernicus DEM (90 m, gratuito) per l'area del progetto, oppure carica il rilievo: DTM LiDAR regionale (ESRI ASCII Grid .asc), nuvola di punti LAS (si usano i punti classificati terreno) o punti XYZ da stazione totale/GNSS.</span>
+        <span>Scarica Copernicus DEM (90 m, gratuito) per l'area del progetto, oppure carica il rilievo: DTM LiDAR regionale (ESRI ASCII Grid .asc), nuvola di punti LAS/LAZ (si usano i punti classificati terreno) o punti XYZ da stazione totale/GNSS.</span>
       </Empty>
       <div className="profile-setup-actions">
         <Button variant="primary" icon="download" busy={!!busy} onClick={() => void run(fetchTerrain(60))}>Scarica DTM Copernicus</Button>
         <Select value={epsg} ariaLabel="Sistema di riferimento del file" options={EPSG} onChange={setEpsg} />
         <NumberField value={spacing} unit="m" min={0.5} max={30} step={0.5} decimals={1} ariaLabel="Passo della griglia per nuvole di punti" onCommit={setSpacing} />
-        <Button icon="upload" disabled={!!busy} onClick={() => file.current?.click()}>Carica rilievo (.asc, .las, .xyz)</Button>
-        <input ref={file} type="file" accept=".asc,.txt,.las,.xyz,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void run(uploadTerrain(f, Number(epsg), spacing)); }} />
+        <Button icon="upload" disabled={!!busy} onClick={() => file.current?.click()}>Carica rilievo (.asc, .las, .laz, .xyz)</Button>
+        <input ref={file} type="file" accept=".asc,.txt,.las,.laz,.xyz,.csv" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void run(uploadTerrain(f, Number(epsg), spacing)); }} />
       </div>
       {busy ? <p className="muted">{busy}</p> : null}
     </div>
@@ -88,6 +88,7 @@ function ProfileChart({ road, ground, v, length, station, onStation, onChange }:
         <>
           {v.pvis.map((p, i) => (p.curveLength ? <rect key={`c${i}`} x={X(p.station - p.curveLength / 2)} width={X(p.station + p.curveLength / 2) - X(p.station - p.curveLength / 2)} y={padT} height={H - padT - padB} className="pc-curve" /> : null))}
           <path d={line(design)} className="pc-design" />
+          {verticalExtrema(v).map((point,i)=><g key={`ext${i}`}><circle cx={X(point.station)} cy={Y(point.elevation)} r={4} fill="#80b3c8" /><text x={X(point.station)} y={Y(point.elevation)-12} className="pc-grade" textAnchor="middle">{point.kind==='high'?'Max':'Min'} {fmt(point.station,1)} m</text></g>)}
           {v.pvis.slice(1).map((p, i) => { const a = v.pvis[i]!; const g = pct(a, p); const bad = Math.abs(g) > verticalRules(road).maxGradePct; return <text key={`g${i}`} x={X((a.station + p.station) / 2)} y={Y((a.elevation + p.elevation) / 2) - 8} className={`pc-grade ${bad ? 'is-bad' : ''}`} textAnchor="middle">{fmt(g, 2)}%</text>; })}
           {v.pvis.map((p, i) => (
             <circle key={i} cx={X(p.station)} cy={Y(p.elevation)} r={6} className="pc-pvi" onPointerDown={(e) => { e.stopPropagation(); (e.target as Element).setPointerCapture(e.pointerId); drag.current = i; }}
@@ -107,14 +108,14 @@ function CrossSectionView({ road, v, grid, station }: { road: Road; v: VerticalP
   const cs = useMemo(() => crossSection(road, v, grid, origin, station, 17), [road, v, grid, origin, station]);
   const W = 360, H = 150;
   const xs = [...cs.offsets, ...cs.slopes.map((s) => s.x)];
-  const zs = [...cs.ground, cs.design, ...cs.slopes.map((s) => s.z)].filter(Number.isFinite);
+  const zs = [...cs.ground,...cs.designProfile, cs.design, ...cs.slopes.map((s) => s.z)].filter(Number.isFinite);
   const xMin = Math.min(...xs) - 2, xMax = Math.max(...xs) + 2, zMin = Math.min(...zs) - 1, zMax = Math.max(...zs) + 1;
   // Same scale on both axes (sections are read undistorted).
   const k = Math.min(W / (xMax - xMin), H / (zMax - zMin));
   const X = (x: number) => W / 2 + (-(x - (xMin + xMax) / 2)) * k; // left of the axis on the left of the drawing (looking forward)
   const Y = (z: number) => H / 2 - (z - (zMin + zMax) / 2) * k;
   const right = cs.slopes.find((s) => s.side === 'right'), left = cs.slopes.find((s) => s.side === 'left');
-  const platform = [right ? [right.x, right.z] : null, [cs.right, cs.design], [cs.left, cs.design], left ? [left.x, left.z] : null].filter(Boolean) as [number, number][];
+  const platform = [right ? [right.x, right.z] : null, ...cs.offsets.map((o,i)=>[o,cs.designProfile[i]!]), left ? [left.x, left.z] : null].filter(Boolean) as [number, number][];
   return (
     <div className="cross-section">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Sezione alla progressiva ${Math.round(station)} m`}>
@@ -139,7 +140,7 @@ function AlignmentView({ road }: { road: Road }) {
         <svg viewBox={`0 0 ${W} ${H}`} className="curv-chart" role="img" aria-label="Diagramma delle curvature">
           <line x1={0} x2={W} y1={H / 2} y2={H / 2} className="axis" />
           {[1, -1].map((sg) => <line key={sg} x1={0} x2={W} y1={y(sg / al.rMinM)} y2={y(sg / al.rMinM)} className="limit" />)}
-          {al.elements.filter((e) => e.kind === 'curve').map((e, i) => <rect key={i} x={x(e.s0)} width={Math.max(1, x(e.s1) - x(e.s0))} y={0} height={H} className="curve-band" />)}
+          {al.elements.filter((e) => e.kind !== 'tangent').map((e, i) => <rect key={i} x={x(e.s0)} width={Math.max(1, x(e.s1) - x(e.s0))} y={0} height={H} className="curve-band" />)}
           <polyline points={al.curvature.map((c) => `${x(c.s).toFixed(1)},${y(c.k).toFixed(1)}`).join(' ')} className="curv" />
         </svg>
         <p className="muted">Diagramma delle curvature 1/R (sinistra in alto). Tratteggio: 1/R minimo per {al.designSpeedKmh} km/h.</p>
@@ -147,7 +148,7 @@ function AlignmentView({ road }: { road: Road }) {
           <thead><tr><th>Elemento</th><th>Da</th><th>A</th><th>Sviluppo</th><th>R</th><th>Deviazione</th><th>q</th></tr></thead>
           <tbody>{al.elements.map((e, i) => (
             <tr key={i}>
-              <td>{e.kind === 'tangent' ? 'Rettifilo' : `Curva ${e.direction === 'left' ? 'sx' : 'dx'}`}</td><td>{fmt(e.s0, 1)}</td><td>{fmt(e.s1, 1)}</td><td>{fmt(e.lengthM, 1)} m</td>
+              <td>{e.kind === 'tangent' ? 'Rettifilo' : `${e.kind==='clothoid'?'Clotoide (R min)':'Curva'} ${e.direction === 'left' ? 'sx' : 'dx'}`}</td><td>{fmt(e.s0, 1)}</td><td>{fmt(e.s1, 1)}</td><td>{fmt(e.lengthM, 1)} m</td>
               <td className={e.radiusM && e.radiusM < al.rMinM ? 'bad' : ''}>{e.radiusM ? `${fmt(e.radiusM, 0)} m` : '∞'}</td><td>{e.deflectionDeg ? `${fmt(e.deflectionDeg, 1)}°` : ''}</td><td>{e.superelevationPct ? `${fmt(e.superelevationPct, 1)}%` : ''}</td>
             </tr>
           ))}</tbody>
@@ -229,6 +230,7 @@ function VerticalStudio() {
                 </tr>
               ))}</tbody>
             </table>
+            <div aria-label="Punti alti e bassi del profilo">{verticalExtrema(draft).map((point,i)=><Button key={i} size="sm" variant="ghost" onClick={()=>setStation(point.station)}>{point.kind==='high'?'Punto alto':'Punto basso'} · {fmt(point.station,2)} m · quota {fmt(point.elevation,2)} m</Button>)}</div>
             {issues.length ? <ul className="issue-list">{issues.map((x, i) => <li key={i} className={x.severity === 'error' ? 'err' : 'warn'}><Icon name="warning" size={14} /><button type="button" className="link" onClick={() => x.station !== undefined && setStation(x.station)}>{x.message}</button></li>)}</ul>
               : <p className="ok"><Icon name="check" size={14} /> Pendenze e raccordi conformi (verifica semplificata DM 5/11/2001).</p>}
           </div>

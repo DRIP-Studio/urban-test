@@ -1,3 +1,4 @@
+import { turnAllowed, turnRouteTree } from './turn-routing';
 import { LocalFrame, bearingDeg } from '../geo/projection';
 import { slice, type V } from '../geo/polyline';
 import type { LngLat, Network } from '../model/types';
@@ -18,6 +19,8 @@ export interface Route {
   readonly durationS: number;
   readonly line: readonly LngLat[];
   readonly roadIds: readonly string[];
+  /** Ordered directed edges actually traversed, including partial endpoint edges. */
+  readonly traversals?: readonly {roadId:string;forward:boolean}[];
   readonly steps: readonly RouteStep[];
   readonly warnings: readonly string[];
   readonly mode: RoutingContext['mode'];
@@ -91,19 +94,23 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
   if (ef) sources.push({ node: g.index.get(ra.to)!, cost: ((a.length - a.along) / (ef.speedKmh / 3.6)) * slow(ef) });
   if (eb) sources.push({ node: g.index.get(ra.from)!, cost: (a.along / (eb.speedKmh / 3.6)) * slow(eb) });
   const turnPenalty = (p: GraphEdge | null, e: GraphEdge) => junctionDelay(net, g.nodeIds[e.from]!, p, e);
-  const { dist, prev } = dijkstra(g, sources, { turnPenalty, costOf: search });
+  const { dist, prev } = ctx.mode === 'walk' || ctx.mode === 'bike' ? dijkstra(g, sources, { turnPenalty, costOf: search }) : {dist: new Float64Array(0), prev: new Int32Array(0)};
+  const turnTree = ctx.mode === 'walk' || ctx.mode === 'bike' ? null : turnRouteTree(g,
+    [...(ef ? [{edge:ef.id,cost:((a.length-a.along)/(ef.speedKmh/3.6))*slow(ef)}] : []), ...(eb ? [{edge:eb.id,cost:(a.along/(eb.speedKmh/3.6))*slow(eb)}] : [])],
+    (incoming,outgoing)=>turnAllowed(net,frameOrigin,g,incoming,outgoing),search,(incoming,outgoing)=>turnPenalty(incoming,outgoing));
+
 
   // Same road, reachable directly along it?
   let best = Infinity;
-  let endVia: { node: number; fwd: boolean } | null = null;
+  let endVia: { node: number; fwd: boolean; edge?: number } | null = null;
   let direct: { fwd: boolean } | null = null;
   if (a.roadId === b.roadId) {
     if (ef && b.along >= a.along) { best = ((b.along - a.along) / (ef.speedKmh / 3.6)) * slow(ef); direct = { fwd: true }; }
     if (eb && b.along <= a.along) { best = ((a.along - b.along) / (eb.speedKmh / 3.6)) * slow(eb); direct = { fwd: false }; }
   }
   const bf = speedOf(b.roadId, true), bb = speedOf(b.roadId, false);
-  if (bf) { const n = g.index.get(rb.from)!; const c = dist[n]! + (b.along / (bf.speedKmh / 3.6)) * slow(bf); if (c < best) { best = c; endVia = { node: n, fwd: true }; direct = null; } }
-  if (bb) { const n = g.index.get(rb.to)!; const c = dist[n]! + ((b.length - b.along) / (bb.speedKmh / 3.6)) * slow(bb); if (c < best) { best = c; endVia = { node: n, fwd: false }; direct = null; } }
+  if (bf) { const n = g.index.get(rb.from)!; const arrival = turnTree?.arrival(n,bf); const c = (arrival?.cost ?? dist[n]!) + (b.along / (bf.speedKmh / 3.6)) * slow(bf); if (c < best) { best = c; endVia = { node: n, fwd: true, edge: arrival?.edge }; direct = null; } }
+  if (bb) { const n = g.index.get(rb.to)!; const arrival = turnTree?.arrival(n,bb); const c = (arrival?.cost ?? dist[n]!) + ((b.length - b.along) / (bb.speedKmh / 3.6)) * slow(bb); if (c < best) { best = c; endVia = { node: n, fwd: false, edge: arrival?.edge }; direct = null; } }
   if (!Number.isFinite(best)) {
     const reasons = [...new Set(g.blocked.values())];
     return empty(['Nessun percorso disponibile con le regole dello scenario', ...reasons.slice(0, 4)]);
@@ -111,35 +118,38 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
 
   const axisM = (id: string) => net.roads[id]!.axis.map((q) => frame.toMetric(q) as V);
   const toLL = (pts: V[]) => pts.map((q) => frame.toLngLat(q));
-  const pieces: { roadId: string; pts: LngLat[]; lengthM: number; durationS: number }[] = [];
+  const pieces: { roadId: string; forward: boolean; pts: LngLat[]; lengthM: number; durationS: number }[] = [];
   let delayS = 0;
   if (direct) {
     const s = Math.min(a.along, b.along), e = Math.max(a.along, b.along);
     let pts = toLL(slice(axisM(a.roadId), s, e));
     if (!direct.fwd) pts = pts.reverse();
     const ed = direct.fwd ? ef! : eb!;
-    pieces.push({ roadId: a.roadId, pts, lengthM: e - s, durationS: ((e - s) / (ed.speedKmh / 3.6)) * slow(ed) });
+    pieces.push({ roadId: a.roadId, forward:direct.fwd, pts, lengthM: e - s, durationS: ((e - s) / (ed.speedKmh / 3.6)) * slow(ed) });
   } else {
-    const chain: GraphEdge[] = [];
-    let n = endVia!.node;
-    while (prev[n]! >= 0) { const e = g.edges[prev[n]!]!; chain.push(e); n = e.from; }
-    chain.reverse();
+    const chain: GraphEdge[] = turnTree ? turnTree.path(endVia!.edge!) : [];
+    if (!turnTree) {
+      let n = endVia!.node;
+      while (prev[n]! >= 0) { const e = g.edges[prev[n]!]!; chain.push(e); n = e.from; }
+      chain.reverse();
+    }
     const firstFwd = chain.length ? g.nodeIds[chain[0]!.from] === ra.to : endVia!.node === g.index.get(ra.to);
     const startPts = firstFwd ? toLL(slice(axisM(a.roadId), a.along, a.length)) : toLL(slice(axisM(a.roadId), 0, a.along)).reverse();
     const sp = firstFwd ? ef! : eb!;
-    pieces.push({ roadId: a.roadId, pts: startPts, lengthM: firstFwd ? a.length - a.along : a.along, durationS: ((firstFwd ? a.length - a.along : a.along) / (sp.speedKmh / 3.6)) * slow(sp) });
+    pieces.push({ roadId: a.roadId, forward:firstFwd, pts: startPts, lengthM: firstFwd ? a.length - a.along : a.along, durationS: ((firstFwd ? a.length - a.along : a.along) / (sp.speedKmh / 3.6)) * slow(sp) });
     let before: GraphEdge | null = sp;
     for (const e of chain) {
       delayS += turnPenalty(before, e);
       before = e;
       let pts = [...net.roads[e.roadId]!.axis];
       if (!e.forward) pts = pts.reverse();
-      pieces.push({ roadId: e.roadId, pts, lengthM: e.lengthM, durationS: travel(e) });
+      pieces.push({ roadId: e.roadId, forward:e.forward, pts, lengthM: e.lengthM, durationS: travel(e) });
     }
     const endPts = endVia!.fwd ? toLL(slice(axisM(b.roadId), 0, b.along)) : toLL(slice(axisM(b.roadId), b.along, b.length)).reverse();
     const ep = endVia!.fwd ? bf! : bb!;
+    if (before) delayS += turnPenalty(before,ep);
     const endLen = endVia!.fwd ? b.along : b.length - b.along;
-    pieces.push({ roadId: b.roadId, pts: endPts, lengthM: endLen, durationS: (endLen / (ep.speedKmh / 3.6)) * slow(ep) });
+    pieces.push({ roadId: b.roadId, forward:endVia!.fwd, pts: endPts, lengthM: endLen, durationS: (endLen / (ep.speedKmh / 3.6)) * slow(ep) });
   }
 
   const line: LngLat[] = [];
@@ -166,7 +176,7 @@ export function route(net: Network, frameOrigin: LngLat, from: LngLat, to: LngLa
   const distanceM = pieces.reduce((s, p) => s + p.lengthM, 0);
   // Real travel time of the path found (search costs may include penalties): pieces plus junction delays.
   const durationS = pieces.reduce((t, p) => t + p.durationS, 0) + delayS;
-  return { found: true, distanceM, durationS, line, roadIds: [...new Set(pieces.map((p) => p.roadId))], steps, warnings, mode: ctx.mode };
+  return { found: true, distanceM, durationS, line, roadIds: [...new Set(pieces.map((p) => p.roadId))], traversals:pieces.filter(p=>p.lengthM>0.01).map(p=>({roadId:p.roadId,forward:p.forward})), steps, warnings, mode: ctx.mode };
 }
 
 

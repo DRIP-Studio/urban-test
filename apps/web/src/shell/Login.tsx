@@ -7,7 +7,7 @@ import { TechnicalLockup } from './Brand';
 
 function hashError(): string | null {
   const m = location.hash.match(/[?&]error=([^&]+)/);
-  return m ? decodeURIComponent(m[1]!) : null;
+  try{return m ? decodeURIComponent(m[1]!) : null;}catch{return 'Risposta di accesso non valida';}
 }
 
 /** Sign-in: DRIP ID / Keycloak (OpenID Connect) or the provisional local administrator. */
@@ -15,6 +15,7 @@ export function Login() {
   const session = useSession((s) => s.session);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword,setShowPassword]=useState(false),[caps,setCaps]=useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(hashError());
   const next = location.hash && !location.hash.startsWith('#/login') ? `/${location.hash}` : '/';
@@ -33,11 +34,12 @@ export function Login() {
   };
   const providers = session?.providers ?? [];
   return (
-    <div className="auth-screen">
+    <div className="auth-screen auth-entry">
+      <section className="auth-territory" aria-label="DRIP Urban"><TechnicalLockup/><div className="auth-statement"><span className="auth-eyebrow">DRIP URBAN · WORKSTATION</span><h2>La città,<br/><em>in progetto.</em></h2><p>Dal territorio alle decisioni.<br/>Progetta, simula e racconta ogni trasformazione.</p></div><svg className="auth-city-lines" viewBox="0 0 600 350" fill="none" aria-hidden="true"><g stroke="currentColor" strokeWidth="1"><path d="M-40 60H650M-40 150H650M-40 245H650M90 -40V390M220 -40V390M410 -40V390M540 -40V390"/><path d="M35 0L120 100L300 155L480 350M0 290L185 205L360 55L600 20"/><path d="M115 75H195V125H115ZM245 75H365V125H245ZM245 170H365V218H245ZM435 170H515V218H435ZM115 270H195V320H115Z"/></g><path d="M-15 150H220V245H410V350" stroke="var(--drip-accent)" strokeWidth="3"/><g fill="var(--drip-accent)"><circle cx="220" cy="150" r="5"/><circle cx="220" cy="245" r="5"/><circle cx="410" cy="245" r="5"/></g></svg><div className="auth-disciplines"><span>01 · Progetto</span><span>02 · Simulazione</span><span>03 · Digital Twin</span></div></section>
       <main className="auth-card">
         <TechnicalLockup />
         <div className="auth-intro">
-          <h1>Accedi</h1>
+          <span className="auth-eyebrow">ACCESSO ALLA POSTAZIONE</span><h1>Benvenuto in Urban</h1>
           <p>Pianificazione urbana, progettazione stradale, traffico e digital twin.</p>
         </div>
         {providers.map((p) => (
@@ -50,14 +52,14 @@ export function Login() {
         {session?.localLogin !== false ? (
           <>
             {providers.length ? <div className="auth-sep"><span>oppure accesso locale</span></div> : null}
-            <form className="auth-form" onSubmit={submit}>
+            <form className="auth-form" onSubmit={submit} aria-busy={busy}>
               <label className="field"><span className="field-label">Utente</span>
-                <input className="text-field" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus={!providers.length} required />
+                <input className="text-field" disabled={busy} autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus={!providers.length} required />
               </label>
               <label className="field"><span className="field-label">Password</span>
-                <input className="text-field" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <div className="auth-password"><input className="text-field" aria-label="Password" disabled={busy} type={showPassword?'text':'password'} autoComplete="current-password" onKeyDown={e=>setCaps(e.getModifierState('CapsLock'))} value={password} onChange={(e) => setPassword(e.target.value)} required /><button type="button" className="auth-password-toggle" aria-label={showPassword?'Nascondi password':'Mostra password'} aria-pressed={showPassword} onClick={()=>setShowPassword(!showPassword)}>{showPassword?'Nascondi':'Mostra'}</button></div>
               </label>
-              <Button type="submit" variant="primary" busy={busy}>Entra</Button>
+              {caps&&<p role="status" className="auth-hint">Blocco maiuscole attivo.</p>}<Button type="submit" variant="primary" busy={busy} disabled={busy}>{busy?'Verifica accesso…':'Entra nella postazione'}</Button>
             </form>
             {session?.provisionalHint ? <p className="auth-hint"><Icon name="key" size={14} />{session.provisionalHint}</p> : null}
           </>

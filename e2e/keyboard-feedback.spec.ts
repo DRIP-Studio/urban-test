@@ -1,0 +1,28 @@
+import {test,expect} from '@playwright/test';
+import {createProject,openWorkspace} from './helpers';
+test('keyboard modal focus and notification reading time remain usable',async({page,request})=>{
+  await openWorkspace(page,await createProject(request,'Keyboard feedback'));
+  const search=page.getByRole('button',{name:'Comandi e ricerca',exact:true}).first();
+  await search.click();
+  const palette=page.getByRole('dialog',{name:'Comandi',exact:true});
+  await expect(palette.getByRole('textbox',{name:'Cerca',exact:true})).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  expect(await palette.evaluate(element=>element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
+  await expect(search).toBeFocused();
+  await page.evaluate(async()=>{const path='/src/state/toasts.ts';const {toast}=await import(path);toast.info('Lettura persistente','Tempo di lettura sospeso sotto il puntatore');});
+  const notification=page.locator('.toast').filter({hasText:'Lettura persistente'});
+  await notification.hover();
+  await page.waitForTimeout(4500);
+  await expect(notification).toBeVisible();
+  await notification.getByRole('button',{name:'Chiudi',exact:true}).click();
+  await expect(notification).toHaveCount(0);
+  await page.evaluate(async()=>{const path='/src/ui/confirm.tsx';void (await import(path)).confirmAction('Prova focus','Nessuna modifica al progetto',{danger:true});});
+  const confirm=page.getByRole('alertdialog');
+  await expect(confirm.getByRole('button',{name:'Annulla',exact:true})).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(confirm.getByRole('button',{name:'Conferma',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+});

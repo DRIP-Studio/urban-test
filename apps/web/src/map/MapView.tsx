@@ -1,5 +1,8 @@
+import {drawWorks} from './works';
+import {drawUtilities} from './utilities';
+import { getProjectTime, useProjectTime } from '../state/projectTime';
 import { api } from '../api/client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { MapMouseEvent, RasterSourceSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -89,6 +92,7 @@ function applyCtr(map: maplibregl.Map, on: boolean): void {
 function themeOf(id: string): 'light' | 'dark' { return basemapById(id).theme; }
 
 export function MapView() {
+  const [fatal,setFatal]=useState<Error|null>(null);
   const el = useRef<HTMLDivElement>(null);
   const openMenu = useContextMenu((s) => s.open);
 
@@ -113,6 +117,7 @@ export function MapView() {
     let furnitureById = new Map(furnCat.items.map((i) => [i.id, i]));
     let theme = themeOf(basemap);
     // Tilted map: plate offsets follow the pitch (a vertical metre is ~ ground metre × sin(pitch) on screen).
+    let buildingStylesRef: unknown;
     let removedRef: Readonly<Record<string, true>> | undefined;
     let signs3dBase: ReturnType<typeof assetsFC>['signs3d'] | null = null;
     let signsRaf = 0;
@@ -126,30 +131,30 @@ export function MapView() {
     const vmsTimer = setInterval(() => {
       const { network } = useApp.getState();
       if (!network || !Object.values(network.assets).some((x) => x.type === 'traffic.vms' && /\n\s*\n/.test(vmsMessage(x)))) return;
-      syncSource('signals', assetsFC(network, baseline.origin, furnitureById).signals);
+      syncSource('signals', assetsFC(network, baseline.origin, furnitureById, undefined, getProjectTime()).signals);
     }, VMS_PAGE_MS);
     const pushNetwork = () => {
       const { network, selection } = useApp.getState();
       if (!network) return;
       syncSource('labels', labelsFC(network));
-      syncSource('zones', zonesFC(network));
+      syncSource('zones', zonesFC(network, getProjectTime()));
       syncSource('restrictions', restrictionsFC(network));
       syncSource('lanes-pref', preferentialLanesFC(network));
       const cat = useApp.getState().catalogs?.furniture;
       if (cat && cat !== furnCat) { furnCat = cat; furnitureById = new Map(cat.items.map((i) => [i.id, i])); }
-      const a = assetsFC(network, baseline.origin, furnitureById);
+      const a = assetsFC(network, baseline.origin, furnitureById, undefined, getProjectTime());
       syncSource('asset-fp', a.fp); syncSource('asset-pt', a.pt); syncSource('signals', a.signals); syncSource('asset-parts', a.parts);
       syncSource('sign-poles', a.poles);
       syncSource('structures', structuresFC(network, baseline.origin));
       drawDrainage(network);
-      drawWater(network);
-      if (network.removedBuildings !== removedRef) { removedRef = network.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef)); }
+      drawWater(network);drawUtilities(network);drawWorks(network);
+      if (network.removedBuildings !== removedRef || network.buildingStyles !== buildingStylesRef) { removedRef = network.removedBuildings; buildingStylesRef = network.buildingStyles; setSource('buildings', buildingsFC(baseline, removedRef, useApp.getState().network?.buildingStyles)); }
       signs3dBase = a.signs3d; updateSigns3d();
       setSource('selection', selectionFC(selection, network));
     };
     const init = () => {
       addProjectLayers(map, catalogs.materials.items, theme === 'dark');
-      removedRef = useApp.getState().network?.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef));
+      removedRef = useApp.getState().network?.removedBuildings; setSource('buildings', buildingsFC(baseline, removedRef, useApp.getState().network?.buildingStyles));
       setSource('context', contextFC(baseline));
       // Large project: whole-city roads around the loaded work area.
       const proj = useApp.getState().project;
@@ -175,7 +180,7 @@ export function MapView() {
       // Sign plates in 3D at their real size (0.6 m), 96 px rasters.
       const plate = (z: number) => (pxPerM19 * 2 ** (z - 19) * SIGN_PLATE_M) / 48;
       if (map.getLayer('signs-3d')) map.setLayoutProperty('signs-3d', 'icon-size', ['interpolate', ['exponential', 2], ['zoom'], 15, Math.max(0.08, plate(15)), 19, plate(19), 22, plate(22)] as never);
-      const atLeast = (v: number) => ['max', v, ['coalesce', ['get', 'minK'], 0]];
+      const atLeast = (v: number) => ['max', ['*', v, ['coalesce', ['get', 'scale'], 1]], ['coalesce', ['get', 'minK'], 0]];
       if (map.getLayer('asset-3d')) map.setLayoutProperty('asset-3d', 'icon-size', ['interpolate', ['exponential', 2], ['zoom'], 15, atLeast(k / 16), 19, atLeast(k), 22, atLeast(k * 8)] as never);
       applyPitchMode();
       useMapUi.setState({ ready: true });
@@ -192,8 +197,16 @@ export function MapView() {
     };
     map.on('pitchend', applyPitchMode);
     map.on('load', init);
-    // ZTL LED panels follow the clock: refresh their state every minute.
-    const ledTimer = window.setInterval(() => { if (map.loaded()) pushNetwork(); }, 60_000);
+    let previousMinute = '';
+    const offClock = useProjectTime.subscribe(() => {
+      const at = getProjectTime(), key = `${at.date}:${Math.floor(at.minutes)}:${at.holiday}`;
+      if (key === previousMinute || !map.isStyleLoaded()) return;
+      previousMinute = key;
+      const network = useApp.getState().network;
+      if (!network) return;
+      syncSource('zones', zonesFC(network, at));
+      if (Object.values(network.assets).some((a) => furnitureById.get(a.type)?.led?.kind === 'ztl')) syncSource('signals', assetsFC(network, baseline.origin, furnitureById, undefined, at).signals);
+    });
     // PMV in live mode follow each traffic refresh.
     const offLive = useLive.subscribe((s, prev) => { if (s.capturedAt !== prev.capturedAt || s.status !== prev.status) { if (map.loaded()) pushNetwork(); } });
 
@@ -268,20 +281,24 @@ export function MapView() {
     };
     map.on('moveend', updateView);
     map.on('load', updateView);
+    const onLost=(event:Event)=>{event.preventDefault();setFatal(new Error('Contesto grafico della mappa perso'));};
+    map.getCanvas().addEventListener('webglcontextlost',onLost);
     const canvas = map.getCanvasContainer();
     const onWheel = (e: WheelEvent) => { if (tool().wheel?.(e, ctx)) { e.preventDefault(); e.stopPropagation(); } };
     canvas.addEventListener('wheel', onWheel, { capture: true, passive: false });
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(el.current);
     return () => {
-      offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); window.clearInterval(ledTimer); clearInterval(vmsTimer); offLive();
+      offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); offClock(); clearInterval(vmsTimer); offLive();
       canvas.removeEventListener('wheel', onWheel, { capture: true });
       useMapUi.setState({ ready: false });
       setMapInstance(null);
+      map.getCanvas().removeEventListener('webglcontextlost',onLost);
       map.remove();
     };
   }, [openMenu]);
 
+  if(fatal)throw fatal;
   return <div className="map" ref={el} role="application" aria-label="Mappa di lavoro" />;
 }
 

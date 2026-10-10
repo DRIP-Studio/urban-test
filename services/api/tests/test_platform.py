@@ -156,7 +156,8 @@ def test_3d_model_upload_validates_and_serves(client):
     assert bad.status_code == 400
     fake = client.post(f"/api/projects/{pid}/models", files={"file": ("x.glb", b"nope", "model/gltf-binary")})
     assert fake.status_code == 400
-    js = b'{"asset":{"version":"2.0"}}  '
+    js = b'{"asset":{"version":"2.0"}}'
+    js += b' ' * ((-len(js)) % 4)
     glb = b"glTF" + struct.pack("<II", 2, 12 + 8 + len(js)) + struct.pack("<I", len(js)) + b"JSON" + js
     r = client.post(f"/api/projects/{pid}/models", files={"file": ("chiosco.glb", glb, "model/gltf-binary")}, data={"w": "3", "d": "2", "h": "3.2", "name": "Chiosco"})
     assert r.status_code == 200, r.text
@@ -165,6 +166,18 @@ def test_3d_model_upload_validates_and_serves(client):
     assert client.get(f"/api/projects/{pid}/models").json()[0]["id"] == rec["id"]
     got = client.get(f"/api/projects/{pid}/models/{rec['id']}")
     assert got.status_code == 200 and got.content == glb
+    invalid = client.post(f"/api/projects/{pid}/models", files={"file": ("bad.glb", glb, "model/gltf-binary")}, data={"scale": "NaN"})
+    assert invalid.status_code == 400
+    scenario = client.get(f"/api/projects/{pid}/scenarios/scenario-a").json()
+    scenario["operations"] = [{"id": "model-usage", "type": "asset.add", "payload": {"assets": [{"id": "a-model", "type": f"model:{rec['id']}"}]}, "author": "admin", "at": "2026-10-09T00:00:00Z"}]
+    saved = client.put(f"/api/projects/{pid}/scenarios/scenario-a", json={"scenario": scenario, "baseRevision": scenario["revision"]})
+    assert saved.status_code == 200, saved.text
+    assert client.delete(f"/api/projects/{pid}/models/{rec['id']}").status_code == 409
+    assert client.get(f"/api/projects/{pid}/models/{rec['id']}").content == glb
+    scenario = saved.json()
+    scenario["operations"] = []
+    removed = client.put(f"/api/projects/{pid}/scenarios/scenario-a", json={"scenario": scenario, "baseRevision": scenario["revision"]})
+    assert removed.status_code == 200, removed.text
     assert client.delete(f"/api/projects/{pid}/models/{rec['id']}").json()["ok"]
     assert client.get(f"/api/projects/{pid}/models").json() == []
 
@@ -221,4 +234,53 @@ def test_local_profile_photo_and_services_launcher(client):
     assert svc["urban"]["current"] and svc["urban"]["url"].endswith("/")
     assert svc["site"]["url"] == "https://studiodrip.it"
     assert svc["fiscoflow"]["url"] == ""
+    assert svc["fiscoflow"]["entitlement"] == "unknown"
+    assert svc["urban"]["entitlement"] == "trial"
     assert client.put("/api/platform/config", json={"services": [{"id": "x", "label": "X", "url": "http://insecure"}]}).status_code == 400
+
+
+def test_services_show_actual_configured_entitlement_without_guessing_other_products(client, monkeypatch):
+    _admin(client)
+    from app.platform import config, license
+    cfg = config.load()
+    monkeypatch.setattr(config, "load", lambda: {**cfg, "services": [
+        {"id": "paid", "label": "Funzione API", "url": "https://example.test", "requiredFeature": "api"},
+        {"id": "other", "label": "Altro prodotto", "url": "https://example.test/other"},
+    ]})
+    monkeypatch.setattr(license, "status", lambda: {"status": "active", "features": ["design"]})
+    svc = {s["id"]: s for s in client.get("/api/platform/services").json()}
+    assert svc["paid"]["entitlement"] == "unavailable"
+    assert svc["other"]["entitlement"] == "unknown"
+    monkeypatch.setattr(license, "status", lambda: {"status": "active", "features": ["api"]})
+    assert client.get("/api/platform/services").json()[0]["entitlement"] == "active"
+
+def test_api_key_scopes_expiry_and_revocation_are_server_enforced(client):
+    _admin(client)
+    from app.platform import integrations
+    from app.storage import read_json, atomic_write_json
+    key = client.post("/api/platform/keys", json={"name": "Scoped admin key", "role": "admin", "scopes": ["projects:read"], "expiresAt": "2030-01-01T00:00:00Z"}).json()
+    assert key["scopes"] == ["projects:read"] and "hash" not in key
+    stored = read_json(integrations._keys_path(), [])
+    assert key["key"] not in str(stored) and stored[-1]["hash"]
+    assert client.post("/api/platform/keys", json={"name": "Excess scope", "role": "viewer", "scopes": ["platform:admin"]}).status_code == 400
+    assert client.post("/api/platform/keys", json={"name": "Expired input", "expiresAt": "2000-01-01T00:00:00Z"}).status_code == 400
+    client.cookies.clear()
+    h = {"Authorization": "Bearer " + key["key"]}
+    assert client.get("/api/projects", headers=h).status_code == 200
+    assert client.post("/api/projects", headers=h, json={"name": "Denied", "template": "frattamaggiore"}).status_code == 403
+    assert client.get("/api/platform/keys", headers=h).status_code == 403
+    assert "key" not in integrations.list_keys()[-1] and integrations.list_keys()[-1]["lastUsedAt"]
+    stored = read_json(integrations._keys_path(), [])
+    stored[-1]["expiresAt"] = "2000-01-01T00:00:00+00:00"
+    atomic_write_json(integrations._keys_path(), stored)
+    assert client.get("/api/projects", headers=h).status_code == 401
+    integrations.revoke_key(key["id"])
+    assert integrations.check_key(key["key"]) is None
+    assert key["id"] not in integrations._last_touch
+    _admin(client)
+
+
+def test_invalid_bearer_never_falls_back_to_open_admin(tmp_path):
+    open_client = fresh_app(tmp_path / "open-key", "open")
+    assert open_client.get("/api/projects").status_code == 200
+    assert open_client.get("/api/projects", headers={"Authorization": "Bearer drip_ffff_bad"}).status_code == 401

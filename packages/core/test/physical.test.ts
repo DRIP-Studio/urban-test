@@ -211,6 +211,25 @@ describe('geometric roundabout insertion', () => {
   });
   const lenM = (net: Network, id: string) => geom.lengthOf(net.roads[id]!.axis.map((q) => new LocalFrame(baseline.origin).toMetric(q)));
 
+  it('exit radius edits change the shared throat geometry and lane edits rebuild the routing ring', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const degree = new Map<string, number>();
+    for (const r of Object.values(h.network.roads)) if (!layoutSection(r).pedestrianOnly) for (const n of [r.from, r.to]) degree.set(n, (degree.get(n) ?? 0) + 1);
+    const node = [...degree].find(([, d]) => d === 4)![0];
+    h.commit({ type: 'roundabout.add', payload: { roundabout: rbAt(h.network.nodes[node]!.at, { replacedNodeId: node }) } });
+    const before = h.network.roundabouts.rbx!;
+    const throats = () => buildPhysicalModel(h.network, { origin: baseline.origin }).surfaces.filter((p) => p.id.includes('rb:rbx:throat:'));
+    const geometry = throats();
+    h.commit({ type: 'roundabout.update', payload: { roundabout: { ...before, arms: before.arms.map((a) => ({ ...a, exitRadiusM: 4 })) } } });
+    expect(throats()).not.toEqual(geometry);
+    h.undo();
+    expect(throats()).toEqual(geometry);
+    h.commit({ type: 'roundabout.update', payload: { roundabout: { ...before, lanes: 2 } } });
+    expect(Object.values(h.network.roads).filter((r) => r.tags?.roundabout === 'rbx').every((r) => r.lanes.length === 2)).toBe(true);
+    expect(buildPhysicalModel(h.network, { origin: baseline.origin }).markings.some((m) => m.kind === 'ring_line')).toBe(true);
+    expect(() => h.commit({ type: 'roundabout.update', payload: { roundabout: { ...before, outerDiameterM: NaN } } })).toThrow();
+  });
+
   it('takes arms through short OSM tracts: no "short arm" refusal, every arm leaves the ring', () => {
     const h = new ScenarioHistory(baseline, scenario(), 't', ids);
     const frame = new LocalFrame(baseline.origin);

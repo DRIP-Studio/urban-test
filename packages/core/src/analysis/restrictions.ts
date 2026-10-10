@@ -73,10 +73,11 @@ export function restrictionsOf(road: Road): { restrictions: RoadRestrictions; so
 export function windowActive(windows: readonly TimeWindow[] | undefined, day: number, minutes: number): boolean {
   if (!windows || !windows.length) return true;
   return windows.some((s) => {
-    if (!s.days.includes(day)) return false;
     const [fh, fm] = s.from.split(':').map(Number), [th, tm] = s.to.split(':').map(Number);
     const a = (fh ?? 0) * 60 + (fm ?? 0), b = (th ?? 0) * 60 + (tm ?? 0);
-    return a <= b ? minutes >= a && minutes < b : minutes >= a || minutes < b;
+    if (a === b) return s.days.includes(day);
+    return a < b ? s.days.includes(day) && minutes >= a && minutes < b :
+      (s.days.includes(day) && minutes >= a) || (s.days.includes((day + 6) % 7) && minutes < b);
   });
 }
 
@@ -89,7 +90,7 @@ export interface VehicleSpec { readonly weightT?: number; readonly heightM?: num
 export function checkRestrictions(road: Road, mode: TravelMode, vehicle: VehicleSpec | undefined, day: number, minutes: number): { blocked: string | null; penalty: number } {
   const r = restrictionsOf(road)?.restrictions;
   if (!r) return { blocked: null, penalty: 1 };
-  const motor = mode === 'car' || mode === 'truck' || mode === 'bus';
+  const motor = mode === 'motorcycle' || mode === 'car' || mode === 'truck' || mode === 'bus';
   const v = mode === 'truck' ? { ...DEFAULT_TRUCK, ...vehicle } : vehicle;
   const timed = windowActive(r.schedule, day, minutes);
   let penalty = 1;

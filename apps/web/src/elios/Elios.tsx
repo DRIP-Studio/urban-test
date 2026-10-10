@@ -1,3 +1,12 @@
+import { useDiagnostics, useProjectDiagnostics } from './diagnostics';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { EvaluationResults } from './EvaluationResults';
+import { useEvaluation } from './evaluationState';
+import { getMap } from '../map/mapStore';
+import { useLive } from '../traffic/live';
+import { engine } from '../engine/engine';
+import { getTwinCameraContext } from '../twin/cameraContext';
+import {setEliosSignal} from './scope';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { create } from 'zustand';
 import { api, ApiError } from '../api/client';
@@ -5,6 +14,7 @@ import { setDock, useApp } from '../state/store';
 import { Icon } from '../ui/Icon';
 import { declarations, toolByName } from './tools';
 import './signalTools';
+import './workstationTools';
 import './rulesTools';
 import './transitTools';
 import './civicTools';
@@ -12,6 +22,8 @@ import './terrainTools';
 import './normTools';
 import './streetscapeTools';
 import './planTools';
+import { cancelEliosAnalysis } from './analysisTools';
+import { getProjectTime } from '../state/projectTime';
 
 type Part = { text?: string; functionCall?: { name: string; args: Record<string, unknown> }; functionResponse?: { name: string; response: unknown }; thoughtSignature?: string };
 interface Content { role: 'user' | 'model'; parts: Part[] }
@@ -29,6 +41,11 @@ interface EliosState {
 }
 export const useElios = create<EliosState>(() => ({ open: false, busy: false, messages: [], contents: [], configured: null }));
 let seq = 0;
+let activeRequest: AbortController | null = null;
+export function cancelEliosRequest(): void {
+  activeRequest?.abort();
+  cancelEliosAnalysis();
+}
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
 const push = (m: DistributiveOmit<Msg, 'id'>) => useElios.setState((s) => ({ messages: [...s.messages, { ...m, id: ++seq } as Msg] }));
 
@@ -53,6 +70,13 @@ function context() {
   return {
     project: s.project?.name, city: s.baseline?.name, bbox: s.baseline?.bbox, scenario: s.scenario?.name, scenarioIsBaseline: s.scenario?.isBaseline,
     mode: s.mode, tool: s.tool, selection: s.selection ? { kind: s.selection.kind, ids: s.selection.ids.slice(0, 10) } : null,
+    projectClock: getProjectTime(),
+    diagnostics: { ...useDiagnostics.getState(), items: useDiagnostics.getState().items.slice(0,20) },
+    panel: s.dock, environment: s.network?.environment,
+    viewport: getMap()?.getBounds()?.toArray(),
+    traffic: useLive.getState().traffic ? { mode: useLive.getState().traffic!.mode, coverage: useLive.getState().traffic!.coverage, generatedAt: useLive.getState().traffic!.generatedAt } : null,
+    simulation: engine.lastSim ? { metrics: { ...engine.lastSim.metrics, queues: engine.lastSim.metrics.queues.slice(0, 15) }, running: !engine.simPaused } : null,
+    twinCamera: s.mode === 'twin' ? getTwinCameraContext() : null,
     today: new Date().toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
   };
 }
@@ -61,11 +85,19 @@ export async function askElios(text: string): Promise<void> {
   const st = useElios.getState();
   if (st.busy || !text.trim()) return;
   push({ who: 'user', text: text.trim() });
+  const controller = new AbortController();
+  activeRequest = controller;
+  setEliosSignal(controller.signal);
+  const initial = useApp.getState();
+  const scope = { project: initial.project?.id, scenario: initial.scenario?.id };
+  let revision = JSON.stringify(initial.scenario?.operations);
+  const ensureCurrent = () => { if(controller.signal.aborted)throw Error('Richiesta annullata'); const current=useApp.getState(); if(current.project?.id!==scope.project||current.scenario?.id!==scope.scenario||JSON.stringify(current.scenario?.operations)!==revision)throw Error('Il progetto o lo scenario è cambiato durante la risposta. Ripeti la richiesta sullo stato attuale.'); };
   let contents: Content[] = [...st.contents, { role: 'user', parts: [{ text: text.trim() }] }];
   useElios.setState({ busy: true, contents });
   try {
     for (let step = 0; step < 8; step++) {
-      const res = await api.post<{ status: string; parts: Part[] }>('/api/elios/chat', { contents, tools: declarations(), context: context() });
+      const res = await api.post<{ status: string; parts: Part[] }>('/api/elios/chat', { contents, tools: declarations(), context: context() }, {signal:controller.signal});
+      ensureCurrent();
       if (res.status === 'not_configured') useElios.setState({ configured: false });
       const parts = res.parts ?? [];
       contents = [...contents, { role: 'model', parts }];
@@ -77,10 +109,14 @@ export async function askElios(text: string): Promise<void> {
         const { name, args } = c.functionCall!;
         const tool = toolByName(name);
         try {
+          ensureCurrent();
           if (!tool) throw new Error(`Strumento sconosciuto: ${name}`);
+          useEvaluation.setState({stage:tool.label??LABEL[name]??name});
           const result = await tool.run(args ?? {});
+          const after=useApp.getState();if(after.project?.id!==scope.project||after.scenario?.id!==scope.scenario)throw Error('Progetto cambiato durante operazione');
+          revision=JSON.stringify(after.scenario?.operations);
           responses.push({ functionResponse: { name, response: { result: result ?? { ok: true } } } });
-          if (tool.kind !== 'read') push({ who: 'action', tool: name, ok: true, kind: tool.kind, detail: `${tool.label ?? LABEL[name] ?? name} ${describe(result)}` });
+          push({ who: 'action', tool: name, ok: true, kind: tool.kind, detail: `${tool.label ?? LABEL[name] ?? name} ${describe(result)}` });
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           responses.push({ functionResponse: { name, response: { error: message } } });
@@ -90,13 +126,16 @@ export async function askElios(text: string): Promise<void> {
       contents = [...contents, { role: 'user', parts: responses }];
     }
   } catch (e) {
-    push({ who: 'elios', text: e instanceof ApiError && e.status === 402 ? e.message : `Non riesco a rispondere: ${e instanceof Error ? e.message : String(e)}` });
+    push({ who: 'elios', text: controller.signal.aborted ? 'Richiesta annullata. Le modifiche già applicate restano annullabili con Ctrl+Z.' : e instanceof ApiError && e.status === 402 ? e.message : `Non riesco a rispondere: ${e instanceof Error ? e.message : String(e)}` });
   } finally {
+    if(activeRequest===controller){activeRequest=null;setEliosSignal(null);}
     useElios.setState({ busy: false, contents });
   }
 }
 
 const SUGGESTIONS = [
+  'Analizza GIS, accessibilità pedonale e ciclabile e interferenze dei sottoservizi; indica i dati mancanti',
+  'Confronta i cicli degli incroci selezionati nel solver: prima chiedimi la domanda se non è dichiarata',
   'Crea una zona 30 attorno alla selezione',
   'Metti alberi ogni 8 metri su entrambi i lati della strada selezionata',
   'Vieta il transito ai camion oltre 3,5 t sulla strada selezionata',
@@ -121,15 +160,18 @@ type Recognition = { lang: string; interimResults: boolean; onresult: (e: { resu
 export function toggleElios(): void { useElios.setState((s) => ({ open: !s.open })); }
 
 export function EliosPanel() {
+  useProjectDiagnostics();
   const { open, busy, messages, configured } = useElios();
+  const evaluated = useEvaluation(s => s.rows.length > 0);
   const [text, setText] = useState('');
   const [listening, setListening] = useState(false);
   const list = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
   const rec = useRef<Recognition | null>(null);
   useEffect(() => {
     if (open && configured === null) api.get<{ configured: boolean }>('/api/elios/status').then((s) => useElios.setState({ configured: s.configured })).catch(() => undefined);
   }, [open, configured]);
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [messages.length, busy]);
+  useEffect(() => { if (follow.current) list.current?.scrollTo({ top: list.current.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }, [messages.length, busy]);
   if (!open) return null;
   const send = () => { const t = text; setText(''); void askElios(t); };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } e.stopPropagation(); };
@@ -153,17 +195,18 @@ export function EliosPanel() {
         <span className="elios-mark"><Icon name="sparkle" size={16} /></span>
         <div><strong>Elios</strong><span>Assistente AI di DRIP Urban</span></div>
         <span className="spacer" />
-        {messages.length ? <button type="button" className="elios-mini" onClick={() => useElios.setState({ messages: [], contents: [] })}>Nuova chat</button> : null}
+        {messages.length ? <button type="button" className="elios-mini" disabled={busy} onClick={() => useElios.setState({ messages: [], contents: [] })}>Nuova chat</button> : null}
         <button type="button" className="elios-mini" aria-label="Chiudi" onClick={() => useElios.setState({ open: false })}><Icon name="close" size={14} /></button>
       </header>
-      <div className="elios-body" ref={list}>
+      <div className="elios-body" ref={list} onScroll={() => { const element = list.current; if (element) follow.current = element.scrollHeight - element.scrollTop - element.clientHeight < 60; }}>
         {configured === false ? (
           <div className="elios-note">
             <p>Per attivarmi serve una chiave <strong>Google Gemini</strong>. Resta su questo computer e non arriva mai al browser.</p>
             <button type="button" className="elios-chip" onClick={() => setDock('settings')}>Apri Impostazioni → Fonti dati e chiavi</button>
           </div>
         ) : null}
-        {!messages.length ? (
+        <DiagnosticsPanel onInvestigate={setText} />
+        {!messages.length && !evaluated ? (
           <div className="elios-empty">
             <p>Descrivimi cosa vuoi ottenere: individuo strade e incroci, modifico lo scenario e ti spiego le scelte secondo il Codice della Strada e i DM. Ogni modifica si annulla con Ctrl+Z.</p>
             <div className="elios-chips">{SUGGESTIONS.map((s) => <button key={s} type="button" className="elios-chip" onClick={() => void askElios(s)}>{s}</button>)}</div>
@@ -174,7 +217,8 @@ export function EliosPanel() {
         ) : (
           <div key={m.id} className={`elios-msg is-${m.who}`}>{m.who === 'elios' ? <Rich text={m.text} /> : m.text}</div>
         ))}
-        {busy ? <div className="elios-msg is-elios is-typing" aria-live="polite"><span /><span /><span /></div> : null}
+        <EvaluationResults />
+        {busy ? <><button type="button" className="elios-chip" onClick={cancelEliosRequest}>Annulla richiesta</button><div className="elios-msg is-elios is-typing" aria-live="polite"><span /><span /><span /><span className="sr-only">Elaborazione in corso</span></div></> : null}
       </div>
       <footer className="elios-input">
         <textarea rows={2} value={text} placeholder="Chiedi a Elios… (Invio per inviare)" onChange={(e) => setText(e.target.value)} onKeyDown={onKey} aria-label="Messaggio per Elios" />

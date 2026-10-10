@@ -1,3 +1,4 @@
+import {corridorCrossfall} from './crossfall';
 import type { LngLat, Network, Road, TerrainGrid, VerticalProfile, VerticalPVI } from '../model/types';
 import { LocalFrame } from '../geo/projection';
 import { leftNormal, lengthOf, sampleAt, type V } from '../geo/polyline';
@@ -47,6 +48,19 @@ export function groundProfile(road: Road, g: TerrainGrid, origin: LngLat, step =
 }
 
 const grade = (a: VerticalPVI, b: VerticalPVI) => (b.elevation - a.elevation) / Math.max(1e-6, b.station - a.station);
+
+/** Exact isolated high/low points: roots of the parabolic derivative, or sharp grade reversals. */
+export function verticalExtrema(profile: VerticalProfile): readonly { station: number; elevation: number; kind: 'high' | 'low' }[] {
+  const points: { station: number; elevation: number; kind: 'high' | 'low' }[] = [];
+  for (let i = 1; i < profile.pvis.length - 1; i++) {
+    const p = profile.pvis[i]!, before = grade(profile.pvis[i - 1]!, p), after = grade(p, profile.pvis[i + 1]!);
+    if (before * after >= 0) continue;
+    const length = p.curveLength ?? 0;
+    const station = length > 0 ? p.station - length / 2 - before * length / (after - before) : p.station;
+    points.push({ station, elevation: designElevation(profile, station), kind: before > 0 ? 'high' : 'low' });
+  }
+  return points.sort((a,b)=>a.station-b.station);
+}
 
 /** Elevation of the grade line at station `s`, with symmetric parabolic curves centred on the PVIs. */
 export function designElevation(v: VerticalProfile, s: number): number {
@@ -216,23 +230,28 @@ export function crossSection(road: Road, v: VerticalProfile, g: TerrainGrid, ori
   const zd = designElevation(v, station);
   const offsets = Array.from({ length: samples }, (_, k) => right + ((left - right) * k) / (samples - 1));
   const ground = offsets.map((o) => groundAt(st, g, station, o));
+  const packageDepth=(road.corridor?.layers??[]).reduce((sum,l)=>sum+l.thicknessM,0);
+  const designProfile=offsets.map(o=>zd+corridorCrossfall(road.corridor,station,o));
+  const subgrade=designProfile.map((z,i)=>z-(road.corridor?.layers??[]).filter(l=>Math.abs(offsets[i]!)<=(l.widthM??left-right)/2).reduce((sum,l)=>sum+l.thicknessM,0));
   let cut = 0, fill = 0;
   for (let k = 1; k < samples; k++) {
     const w = offsets[k]! - offsets[k - 1]!;
-    const d0 = ground[k - 1]! - zd, d1 = ground[k]! - zd;
+    const d0 = ground[k - 1]! - subgrade[k-1]!, d1 = ground[k]! - subgrade[k]!;
     cut += (Math.max(0, d0) + Math.max(0, d1)) / 2 * w;
     fill += (Math.max(0, -d0) + Math.max(0, -d1)) / 2 * w;
   }
   // Side slopes from the platform edges down/up to the ground (triangle approximation).
   const slopes: { side: 'left' | 'right'; x: number; z: number }[] = [];
   for (const [side, o, gz] of [['right', right, ground[0]!], ['left', left, ground[samples - 1]!]] as const) {
-    const hgt = gz - zd;
+    const edgeZ=zd+corridorCrossfall(road.corridor,station,o)-packageDepth;
+    const hgt = gz - edgeZ;
     if (!Number.isFinite(hgt)) continue;
-    const m = hgt > 0 ? CUT_SLOPE : FILL_SLOPE;
+    const retained=road.corridor?.retaining?.[side];
+    const m = retained?0:hgt > 0 ? road.corridor?.cutSlope??CUT_SLOPE : road.corridor?.fillSlope??FILL_SLOPE;
     if (hgt > 0) cut += (hgt * hgt * m) / 2; else fill += (hgt * hgt * m) / 2;
     slopes.push({ side, x: o + Math.sign(o || 1) * Math.abs(hgt) * m, z: gz });
   }
-  return { station, offsets, ground, design: zd, left, right, slopes, cutM2: cut, fillM2: fill };
+  return { station, offsets, ground, design: zd, designProfile,subgrade, left, right, slopes, cutM2: cut, fillM2: fill };
 }
 
 /** Earthworks along the road by average end areas, sections every `step` metres. */
@@ -253,5 +272,15 @@ export function earthworks(road: Road, v: VerticalProfile, g: TerrainGrid, origi
   }
   const lay = layoutSection(road);
   return { rows, cutM3: Math.round(cut), fillM3: Math.round(fill), platformWidthM: lay.outerLeft - lay.outerRight,
-    method: `Sezioni ogni ${step} m, aree medie; scarpate 1:1 in sterro e 3:2 in rilevato; pacchetto stradale escluso` };
+    method: `Sezioni ogni ${step} m, aree medie; scarpate H/V ${road.corridor?.cutSlope??CUT_SLOPE} sterro / ${road.corridor?.fillSlope??FILL_SLOPE} rilevato; ${road.corridor?'pacchetto e pendenze assembly inclusi':'pacchetto stradale escluso'}` };
+}
+
+/** Exact interval restriction: clipped parabolas become equivalent symmetric PVI curves. */
+export function sliceVerticalProfile(v:VerticalProfile,start:number,end:number):VerticalProfile {
+ if(!(Number.isFinite(start)&&Number.isFinite(end)&&end>start))throw Error('Intervallo profilo non valido');
+ const curves=v.pvis.slice(1,-1).flatMap((p,j)=>{const length=p.curveLength??0;return length>0?[{a:p.station-length/2,b:p.station+length/2,p,gradeIn:grade(v.pvis[j]!,p),gradeOut:grade(p,v.pvis[j+2]!)}]:[];});
+ const breaks=[...new Set([start,end,...v.pvis.filter(p=>p.station>start&&p.station<end&&!curves.some(c=>p.station>c.a&&p.station<c.b)).map(p=>p.station),...curves.flatMap(c=>[c.a,c.b]).filter(s=>s>start&&s<end)])].sort((a,b)=>a-b);
+ const pvis:VerticalPVI[]=[{station:0,elevation:designElevation(v,start)}];
+ for(let i=1;i<breaks.length;i++){const a=breaks[i-1]!,b=breaks[i]!,mid=(a+b)/2,curve=curves.find(c=>mid>c.a&&mid<c.b);if(curve){const g0=curve.gradeIn+(curve.gradeOut-curve.gradeIn)*(a-curve.a)/(curve.b-curve.a);pvis.push({station:mid-start,elevation:designElevation(v,a)+g0*(b-a)/2,curveLength:b-a});}pvis.push({station:b-start,elevation:designElevation(v,b)});}
+ return{...v,pvis};
 }

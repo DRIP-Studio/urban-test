@@ -5,7 +5,7 @@ import { useSession } from '../state/session';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 
-interface Service { readonly id: string; readonly label: string; readonly description: string; readonly url: string; readonly current?: boolean }
+interface Service { readonly id: string; readonly label: string; readonly description: string; readonly url: string; readonly current?: boolean; readonly entitlement?: 'active' | 'trial' | 'unavailable' | 'unknown' }
 
 /** Brand tones of the DRIP system for the service marks (no third-party logos, no invented artwork). */
 const TONE: Record<string, string> = {
@@ -40,8 +40,10 @@ export function AppsLauncher() {
               const mark = <span className="apps-mark" style={{ background: TONE[s.id] ?? 'var(--ink-3)', color: INK[s.id] ?? '#f3efe8' }} aria-hidden="true">{s.label.replace(/^DRIP\s+/i, '').slice(0, 1)}</span>;
               return (
                 <li key={s.id}>
-                  {s.url && !s.current ? (
-                    <a className="apps-tile" href={s.url} target="_blank" rel="noopener noreferrer" title={s.description} onClick={close}>{mark}<span>{s.label}</span></a>
+                  {s.entitlement === 'unavailable' ? (
+                    <span className="apps-tile is-off" title={`${s.description} · entitlement richiesto non attivo`}>{mark}<span>{s.label}</span><small>non incluso</small></span>
+                  ) : s.url && !s.current ? (
+                    <a className="apps-tile" href={s.url} target="_blank" rel="noopener noreferrer" title={s.description} onClick={close}>{mark}<span>{s.label}</span>{s.entitlement === 'active' || s.entitlement === 'trial' ? <small>{s.entitlement === 'trial' ? 'in prova' : 'attivo'}</small> : null}</a>
                   ) : s.current ? (
                     <span className="apps-tile is-current" title="Sei qui">{mark}<span>{s.label}</span></span>
                   ) : (

@@ -73,8 +73,16 @@ export function RoundaboutInspector({ rb }: { rb: Roundabout }) {
           <Field label="Fascia sormontabile"><NumberField value={rb.apronWidthM} unit="m" min={0} max={3} step={0.25} ariaLabel="Fascia" onCommit={(v) => update({ apronWidthM: v })} /></Field>
           <Field label="Velocità anello"><NumberField value={rb.speedKmh} unit="km/h" min={10} max={50} step={5} decimals={0} ariaLabel="Velocità" onCommit={(v) => update({ speedKmh: v })} /></Field>
         </div>
+        <FieldGroup label="Corsie anello"><Segmented<'1' | '2'> label="Corsie anello" value={String(rb.lanes) as '1' | '2'} options={[{ value: '1', label: '1' }, { value: '2', label: '2' }]} onChange={(v) => update({ lanes: Number(v) as 1 | 2 })} /></FieldGroup>
+        {rb.outerDiameterM > 2 * (6 + rb.apronWidthM) + 1 ? <Field label="Diametro isola centrale"><NumberField value={rb.outerDiameterM - 2 * (rb.circulatoryWidthM + rb.apronWidthM)} unit="m" min={Math.max(1, rb.outerDiameterM - 2 * (12 + rb.apronWidthM))} max={rb.outerDiameterM - 2 * (6 + rb.apronWidthM)} step={0.5} ariaLabel="Diametro isola centrale" onCommit={(v) => update({ circulatoryWidthM: (rb.outerDiameterM - v) / 2 - rb.apronWidthM })} /></Field> : null}
+        <Field label="Materiale isola"><Select value={rb.islandMaterial} ariaLabel="Materiale isola" options={[{ value: 'grass', label: 'Verde' }, { value: 'porphyry', label: 'Porfido' }, { value: 'concrete', label: 'Calcestruzzo' }, { value: 'stone', label: 'Pietra' }]} onChange={(v) => update({ islandMaterial: v })} /></Field>
+        {rb.type === 'elliptical' ? <div className="grid-2">
+          <Field label="Rapporto assi"><NumberField value={rb.aspect} min={0.5} max={1} step={0.05} ariaLabel="Rapporto assi" onCommit={(v) => update({ aspect: v })} /></Field>
+          <Field label="Orientamento"><NumberField value={rb.orientationDeg} unit="°" min={-180} max={180} step={5} ariaLabel="Orientamento" onCommit={(v) => update({ orientationDeg: v })} /></Field>
+        </div> : null}
         <FieldGroup label="Regolazione"><Segmented<Roundabout['control']> label="Regolazione" value={rb.control} onChange={(v) => update({ control: v })}
           options={[{ value: 'yield', label: 'Precedenza' }, { value: 'signalized', label: 'Semaforica' }, { value: 'metered', label: 'A dosaggio' }, { value: 'part_time', label: 'Fasce orarie' }]} /></FieldGroup>
+        {rb.control !== 'yield' ? <p className="warn-line">Servono piani semaforici applicati agli accessi. Senza un piano sull’accesso, DRIP Flow e segnaletica mantengono la precedenza all’anello. Dosaggio e fasce orarie richiedono una logica dedicata non ancora disponibile.</p> : null}
         <p className="muted">Diametri e corona giratoria: <NormRef id="dm-2006" article="Allegato, § 4.5" /> (mini 14–25 m, compatte 25–40 m, convenzionali 40–50 m).</p>
       </Section>
       <Section title="Bracci" count={rb.arms.length}>
@@ -85,7 +93,9 @@ export function RoundaboutInspector({ rb }: { rb: Roundabout }) {
             <Toggle label="Attraversamento" checked={a.crossing} onChange={(v) => update({ arms: rb.arms.map((x) => (x.roadId === a.roadId ? { ...x, crossing: v } : x)) })} />
             <div className="grid-2">
               <Field label="Raggio d'entrata"><NumberField value={a.entryRadiusM} unit="m" min={4} max={40} ariaLabel="Raggio entrata" onCommit={(v) => update({ arms: rb.arms.map((x) => (x.roadId === a.roadId ? { ...x, entryRadiusM: v } : x)) })} /></Field>
+              <Field label="Raggio d'uscita"><NumberField value={a.exitRadiusM} unit="m" min={4} max={40} ariaLabel="Raggio uscita" onCommit={(v) => update({ arms: rb.arms.map((x) => (x.roadId === a.roadId ? { ...x, exitRadiusM: v } : x)) })} /></Field>
               {a.splitter ? <Field label="Lunghezza isola"><NumberField value={a.splitterLengthM} unit="m" min={4} max={30} ariaLabel="Lunghezza isola" onCommit={(v) => update({ arms: rb.arms.map((x) => (x.roadId === a.roadId ? { ...x, splitterLengthM: v } : x)) })} /></Field> : null}
+              {a.splitter ? <Field label="Larghezza isola"><NumberField value={a.splitterWidthM} unit="m" min={1.5} max={6} step={0.25} ariaLabel="Larghezza isola" onCommit={(v) => update({ arms: rb.arms.map((x) => (x.roadId === a.roadId ? { ...x, splitterWidthM: v } : x)) })} /></Field> : null}
             </div>
           </div>
         ))}

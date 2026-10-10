@@ -24,6 +24,7 @@ export async function loadPlan(): Promise<UrbanPlanDoc> {
   if (!p) return EMPTY_URBAN_PLAN;
   const doc = await api.get<UrbanPlanDoc | null>(`/api/projects/${encodeURIComponent(p.id)}/docs/urbanplan`).catch(() => null);
   const d = doc && Array.isArray(doc.zones) ? { ...EMPTY_URBAN_PLAN, ...doc } : EMPTY_URBAN_PLAN;
+  if(useApp.getState().project?.id!==p.id)throw Error('Progetto cambiato durante caricamento piano');
   usePlans.setState({ doc: d, loaded: true });
   drawPlan();
   return d;
@@ -67,3 +68,5 @@ export function showPlanLayers(which: 'urban' | 'traffic', on = true): void {
   if (which === 'urban') { toggleLayer('plan-zones', on); toggleLayer('plan-constraints', on); }
   else { toggleLayer('func-class', on); toggleLayer('islands', on); if (on) drawFunctionalClasses(); }
 }
+
+useApp.subscribe((s,previous)=>{if(s.project?.id!==previous.project?.id)usePlans.setState({doc:EMPTY_URBAN_PLAN,loaded:false,islands:[]});});

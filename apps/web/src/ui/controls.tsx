@@ -62,20 +62,24 @@ export function Field({ label, children, hint, prov }: { label: string; children
 
 /** Numeric input that commits on Enter/blur, supports arrow keys (Shift = ×10) and shows its unit. */
 export function NumberField({ value, onCommit, unit, min, max, step = 1, decimals = 2, disabled, ariaLabel }: {
-  value: number; onCommit: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; decimals?: number; disabled?: boolean; ariaLabel?: string;
+  value: number; onCommit: (v: number) => unknown; unit?: string; min?: number; max?: number; step?: number; decimals?: number; disabled?: boolean; ariaLabel?: string;
 }) {
   const fmt = (v: number) => (Number.isFinite(v) ? String(Math.round(v * 10 ** decimals) / 10 ** decimals).replace('.', ',') : '');
   const [text, setText] = useState(fmt(value));
   const [invalid, setInvalid] = useState(false);
   useEffect(() => { setText(fmt(value)); setInvalid(false); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   const clamp = (v: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
+  const apply = (v: number) => {
+    const result = onCommit(v);
+    if (result && typeof result === 'object' && 'ok' in result && result.ok === false) { setText(fmt(value)); setInvalid(true); }
+  };
   const commit = (raw: string) => {
     const v = parseFloat(raw.replace(',', '.'));
     if (!Number.isFinite(v)) { setInvalid(true); return; }
     const c = clamp(v);
     setInvalid(false);
     setText(fmt(c));
-    if (c !== value) onCommit(c);
+    if (c !== value) apply(c);
   };
   return (
     <span className={`num-field ${invalid ? 'is-invalid' : ''} ${disabled ? 'is-disabled' : ''}`}>
@@ -87,7 +91,7 @@ export function NumberField({ value, onCommit, unit, min, max, step = 1, decimal
           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
             const v = clamp(value + (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1));
-            onCommit(Math.round(v * 1e6) / 1e6);
+              apply(Math.round(v * 1e6) / 1e6);
           }
         }} />
       {unit ? <span className="unit">{unit}</span> : null}
@@ -130,7 +134,7 @@ export function Select<T extends string>({ value, options, onChange, ariaLabel, 
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!open) setOpen(true); setHi((h) => Math.min(options.length - 1, Math.max(0, h + (e.key === 'ArrowDown' ? 1 : -1)))); }
           else if (e.key === 'Enter' && open) { e.preventDefault(); choose(hi); }
-          else if (e.key === 'Escape') setOpen(false);
+          else if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); }
           else if (e.key.length === 1) { const i = options.findIndex((o) => o.label.toLowerCase().startsWith(e.key.toLowerCase())); if (i >= 0) setHi(i); }
         }}>
         <span className={current ? '' : 'muted'}>{current?.label ?? placeholder ?? 'Seleziona'}</span>
@@ -140,7 +144,7 @@ export function Select<T extends string>({ value, options, onChange, ariaLabel, 
         <ul className="select-list" role="listbox" id={id} aria-label={ariaLabel}>
           {options.map((o, i) => (
             <li key={o.value} role="option" aria-selected={o.value === value} className={`${i === hi ? 'is-hi' : ''} ${o.value === value ? 'is-sel' : ''}`}
-              onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); choose(i); }}>
+              onMouseEnter={() => setHi(i)} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); choose(i); }}>
               <span>{o.label}</span>{o.hint ? <span className="hint">{o.hint}</span> : null}
             </li>
           ))}

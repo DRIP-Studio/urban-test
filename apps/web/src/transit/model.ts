@@ -4,7 +4,8 @@ import { LocalFrame, geom, type CityBaseline, type LngLat } from '@drip-urban/co
  * Public transport modes with planning defaults (Italian practice / UITP orders of magnitude).
  * Every derived number in the TPL panel is labelled as a DRIP estimate.
  */
-export type TransitMode = 'bus' | 'brt' | 'trolleybus' | 'tram' | 'metro' | 'train' | 'funicular' | 'ferry' | 'on_demand';
+export type { TransitMode, LineStop, TransitLine } from '@drip-urban/core';
+import type { TransitMode, TransitLine } from '@drip-urban/core';
 
 export interface ModeSpec {
   readonly label: string;
@@ -54,28 +55,8 @@ export const BANDS: readonly ServiceBand[] = [
   { id: 'weekend', label: 'Festivo (giornata)', hours: 16 },
 ];
 
-export interface LineStop { readonly id: string; readonly name: string; readonly at: LngLat }
-
-export interface TransitLine {
-  readonly id: string;
-  name: string;
-  mode: TransitMode;
-  color: string;
-  line: LngLat[];
-  stops: LineStop[];
-  /** Minutes between departures per band (0 = no service). */
-  headways: Record<ServiceBand['id'], number>;
-  firstDeparture: string;
-  lastDeparture: string;
-  vehicle: string;
-  capacity: number;
-  speedKmh: number;
-  /** Legacy single headway (1.0 lines); kept in sync with the peak band. */
-  headwayMin?: number;
-}
-
-export interface BikeStation { readonly id: string; name: string; at: LngLat; docks: number; ebikeShare: number }
-export interface BikeShare { system: string; stations: BikeStation[]; dockless: boolean }
+export type {BikeShare,BikeStation} from '@drip-urban/core';
+import type {BikeShare,BikeStation} from '@drip-urban/core';
 
 export function defaultLine(id: string, mode: TransitMode, line: LngLat[], index: number): TransitLine {
   const m = MODES[mode];
@@ -84,7 +65,7 @@ export function defaultLine(id: string, mode: TransitMode, line: LngLat[], index
   return {
     id, name: `${m.label} ${index + 1}`, mode, color: m.color, line, stops: [],
     headways: { peak: base, offpeak: Math.round(base * 1.5), evening: base * 2, weekend: Math.round(base * 2) },
-    firstDeparture: mode === 'metro' ? '05:30' : '06:00', lastDeparture: mode === 'metro' ? '00:30' : '21:30', vehicle: v.label, capacity: v.capacity, speedKmh: m.speedKmh,
+    dwellS: m.dwellS, layoverMin: m.layoverMin, firstDeparture: mode === 'metro' ? '05:30' : '06:00', lastDeparture: mode === 'metro' ? '00:30' : '21:30', vehicle: v.label, capacity: v.capacity, speedKmh: m.speedKmh,
   };
 }
 

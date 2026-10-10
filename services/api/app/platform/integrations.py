@@ -14,7 +14,7 @@ import json
 import secrets
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import httpx
 
@@ -42,19 +42,45 @@ def _keys_path():
     return SETTINGS.settings_dir / "api-keys.json"
 
 
+KEY_SCOPES = ("projects:read", "projects:write", "scenarios:read", "scenarios:write", "exports:read", "civic:publish", "integrations:use", "platform:admin")
+
+
+def default_key_scopes(role: str) -> list[str]:
+    scopes = ["projects:read", "scenarios:read", "exports:read"]
+    if ROLES.index(role) >= ROLES.index("editor"):
+        scopes += ["projects:write", "scenarios:write", "integrations:use"]
+    if ROLES.index(role) >= ROLES.index("publisher"):
+        scopes += ["civic:publish"]
+    if role == "admin":
+        scopes += ["platform:admin"]
+    return scopes
+
+
 def list_keys() -> list[dict]:
-    return [{k: v for k, v in x.items() if k != "hash"} for x in read_json(_keys_path(), []) or []]
+    return [{**{k: v for k, v in x.items() if k != "hash"}, "scopes": x.get("scopes", default_key_scopes(x["role"])), "expiresAt": x.get("expiresAt")}
+            for x in read_json(_keys_path(), []) or []]
 
 
-def create_key(name: str, role: str, author: str) -> dict:
+def create_key(name: str, role: str, author: str, scopes: list[str] | None = None, expires_at: str | None = None) -> dict:
     if role not in ROLES:
         raise ValueError("Ruolo non valido")
     name = name.strip()
     if not (2 <= len(name) <= 60):
         raise ValueError("Nome della chiave: 2–60 caratteri")
+    allowed = default_key_scopes(role)
+    if scopes is None:
+        scopes = allowed
+    if not isinstance(scopes, list) or not scopes or any(not isinstance(s, str) or s not in allowed for s in scopes):
+        raise ValueError("Ambiti non validi o superiori al ruolo assegnato")
+    try:
+        expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00")) if expires_at else datetime.now(timezone.utc) + timedelta(days=90)
+        if not expiry.tzinfo or expiry <= datetime.now(timezone.utc) or expiry > datetime.now(timezone.utc) + timedelta(days=3650):
+            raise ValueError()
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Scadenza con timezone richiesta, futura ed entro 10 anni") from exc
     kid, secret = secrets.token_hex(4), secrets.token_urlsafe(32)
-    rec = {"id": kid, "name": name, "role": role, "prefix": f"drip_{kid}_{secret[:4]}…", "hash": hashlib.sha256(secret.encode()).hexdigest(),
-           "createdAt": _now(), "createdBy": author, "lastUsedAt": None}
+    rec = {"id": kid, "name": name, "role": role, "scopes": list(dict.fromkeys(scopes)), "expiresAt": expiry.astimezone(timezone.utc).isoformat(),
+           "prefix": f"drip_{kid}_{secret[:4]}…", "hash": hashlib.sha256(secret.encode()).hexdigest(), "createdAt": _now(), "createdBy": author, "lastUsedAt": None}
     with _lock:
         keys = read_json(_keys_path(), []) or []
         keys.append(rec)
@@ -62,13 +88,14 @@ def create_key(name: str, role: str, author: str) -> dict:
     return {**{k: v for k, v in rec.items() if k != "hash"}, "key": f"drip_{kid}_{secret}"}
 
 
+_last_touch: dict[str, float] = {}
+
+
 def revoke_key(kid: str) -> None:
     with _lock:
         keys = [k for k in read_json(_keys_path(), []) or [] if k["id"] != kid]
         atomic_write_json(_keys_path(), keys)
-
-
-_last_touch: dict[str, float] = {}
+        _last_touch.pop(kid, None)
 
 
 def check_key(token: str) -> dict | None:
@@ -78,18 +105,41 @@ def check_key(token: str) -> dict | None:
         _, kid, secret = token.split("_", 2)
     except ValueError:
         return None
-    keys = read_json(_keys_path(), []) or []
-    rec = next((k for k in keys if k["id"] == kid), None)
-    if not rec or not hmac.compare_digest(rec["hash"], hashlib.sha256(secret.encode()).hexdigest()):
-        return None
-    if time.time() - _last_touch.get(kid, 0) > 300:  # lastUsedAt at most every 5 minutes
-        _last_touch[kid] = time.time()
-        with _lock:
-            for k in keys:
-                if k["id"] == kid:
-                    k["lastUsedAt"] = _now()
+    with _lock:
+        keys = read_json(_keys_path(), []) or []
+        rec = next((k for k in keys if k["id"] == kid), None)
+        if not rec or rec.get("role") not in ROLES or not hmac.compare_digest(rec["hash"], hashlib.sha256(secret.encode()).hexdigest()):
+            return None
+        try:
+            if rec.get("expiresAt") and datetime.fromisoformat(rec["expiresAt"]).astimezone(timezone.utc) <= datetime.now(timezone.utc):
+                return None
+        except (ValueError, TypeError):
+            return None
+        scopes = rec.get("scopes", default_key_scopes(rec["role"]))
+        if not isinstance(scopes, list) or any(s not in default_key_scopes(rec["role"]) for s in scopes):
+            return None
+        if time.time() - _last_touch.get(kid, 0) > 300:
+            _last_touch[kid] = time.time()
+            rec["lastUsedAt"] = _now()
             atomic_write_json(_keys_path(), keys)
-    return {"sub": f"apikey:{kid}", "name": f"API · {rec['name']}", "username": f"apikey-{kid}", "role": rec["role"], "provider": "apikey", "via": "apikey"}
+    return {"sub": f"apikey:{kid}", "name": f"API · {rec['name']}", "username": f"apikey-{kid}", "role": rec["role"], "scopes": scopes, "provider": "apikey", "via": "apikey"}
+
+
+def required_key_scope(path: str, method: str) -> str | None:
+    write = method in {"POST", "PUT", "PATCH", "DELETE"}
+    if path == "/api/v1/info":
+        return None
+    if path.startswith(("/api/platform/", "/api/auth/", "/api/update/", "/api/license/", "/api/providers/", "/api/migration/")):
+        return "platform:admin"
+    if path.startswith("/api/elios/"):
+        return "integrations:use"
+    if "/export" in path and not write:
+        return "exports:read"
+    if "/scenarios" in path:
+        return "scenarios:write" if write else "scenarios:read"
+    if path.startswith("/api/civic/") and write:
+        return "civic:publish"
+    return "projects:write" if write else "projects:read"
 
 
 # ------------------------------------------------------------------ webhooks

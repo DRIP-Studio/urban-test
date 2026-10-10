@@ -13,6 +13,11 @@ function guard(page: Page): string[] {
   return problems;
 }
 
+async function stableFrame(page: Page) {
+  await page.mouse.move(3, 3);
+  await expect(page.locator('.toast')).toHaveCount(0);
+  await expect(page.getByText('Calcolo dei marciapiedi stimati…', {exact:true})).toHaveCount(0);
+}
 let pid = '';
 test.beforeAll(async ({ request }) => { pid = await createProject(request, 'E2E viste'); });
 
@@ -31,6 +36,7 @@ test('workspace modes', async ({ page }) => {
   await openWorkspace(page, pid);
   const j = (await junctions(page, 4))[0]!;
   await focus(page, j.at, 18.5);
+  await stableFrame(page);
   await expect(page).toHaveScreenshot('map-design.png');
 
   // Junction Lab on a real 4-arm junction.
@@ -42,13 +48,15 @@ test('workspace modes', async ({ page }) => {
   // RB-12: dock content must fit its panel (no clipped columns).
   const clipped = await page.locator('.dock-body').evaluate((el) => el.scrollWidth - el.clientWidth);
   expect(clipped).toBeLessThanOrEqual(0);
+  await stableFrame(page);
   await expect(page).toHaveScreenshot('junction-lab.png');
   await page.keyboard.press('Escape');
 
   for (const [mode, shot] of [['Analizza', 'analyze'], ['Traffico', 'traffic'], ['TPL', 'transit']] as const) {
     await page.getByRole('button', { name: mode, exact: true }).click();
     await page.waitForTimeout(800);
-    await expect(page).toHaveScreenshot(`mode-${shot}.png`);
+    await stableFrame(page);
+  await expect(page).toHaveScreenshot(`mode-${shot}.png`);
   }
   expect(problems).toEqual([]);
 });
@@ -67,7 +75,8 @@ test('present before/after', async ({ page }) => {
   await openWorkspace(page, pid);
   await page.getByRole('button', { name: 'Presenta', exact: true }).click();
   await expect(page.getByText('Strade modificate')).toBeVisible();
-  await page.waitForTimeout(1500);
+  await page.waitForFunction(()=>{const maps=(window as any).__dripCompare;return maps?.a.loaded()&&maps?.b.loaded();});
+  await stableFrame(page);
   await expect(page).toHaveScreenshot('present.png');
   expect(problems).toEqual([]);
 });
@@ -77,5 +86,6 @@ test('narrow window keeps the shell usable', async ({ page }) => {
   await openWorkspace(page, pid);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+  await stableFrame(page);
   await expect(page).toHaveScreenshot('map-1024.png');
 });

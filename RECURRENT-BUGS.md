@@ -1,5 +1,13 @@
 # RECURRENT-BUGS — DRIP Urban
 
+## Regressioni aggiunte l’8 ottobre 2026
+
+- RB-08 non basta più verificarlo con il registro dei pulsanti: aggiunti test di esecuzione, rifiuto, undo e persistenza per controlli rotatoria, suggerimenti, snap, account/launcher ed Elios.
+- RB-14: il raggio d’uscita era memorizzato ma senza effetto; `physical.test.ts` verifica variazione della gola e ritorno identico con undo.
+- RB-15: snap OFF deve fermare anche l’accorpamento a nodi vicini nella costruzione delle operazioni stradali; `road-snap.test.ts` verifica l’intersezione esatta.
+- RB-16: Flow attivo non deve mantenere rete e stop line precedenti dopo un commit; `worker-simulation.test.ts` verifica riavvio, pausa conservata e stop su cambio progetto.
+- RB-17: la tolleranza offline non deve riattivare una licenza revocata; `test_license_state.py` copre stati inattivi, feature vuote e date malformate.
+
 Bug tornati in più release 4x–53. Uno è chiuso solo quando c'è un **test di comportamento** che lo copre (nessun test sul testo del sorgente). Aggiornato il 2026-10-02.
 
 | ID | Bug | Prevenzione strutturale in 1.0 | Test di regressione | Stato |
@@ -17,3 +25,8 @@ Bug tornati in più release 4x–53. Uno è chiuso solo quando c'è un **test di
 | RB-11 | Catalogo materiali vuoto | Catalogo statico nel pacchetto assets | `registries.test.ts`: ≥ 17 materiali con colore e categoria, almeno uno permeabile | **chiuso** |
 | RB-12 | Pannelli tagliati / sovrapposti | Shell a griglia, griglie fluide nei pannelli, niente `!important` | `views.spec.ts`: dock senza scorrimento orizzontale (Junction Lab), nessun overflow di pagina a 1024 px; baseline visive a 1440 e 1024 | **parziale**: 1366/1600/1920 non ancora nelle baseline |
 | RB-13 | Branding disallineato | Lockup SVG con varianti normali e reverse | baseline `hub-head.png`, header in tutte le schermate e2e | **parziale**: SVG ricavati dai PNG (P1-01) |
+
+- RB-18: pannello Flow chiuso fermava il run prima del Twin. Lifetime spostato al progetto, replay ultimo frame nel nuovo renderer; e2e simulation-scale.
+- RB-19: avvio durante reload automatico baseline prima del build produceva «Motore non inizializzato». Start accodato nel worker; worker test + e2e.
+- RB-20: playback 1× usava un minimo di uno step da 0,25 s ogni 0,1 s. Ora accumula il tempo e preserva il passo fisso.
+- RB-21: timeout gridlock eliminava agenti senza contabilizzazione. Rimosso; test mantiene agenti con born oltre la soglia preesistente.

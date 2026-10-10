@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   LocalFrame, NetworkReplayer, ROAD_TEMPLATES, ScenarioHistory, buildPhysicalModel, connectorOps, danglingLinks, geom, linkOps, roadFromTemplate, route,
-  type CityBaseline, type Operation, type Scenario,
+  designElevation, serviceAccess,type CityBaseline, type Operation, type Scenario,
 } from '../src';
 
 const origin: [number, number] = [14.27, 40.94];
@@ -92,4 +92,21 @@ describe('connecting roads drawn without snapping', () => {
     const after = route(h.network, origin, LL(5, -1), LL(80, 110), { mode: 'car', day: 1, minutes: 600 });
     expect(after.found).toBe(true);
   });
+});
+
+
+it('reports each service coverage independently of earlier missing categories',()=>{
+ const city=straightCity(),features={health:{id:'health',kind:'amenity',category:'pharmacy',geometry:'point',properties:{},provenance:{kind:'project',source:'Test fixture'},coords:[LL(100,0)]}} as CityBaseline['features'];
+ const base={...city,features},net=new NetworkReplayer().derive(base,[]).net,result=serviceAccess(net,base,7,'walk');
+ expect(result.categoryCoverage.school).toBe(0);expect(result.categoryCoverage.health).toBe(100);expect(result.coverage).toBe(0);
+});
+
+it('native split preserves a vertical curve across undo and redo',()=>{
+ const b=straightCity(),h=new ScenarioHistory(b,scenario(),'t',ids);
+ const vertical={pvis:[{station:0,elevation:10},{station:100,elevation:15,curveLength:80},{station:200,elevation:10}]};
+ expect(h.commit({type:'road.setVertical',payload:{roadId:'rA',vertical}}).op.type).toBe('road.setVertical');
+ const road=h.network.roads.rA!;
+ expect(h.commit({type:'road.split',payload:{roadId:'rA',at:LL(88,0),nodeId:'cut',newRoadIds:['left','right']}}).op.type).toBe('road.split');
+ for(let station=0;station<=200;station+=.5){const r=station<=88?h.network.roads.left!:h.network.roads.right!;expect(designElevation(r.vertical!,station<=88?station:station-88)).toBeCloseTo(designElevation(vertical,station),7);}
+ expect(h.network.roads.rA).toBeUndefined();h.undo();expect(h.network.roads.rA!.vertical).toEqual(road.vertical);h.redo();expect(h.network.roads.left!.vertical).toBeDefined();
 });

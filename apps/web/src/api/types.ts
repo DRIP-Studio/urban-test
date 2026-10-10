@@ -60,10 +60,11 @@ export interface SignCatalog { readonly source: string; readonly license: string
 
 /** Procedural part of a catalogue item; geometry conventions in models/parts.ts. */
 export interface ModelPart { readonly shape: 'box' | 'cylinder' | 'sphere' | 'cone' | 'frustum' | 'ellipsoid'; readonly size?: [number, number, number]; readonly r?: number; readonly r2?: number; readonly h?: number; readonly at: [number, number, number]; readonly rot?: [number, number, number]; readonly mat: string }
-export interface FurnitureItem { readonly id: string; readonly label: string; readonly category: string; readonly dims: { w: number; d: number; h: number }; readonly material: string; readonly model: ModelPart[]; readonly signal?: { heads: string }; readonly led?: { kind: string }; readonly gltf?: string; readonly scale?: number }
+export interface FurnitureItem { readonly id: string; readonly label: string; readonly category: string; readonly dims: { w: number; d: number; h: number }; readonly material: string; readonly model: ModelPart[]; readonly signal?: { heads: string }; readonly led?: { kind: string }; readonly modelOffset?: readonly [number,number,number]; readonly gltf?: string; readonly scale?: number }
 export interface FurnitureCatalog { readonly categories: Record<string, string>; readonly items: FurnitureItem[] }
 
-export interface MaterialItem { readonly id: string; readonly label: string; readonly category: string; readonly color: string; readonly pattern: string; readonly scaleM: number; readonly roughness: number; readonly permeable: boolean; readonly opacity?: number }
+export type MaterialItem = import('@drip-urban/core').ProjectMaterial;
+
 export interface MaterialCatalog { readonly categories: Record<string, string>; readonly items: MaterialItem[] }
 
 export interface Catalogs { readonly signs: SignCatalog; readonly furniture: FurnitureCatalog; readonly materials: MaterialCatalog }
@@ -86,6 +87,7 @@ export interface SessionInfo {
   readonly provisionalHint: string | null;
 }
 export interface LicenseInfo {
+  readonly organisation?:string|null;readonly seatsUsed?:number|null;readonly validation?:string;readonly connectivity?:{state:string;lastVerifiedAt:string|null};
   readonly status: 'active' | 'trialing' | 'offline_grace' | 'expired' | 'offline_expired' | 'unlicensed' | string;
   readonly plan: string; readonly planLabel: string; readonly source: 'key' | 'drip-id' | 'trial';
   readonly validUntil?: string; readonly daysLeft?: number; readonly customer?: string; readonly seats?: number;
@@ -93,6 +95,8 @@ export interface LicenseInfo {
   readonly error?: string | null; readonly enforcement: 'soft' | 'strict'; readonly deviceId: string; readonly catalog: Record<string, string>; readonly platformUrl: string;
 }
 export interface UpdateInfo {
+  readonly installation?:{status:string;version?:string;from?:string;error?:string;at?:string;backup?:string};
+  readonly ready?:{version:string;sha256:string}|null;
   readonly current: string; readonly checkedAt: string | null; readonly error: string | null; readonly available: boolean; readonly channel: string; readonly autoCheck: boolean;
   readonly latest: { version: string; notes?: string; publishedAt?: string; mandatory?: boolean; size?: number } | null;
   readonly pending: { version: string } | null;
@@ -101,6 +105,7 @@ export interface IdentityProviderCfg {
   readonly id: string; readonly label: string; readonly kind: string; readonly issuer: string; readonly clientId: string; readonly scopes: string; readonly enabled: boolean; readonly hasClientSecret?: boolean;
 }
 export interface PlatformConfig {
+  readonly management?:{managed:boolean;organisation:string|null;revision:number|null;lockedKeys:readonly string[];denyActions:readonly string[];transport:string|null};
   readonly authMode: 'open' | 'protected'; readonly sessionHours: number; readonly platformUrl: string; readonly fstUrl?: string; readonly identityProviders: readonly IdentityProviderCfg[];
   readonly roleMapping: Record<string, Role>; readonly defaultRole: Role; readonly localLogin: boolean; readonly updates: { autoCheck: boolean; channel: string };
   readonly licenseEnforcement: 'soft' | 'strict';
@@ -117,6 +122,6 @@ export interface WmsPublic {
   readonly id: string; readonly label: string; readonly kind: 'basemap' | 'overlay'; readonly attribution: string;
   readonly transparent: boolean; readonly minzoom: number; readonly format: string;
 }
-export interface ApiKeyInfo { readonly id: string; readonly name: string; readonly role: Role; readonly prefix: string; readonly createdAt: string; readonly createdBy: string; readonly lastUsedAt: string | null; readonly key?: string }
+export interface ApiKeyInfo { readonly id: string; readonly name: string; readonly role: Role; readonly prefix: string; readonly createdAt: string; readonly createdBy: string; readonly lastUsedAt: string | null; readonly key?: string;readonly scopes?:readonly string[];readonly expiresAt?:string|null }
 export interface WebhookInfo { readonly id: string; readonly url: string; readonly label: string; readonly events: string[]; readonly active: boolean; readonly secret?: string; readonly lastDelivery?: { ok: boolean; status: number | null; at: string; event: string; error?: string } }
 export interface LocalUser { readonly username: string; readonly name: string; readonly role: Role; readonly provisional?: boolean; readonly mustChangePassword?: boolean; readonly disabled?: boolean; readonly expiresAt?: string; readonly lastLoginAt?: string }

@@ -1,5 +1,13 @@
+import {installTrafficFreshness} from '../traffic/live';
+import {ErrorBoundary} from '../ui/ErrorBoundary';
+import { AssetManager } from '../panels/AssetManager';
+import { WorksSheet } from '../panels/WorksSheet';
+import { ModelingSheet } from '../panels/ModelingSheet';
+import { UtilitiesSheet } from '../panels/UtilitiesSheet';
+import { CivilStudio } from '../panels/CivilStudio';
+import { MaterialEditor } from '../panels/MaterialEditor';
 import { ShortcutsSheet } from './Shortcuts';
-import { lazy, Suspense, useEffect, type ReactElement } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
 import { MapView, captureThumbnail, getIndex } from '../map/MapView';
@@ -23,7 +31,7 @@ import { DrainageSheet } from '../panels/DrainageSheet';
 import { WaterSheet } from '../panels/WaterSheet';
 import { TransitPanel } from '../panels/TransitPanel';
 import { PresentView } from '../present/PresentView';
-import { setDock, useApp } from '../state/store';
+import { setDock, setMode, useApp } from '../state/store';
 import { toolById } from '../tools/registry';
 import { Skeleton } from '../ui/controls';
 import { Icon } from '../ui/Icon';
@@ -32,6 +40,7 @@ import { ContextMenu, StatusBar, ToolHint, ToolRail } from './Chrome';
 import { Suggestions } from './Suggestions';
 import { installShortcuts } from './commands';
 import { TopBar } from './TopBar';
+import { ProjectTimeline } from './ProjectTimeline';
 import { EliosPanel } from '../elios/Elios';
 
 const TwinView = lazy(() => import('../twin/TwinView'));
@@ -48,12 +57,18 @@ const SHEETS: Record<string, { title: string; render: () => ReactElement }> = {
   export: { title: 'Esporta', render: () => <ExportSheet /> },
   settings: { title: 'Impostazioni', render: () => <SettingsSheet /> },
   qa: { title: 'Diagnostica', render: () => <QASheet /> },
-  compare: { title: 'Confronto scenari', render: () => <ComparePanel /> },
+  compare: { title: 'Scenario Lab', render: () => <ComparePanel /> },
   connect: { title: 'Aggancia strade', render: () => <ConnectSheet /> },
   quantities: { title: 'Computo metrico', render: () => <QuantitiesSheet /> },
   norms: { title: 'Normativa e verifiche', render: () => <NormsSheet /> },
   plans: { title: 'Piani: urbanistico, traffico, PUMS', render: () => <PlansSheet /> },
   drainage: { title: 'Drenaggio urbano', render: () => <DrainageSheet /> },
+  assetLibrary: {title:'Asset manager · cataloghi e utilizzi',render:()=> <AssetManager/>},
+  materials: { title: 'Materiali e texture', render: () => <MaterialEditor /> },
+  utilities:{title:'Sottoservizi · reti e clash 3D',render:()=> <UtilitiesSheet/>},
+  works:{title:'Lavori · Gantt e scenari territoriali',render:()=> <WorksSheet/>},
+  modeling:{title:'Modellazione urbana · solidi e gruppi',render:()=> <ModelingSheet/>},
+  civil: {title:'Civil · tracciati, assembly e masse',render:()=> <CivilStudio/>},
   water: { title: 'Rete acquedotto', render: () => <WaterSheet /> },
 };
 const MODE_TITLE: Record<string, string> = { design: 'Progetta', analyze: 'Analizza', traffic: 'Traffico', transit: 'Trasporto pubblico', civic: 'Civico' };
@@ -89,6 +104,8 @@ function useThumbnail(): void {
 }
 
 export function Workspace() {
+  useEffect(installTrafficFreshness,[]);
+  const [expandedDock,setExpandedDock] = useState(false);
   const project = useApp((s) => s.project);
   const network = useApp((s) => s.network);
   const loading = useApp((s) => s.loading);
@@ -111,27 +128,28 @@ export function Workspace() {
   return (
     <div className={`workspace mode-${mode} ${focus ? 'is-focus' : ''}`}>
       <TopBar />
+      <ProjectTimeline />
       <div className="ws-body">
         {mode !== 'present' ? <ToolRail /> : null}
         <main className="ws-center">
           <div className="ws-stage">
-            {map ? <MapView /> : null}
-            {mode === 'twin' ? <Suspense fallback={<div className="fullscreen-state"><span className="spinner lg" /><p>Caricamento del Twin 3D</p></div>}><TwinView /></Suspense> : null}
-            {mode === 'present' ? <PresentView /> : null}
+            {map ? <ErrorBoundary label="Mappa"><MapView /></ErrorBoundary> : null}
+            {mode === 'twin' ? <ErrorBoundary label="Twin 3D" onExit={()=>setMode('design')}><Suspense fallback={<div className="fullscreen-state"><span className="spinner lg" /><p>Caricamento del Twin 3D</p></div>}><TwinView /></Suspense></ErrorBoundary> : null}
+            {mode === 'present' ? <ErrorBoundary label="Presentazione" onExit={()=>setMode('design')}><PresentView /></ErrorBoundary> : null}
             {map ? <ToolHint /> : null}
             {map ? <Suggestions /> : null}
             {mode !== 'present' ? <EliosPanel /> : null}
           </div>
           {bottom && map ? (
-            <section className="dock" aria-label={bottom.title}>
-              <header className="dock-head"><Icon name={bottom.icon} size={16} /><strong>{bottom.title}</strong><span className="spacer" /><IconButton icon="close" label="Chiudi pannello" onClick={() => setDock(null)} /></header>
-              <div className="dock-body">{bottom.render()}</div>
+            <section className={`dock ${expandedDock?'is-expanded':''}`} aria-label={bottom.title}>
+              <header className="dock-head"><Icon name={bottom.icon} size={16} /><strong>{bottom.title}</strong><span className="spacer" /><button type="button" className="link" onClick={()=>setExpandedDock(v=>!v)}>{expandedDock?'Riduci pannello':'Espandi pannello'}</button><IconButton icon="close" label="Chiudi pannello" onClick={() => setDock(null)} /></header>
+              <div className="dock-body"><ErrorBoundary key={dock} label={bottom.title}>{bottom.render()}</ErrorBoundary></div>
             </section>
           ) : null}
         </main>
         {map ? <RightPanel /> : null}
         {sheet ? (
-          <aside className="sheet" aria-label={sheet.title}>
+          <aside className={`sheet ${['compare','civil','utilities','modeling','works','assetLibrary'].includes(dock??'') ? 'sheet-lab' : ''}`} aria-label={sheet.title}>
             <header className="sheet-head"><strong>{sheet.title}</strong><IconButton icon="close" label="Chiudi" onClick={() => setDock(null)} /></header>
             <div className="sheet-body"><Suspense fallback={<Skeleton />}>{sheet.render()}</Suspense></div>
           </aside>

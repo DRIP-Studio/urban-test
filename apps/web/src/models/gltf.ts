@@ -2,7 +2,7 @@
  * Size of a glTF 2.0 model from its accessors (POSITION min/max of every mesh primitive, node
  * translations and scales applied along the scene tree). glTF is Y-up: w = X, h = Y, d = Z, metres.
  */
-export interface ModelDims { w: number; d: number; h: number }
+export interface ModelDims { w: number; d: number; h: number; pivot: [number, number, number] }
 
 function parseJson(buf: ArrayBuffer): Record<string, unknown> {
   const head = new Uint8Array(buf, 0, 4);
@@ -49,9 +49,12 @@ export function gltfDims(buf: ArrayBuffer): ModelDims {
       lo[i] = Math.min(lo[i]!, v); hi[i] = Math.max(hi[i]!, v);
     }
   };
+  const ancestors = new Set<number>();
   const visit = (ni: number, parent: Mat) => {
+    if (ancestors.has(ni)) throw new Error('Gerarchia glTF ciclica');
+    ancestors.add(ni);
     const n = j.nodes?.[ni];
-    if (!n) return;
+    if (!n) { ancestors.delete(ni); return; }
     const m = mul(parent, trs(n));
     if (n.mesh !== undefined) for (const p of j.meshes?.[n.mesh]?.primitives ?? []) {
       const a = p.attributes.POSITION !== undefined ? j.accessors?.[p.attributes.POSITION] : undefined;
@@ -59,9 +62,10 @@ export function gltfDims(buf: ArrayBuffer): ModelDims {
       for (const x of [a.min[0]!, a.max[0]!]) for (const y of [a.min[1]!, a.max[1]!]) for (const z of [a.min[2]!, a.max[2]!]) add(m, [x, y, z]);
     }
     for (const c of n.children ?? []) visit(c, m);
+    ancestors.delete(ni);
   };
   const roots = j.scenes?.[j.scene ?? 0]?.nodes ?? (j.nodes ?? []).map((_, i) => i);
   for (const r of roots) visit(r, ident());
-  if (!Number.isFinite(lo[0])) return { w: 2, d: 2, h: 2 };
-  return { w: hi[0]! - lo[0]!, h: hi[1]! - lo[1]!, d: hi[2]! - lo[2]! };
+  if (![...lo,...hi].every(Number.isFinite)) throw new Error('Modello senza bounding box POSITION valida');
+  return { w: hi[0]! - lo[0]!, h: hi[1]! - lo[1]!, d: hi[2]! - lo[2]!, pivot: [-(lo[0]!+hi[0]!)/2,(lo[2]!+hi[2]!)/2,-lo[1]!] };
 }

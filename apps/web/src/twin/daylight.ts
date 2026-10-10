@@ -1,3 +1,4 @@
+import type { WeatherPreset } from '@drip-urban/core';
 import * as Cesium from 'cesium';
 
 /**
@@ -40,6 +41,26 @@ export const DAY_PRESETS: readonly { readonly value: string; readonly label: str
   { value: 'sunset', label: 'Tramonto', hour: 19 }, { value: 'night', label: 'Notte', hour: 22.5 },
 ];
 
+/** Resolve named solar moments for this project's latitude, date and time zone. */
+export function solarDayPresets(origin: readonly [number,number], date: string, timeZone: string) {
+  const anchor = zonedInstant(date, 0, timeZone).getTime();
+  const samples = Array.from({length:289},(_,index) => ({ minute:index*5, elevation:solarElevation(origin[0],origin[1],new Date(anchor+index*300000)) }));
+  const localHour = (minute:number) => {
+    const parts = new Intl.DateTimeFormat('en-GB',{timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(anchor+minute*60000));
+    return Number(parts.find(p=>p.type==='hour')!.value) + Number(parts.find(p=>p.type==='minute')!.value)/60;
+  };
+  const crossing = (elevation:number,rising:boolean):number|null => {
+    for(let i=1;i<samples.length;i++) {
+      const before=samples[i-1]!,after=samples[i]!;
+      if(rising ? before.elevation<elevation&&after.elevation>=elevation : before.elevation>elevation&&after.elevation<=elevation) return localHour(before.minute+5*(elevation-before.elevation)/(after.elevation-before.elevation));
+    }
+    return null; // Polar day/night: do not invent a sunrise or sunset.
+  };
+  const noon=samples.reduce((best,sample)=>sample.elevation>best.elevation?sample:best);
+  const moments:Record<string,number|null>={dawn:crossing(-.833,true),noon:localHour(noon.minute),sunset:crossing(-.833,false),'blue-hour':crossing(-5,false)};
+  return [...DAY_PRESETS.slice(0,4),{value:'blue-hour',label:'Ora blu',hour:19.5},DAY_PRESETS[4]!].flatMap(p=>moments[p.value]===null?[]:[{...p,hour:moments[p.value]??p.hour}]);
+}
+
 /** Owns the lighting state of one viewer: sun or moon light, shadows, sky, lamps. */
 export class Daylight {
   private lamps: Cesium.PointPrimitiveCollection;
@@ -73,16 +94,18 @@ export class Daylight {
   }
 
   /** Applies a local time: returns the solar elevation used. */
-  apply(when: Date): number {
+  apply(when: Date, weather: WeatherPreset = 'clear', intensity = 1): number {
     const v = this.viewer;
     v.clock.currentTime = Cesium.JulianDate.fromDate(when);
     const elev = solarElevation(this.origin[0], this.origin[1], when);
     const night = elev < -4;
     if (night) v.scene.light = this.moon;
-    else { this.sun.intensity = Math.max(0.6, Math.min(2.0, 0.6 + elev / 25)); v.scene.light = this.sun; }
+    else { this.sun.intensity = Math.max(0.6, Math.min(2.0, 0.6 + elev / 25)) * (weather === 'clear' ? 1 : 1 - intensity * (weather === 'cloudy' ? .35 : .65)); v.scene.light = this.sun; }
     v.shadows = elev > 1.5;
-    if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
-    v.scene.fog.enabled = true;
+    if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = v.scene.globe.show;
+    v.scene.fog.enabled = v.scene.globe.show;
+    v.scene.fog.density = weather === 'fog' ? .0002 + intensity * .003 : weather === 'rain' ? .0005 : .0002;
+    if(v.scene.skyAtmosphere) { v.scene.skyAtmosphere.brightnessShift = weather === 'clear' ? 0 : -.15 * intensity; v.scene.skyAtmosphere.saturationShift = weather === 'clear' ? 0 : -.5 * intensity; }
     this.lamps.show = this.glow.show = elev < 2;
     v.scene.requestRender();
     return elev;

@@ -31,7 +31,7 @@ export interface Provenance {
   readonly uncertaintyM?: number;
 }
 
-export type TravelMode = 'car' | 'truck' | 'bus' | 'bike' | 'walk' | 'emergency' | 'tram';
+export type TravelMode = 'motorcycle' | 'car' | 'truck' | 'bus' | 'bike' | 'walk' | 'emergency' | 'tram';
 
 export type TurnKind = 'left' | 'through' | 'right' | 'uturn';
 
@@ -113,6 +113,16 @@ export interface RoadRestrictions {
 export type FunctionalClass =
   | 'autostrada' | 'scorrimento_veloce' | 'interquartiere' | 'scorrimento' | 'quartiere' | 'interzonale' | 'locale';
 
+export interface HorizontalDesign {
+ readonly bearingDeg:number;
+ readonly elements:readonly {readonly id:string;readonly kind:'tangent'|'arc'|'clothoid';readonly lengthM:number;readonly radiusM?:number;readonly turn?:'left'|'right';readonly startCurvature?:number;readonly endCurvature?:number;}[];
+}
+export interface CorridorAssembly {
+ readonly layers:readonly {readonly id:string;readonly name:string;readonly material:string;readonly thicknessM:number;readonly widthM?:number;readonly unitCostM3?:number;}[];
+ readonly crossfall:readonly {readonly station:number;readonly leftPct:number;readonly rightPct:number;}[];
+ readonly cutSlope:number;readonly fillSlope:number;
+ readonly retaining?: {readonly left:boolean;readonly right:boolean;};
+}
 export interface Road {
   readonly id: string;
   readonly from: string;
@@ -130,6 +140,8 @@ export interface Road {
   readonly restrictions?: RoadRestrictions;
   /** Vertical alignment (profilo longitudinale); when absent the road follows the terrain. */
   readonly vertical?: VerticalProfile;
+  readonly alignment?: HorizontalDesign;
+  readonly corridor?: CorridorAssembly;
   /** Bridge / viaduct / tunnel. */
   readonly structure?: RoadStructure;
   /** Functional class in the traffic plan (PGTU, Direttive 12/4/1995); absent = not classified. */
@@ -168,7 +180,13 @@ export interface TerrainGrid {
   readonly fetchedAt?: string;
 }
 
-export interface Building {
+export interface BuildingStyle {
+  readonly heightM?: number; readonly minHeightM?: number; readonly levels?: number;
+  readonly use?: 'residential' | 'commercial' | 'industrial' | 'public';
+  readonly roofShape?: 'flat' | 'gabled' | 'hipped'; readonly facadeColor?: string;
+  readonly facadeMaterial?: string; readonly roofMaterial?: string; readonly balconies?: boolean;
+}
+export interface Building extends BuildingStyle {
   readonly id: string;
   readonly footprint: readonly LngLat[];
   readonly heightM: number;
@@ -191,12 +209,16 @@ export interface CityFeature {
 export type AssetState = 'existing' | 'project' | 'removed';
 
 /** Anything placed in the city: sign pole, signal head, tree, bench, shelter… */
+export interface UrbanSolid {readonly polygons:readonly (readonly (readonly (readonly[number,number])[])[])[];readonly heightM:number;}
 export interface Asset {
+  readonly solid?:UrbanSolid;
   readonly id: string;
   /** Catalogue id (packages/assets), e.g. "it.sign.II.36" or "furniture.bench.linear". */
   readonly type: string;
   readonly at: LngLat;
   readonly elevationM?: number;
+  /** Uniform object-local scale; catalogue dimensions remain in metres. Absent = 1. */
+  readonly scale?: number;
   /** Degrees clockwise from north. */
   readonly rotationDeg: number;
   readonly state: AssetState;
@@ -377,10 +399,13 @@ export interface SignalCoordination {
 }
 
 export interface SignalPlan {
+  /** Ordered weekly timing programmes; the first active programme wins, otherwise base timings apply. */
+  readonly programmes?: readonly { readonly id: string; readonly name: string; readonly schedule: readonly TimeWindow[]; readonly cycleS: number; readonly offsetS: number; readonly phases: readonly SignalPhase[] }[];
   readonly id: string;
   readonly nodeId: string;
   readonly name: string;
   readonly mode: 'fixed_time' | 'actuated' | 'adaptive' | 'green_wave';
+  readonly priority?: 'none'|'tpl'|'emergency'|'pedestrian'|'balanced';
   readonly cycleS: number;
   readonly offsetS: number;
   readonly phases: readonly SignalPhase[];
@@ -434,6 +459,16 @@ export interface Area {
   readonly state: AssetState;
   /** crossing: depth of the stripes along traffic, metres. */
   readonly depthM?: number;
+  readonly grading?: {
+    /** Orthometric elevation at polygon[0], plane grades east/north in percent. */
+    readonly elevationM: number;
+    readonly eastPct: number;
+    readonly northPct: number;
+    readonly cutSlope: number;
+    readonly fillSlope: number;
+    readonly maxDaylightM: number;
+    readonly retaining: boolean;
+  };
   readonly properties: Readonly<Record<string, unknown>>;
   readonly provenance: Provenance;
 }
@@ -472,6 +507,11 @@ export type BayPurpose = 'free' | 'paid' | 'disabled' | 'loading' | 'taxi' | 'pi
 export type MarkingColor = 'white' | 'yellow' | 'blue' | 'red' | 'pink' | 'green';
 
 export interface Marking {
+  readonly dashM?: number; readonly gapM?: number; readonly doubleSpacingM?: number;
+  readonly offsetM?: number; readonly scale?: number; readonly repeatM?: number; readonly reverse?: boolean;
+  readonly hatch?: { readonly angleDeg: number; readonly stripeWidthM: number; readonly spacingM: number; readonly borderM: number };
+  readonly binding?: { readonly roadId: string; readonly laneId?: string; readonly fromS: number; readonly toS: number };
+
   readonly id: string;
   readonly kind: MarkingKind;
   /** Line kinds: polyline; hatch/chevrons/box_junction/parking_bays: polygon or polyline (bays along it); text/symbol/arrow/triangle: [anchor, direction point]. */
@@ -495,6 +535,18 @@ export interface RoadStructure {
   /** Ordering with crossing roads (OSM layer). */
   readonly layer: number;
   readonly piersEveryM?: number;
+  /** Authored cut-and-cover passage; the same road retains its connected endpoints. */
+  readonly underpass?: {
+    /** Profile before this passage was designed; null explicitly means terrain-following. */
+    readonly previousVertical?: VerticalProfile|null;
+    /** Traffic attributes retained when converting this passage to pedestrian use. */
+    readonly previousTraffic?: Pick<Road,'roadClass'|'speedKmh'|'oneway'|'lanes'|'section'|'restrictions'|'tags'|'provenance'>;
+    readonly usage: 'road' | 'pedestrian';
+    readonly clearanceM: number;
+    readonly slabM: number;
+    readonly rampLengthM: number;
+    readonly maxGradePct: number;
+  };
 }
 
 export type WaterNodeKind = 'junction' | 'reservoir' | 'tank' | 'hydrant' | 'valve';
@@ -556,7 +608,67 @@ export interface DrainagePipe {
 }
 
 /** The editable, derived state of one scenario: baseline + operations replayed. */
+export interface ProjectClock {
+  /** Canonical UTC anchor; wall time is always obtained through timeZone. */
+  readonly anchor: string;
+  readonly timeZone: string;
+  readonly durationS: number;
+  readonly speed: number;
+  /** Explicit study holiday flag; no external calendar is fabricated. */
+  readonly holiday: boolean;
+}
+
+/** Scenario-owned material; images are content-addressed files in the project package. */
+export interface ProjectMaterial {
+  readonly id: string; readonly label: string; readonly category: string;
+  readonly color: string; readonly pattern: string; readonly scaleM: number;
+  readonly roughness: number; readonly permeable: boolean; readonly opacity?: number;
+  readonly metallic?: number; readonly texture?: string; readonly normalMap?: string;
+  readonly crop?: readonly [number, number, number, number];
+  readonly offset?: readonly [number, number]; readonly rotationDeg?: number;
+  readonly brightness?: number; readonly contrast?: number; readonly bump?: number; readonly emissive?: number;
+}
+
+export interface ProjectEnvironment { readonly weather: WeatherPreset; readonly intensity:number; readonly mode?:'study'|'live'; readonly weatherSource?:'simulated'|'provider'; readonly weatherCapture?:{ readonly provider:string; readonly validAt:string; readonly retrievedAt:string; readonly code:number; readonly at:LngLat }; readonly trafficSource?:'live'|'historical'|'simulated'|'hybrid'; readonly pedestrianDemandPerHour?:number; }
+export type WeatherPreset = 'clear' | 'cloudy' | 'rain' | 'fog' | 'overcast';
+export interface CityModel { readonly id: string; readonly name: string; readonly url: string; readonly enabled: boolean; }
+export interface BikeStation {readonly id:string;name:string;at:LngLat;docks:number;ebikeShare:number;}
+export interface BikeShare {system:string;stations:BikeStation[];dockless:boolean;}
+export type TransitMode = 'bus' | 'brt' | 'trolleybus' | 'tram' | 'metro' | 'train' | 'funicular' | 'ferry' | 'on_demand';
+export interface LineStop { readonly id: string; readonly name: string; readonly at: LngLat; readonly arrivalsPerHour?: number; readonly alightFraction?: number; readonly transferTo?: {readonly lineId:string;readonly stopId:string;readonly fraction:number;readonly walkS:number;}; }
+export interface TransitLine {
+ readonly id: string; name: string; mode: TransitMode; color: string; line: LngLat[]; stops: LineStop[];
+ headways: Record<'peak'|'offpeak'|'evening'|'weekend',number>;
+ firstDeparture: string; lastDeparture: string; vehicle: string; capacity: number; speedKmh: number;
+ headwayMin?: number; dwellS?: number; layoverMin?: number;
+}
+export type UtilitySystem='water'|'sewer'|'stormwater'|'electricity'|'gas'|'telecom'|'district';
+export interface UtilityNode {readonly id:string;readonly name:string;readonly system:UtilitySystem;readonly kind:'junction'|'chamber'|'cabinet'|'terminal';readonly at:LngLat;readonly elevationM:number;readonly datum:'orthometric'|'relative';readonly chamberDiameterM?:number;}
+export interface UtilityLink {readonly id:string;readonly name:string;readonly from:string;readonly to:string;readonly diameterMm:number;readonly clearanceM:number;readonly material:string;readonly path?:readonly{readonly at:LngLat;readonly elevationM:number;}[];}
+export interface PresentationCamera {readonly lon:number;readonly lat:number;readonly height:number;readonly heading:number;readonly pitch:number;}
+export interface PresentationGraphic {
+ readonly id:string;readonly kind:'text'|'image'|'chart'|'legend';readonly x:number;readonly y:number;readonly width:number;readonly height:number;
+ readonly title:string;readonly color:string;readonly fontPx:number;
+ readonly textureId?:string;
+ readonly rows?:readonly{readonly label:string;readonly value:number;readonly color:string;}[];
+ readonly source?:string;readonly unit?:string;readonly capturedAt?:string;
+}
+export interface PresentationScene {readonly id:string;readonly title:string;readonly text:string;readonly camera:{readonly center:readonly[number,number];readonly zoom:number;readonly bearing:number;readonly pitch:number}|null;readonly twin?:PresentationCamera;readonly path?:readonly PresentationCamera[];readonly durationS?:number;readonly clock?:ProjectClock;readonly liveSimulation?:{readonly mode:'microscopic'|'hybrid';readonly dailyTrips:number;readonly seed:number;};readonly graphics?:readonly PresentationGraphic[];readonly annotations?:readonly {readonly id:string;readonly at:LngLat;readonly text:string;readonly kind?:'label'|'callout'|'arrow';readonly endAt?:LngLat;}[];}
+export interface PresentationDocument {readonly scenes?:readonly PresentationScene[];readonly civic?:boolean;}
+export interface WorksTarget {readonly kind:'asset'|'road'|'building';readonly id:string;readonly action:'construct'|'demolish'|'close';}
+export interface WorksPhase {readonly id:string;readonly name:string;readonly startDate:string;readonly endDate:string;readonly status:'planned'|'active'|'complete'|'paused';readonly budget:number;readonly contractor:string;readonly category:string;readonly affectedArea?:readonly LngLat[];readonly dependencies:readonly string[];readonly targets:readonly WorksTarget[];}
 export interface Network {
+  readonly presentation?:PresentationDocument;
+  readonly works?:readonly WorksPhase[];
+  readonly utilityNodes?:Readonly<Record<string,UtilityNode>>;
+  readonly utilityLinks?:Readonly<Record<string,UtilityLink>>;
+  readonly transit?: readonly TransitLine[];
+  readonly bikeShare?:BikeShare;
+  readonly cityModels?: Readonly<Record<string, CityModel>>;
+  readonly environment?: ProjectEnvironment;
+  readonly materials?: Readonly<Record<string, ProjectMaterial>>;
+  readonly buildingStyles?: Readonly<Record<string, BuildingStyle>>;
+  readonly clock?: ProjectClock;
   readonly nodes: Readonly<Record<string, RoadNode>>;
   readonly roads: Readonly<Record<string, Road>>;
   readonly assets: Readonly<Record<string, Asset>>;

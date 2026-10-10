@@ -9,9 +9,14 @@ export interface OptimizeSummary { plans: number; corridors: number; before: num
  * "Ottimizza tutti i semafori": Webster on every plan of the scenario with the DRIP traffic estimate,
  * applied as one undoable batch. Corridors keep their offsets on a common cycle.
  */
-export async function optimizeAllSignals(apply = true): Promise<OptimizeSummary> {
+export async function optimizeAllSignals(apply = true, beforeApply?:()=>void): Promise<OptimizeSummary> {
+  const source=useApp.getState();
+  const revision=JSON.stringify(source.scenario?.operations);
   const res = await engine.job<SignalOptimization[]>('optimizeSignals', {});
-  const net = useApp.getState().network;
+  const current=useApp.getState();
+  if(current.project?.id!==source.project?.id||current.scenario?.id!==source.scenario?.id||JSON.stringify(current.scenario?.operations)!==revision)throw Error('Scenario modificato durante ottimizzazione: ripetere');
+  beforeApply?.();
+  const net = current.network;
   const mean = (xs: number[]) => (xs.length ? Math.round(xs.reduce((s, x) => s + x, 0) / xs.length) : 0);
   const summary: OptimizeSummary = {
     plans: res.length, corridors: new Set(res.map((r) => r.plan.coordination?.id).filter(Boolean)).size,

@@ -36,6 +36,15 @@ const URBAN_FAST = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link'])
 export function dismissSuggestion(key: string): void {
   useSuggest.setState((s) => ({ items: s.items.filter((x) => x.key !== key), dismissed: new Set(s.dismissed).add(key) }));
 }
+/** All suggested project changes use the same validated, undoable commit boundary. */
+export function applySuggestion(key: string | null, label: string, ops: readonly { type: string; payload: unknown }[]): boolean {
+  if (!ops.length) { toast.warn('Azione non applicabile', 'Non ci sono elementi validi da modificare.'); return false; }
+  const result = commit('batch', { label, ops });
+  if (!result.ok) return false;
+  if (key) dismissSuggestion(key);
+  toast.success(label, 'Modifica applicata allo scenario · Ctrl+Z per annullare.');
+  return true;
+}
 export function clearSuggestions(): void { useSuggest.setState({ items: [] }); }
 export function setSuggestionsEnabled(enabled: boolean): void { useSuggest.setState({ enabled, ...(enabled ? {} : { items: [] }) }); }
 
@@ -91,7 +100,8 @@ export function generateZoneGates(zone: Zone): number {
   const ops: { type: string; payload: unknown }[] = [];
   if (old.length) ops.push({ type: 'asset.remove', payload: { assetIds: old.map((a) => a.id) } });
   ops.push({ type: 'asset.add', payload: { assets } });
-  if (commit('batch', { label: `Varchi ${zone.name}`, ops }).ok) toast.success(zone.kind === 'zone30' ? 'Segnali Zona 30 posizionati' : 'Varchi generati', `${found.length} ingressi`);
+  if (!applySuggestion(null, `Varchi ${zone.name}`, ops)) return 0;
+  toast.success(zone.kind === 'zone30' ? 'Segnali Zona 30 posizionati' : 'Varchi generati', `${found.length} ingressi`);
   return found.length;
 }
 
@@ -125,8 +135,8 @@ function forNewRoads(roads: readonly Road[]): Suggestion[] {
       actions: [{ label: 'Aggiungi 1,50 m per lato', primary: true, run: () => {
         const net = useApp.getState().network!;
         const ops = noWalk.map((r) => net.roads[r.id]).filter((r): r is Road => !!r).map((r) => sidewalkOp(r, 1.5));
-        if (ops.length) commit('batch', { label: 'Marciapiedi sulla nuova strada', ops });
-        dismissSuggestion(key);
+        if (!ops.length) { toast.warn('Strade non disponibili', 'La nuova strada è stata rimossa o sostituita.'); return; }
+        applySuggestion(key, 'Marciapiedi sulla nuova strada', ops);
       } }, { label: 'Ignora', run: done(key) }],
       valid: (n) => noWalk.some((r) => n.roads[r.id] && !n.roads[r.id]!.section.elements.some((e) => e.kind === 'sidewalk')),
     });
@@ -140,7 +150,8 @@ function forNewRoads(roads: readonly Road[]): Suggestion[] {
       actions: [{ label: 'Porta a 50 km/h', primary: true, run: () => {
         const n = useApp.getState().network!;
         const ops = fast.filter((r) => (n.roads[r.id]?.speedKmh ?? 0) > 50).map((r) => ({ type: 'road.update', payload: { roadId: r.id, changes: { speedKmh: 50 } } }));
-        if (!ops.length || commit('batch', { label: 'Limite 50 km/h', ops }).ok) dismissSuggestion(key);
+        if (!ops.length) { dismissSuggestion(key); return; }
+        applySuggestion(key, 'Limite 50 km/h', ops);
       } }, { label: 'Ignora', run: done(key) }],
       valid: (n) => fast.some((r) => (n.roads[r.id]?.speedKmh ?? 0) > 50),
     });
@@ -165,7 +176,7 @@ function forRoad(net: Network, road: Road): Suggestion[] {
           const n = useApp.getState().network!;
           const minor = Object.values(n.roads).filter((r) => (r.from === nodeId || r.to === nodeId) && r.provenance.geometry?.kind === 'project' && !r.tags?.roundabout).map((r) => r.id);
           const prev = n.junctions[nodeId];
-          if (commit('junction.set', { spec: { nodeId, control: 'priority', cornerRadiusM: prev?.cornerRadiusM ?? 6, minorRoadIds: minor.length ? minor : [road.id], crossingRoadIds: prev?.crossingRoadIds ?? [], ...(prev?.laneConnections ? { laneConnections: prev.laneConnections } : {}) } }).ok) dismissSuggestion(key);
+          applySuggestion(key, 'Dare precedenza sulla nuova strada', [{ type: 'junction.set', payload: { spec: { nodeId, control: 'priority', cornerRadiusM: prev?.cornerRadiusM ?? 6, minorRoadIds: minor.length ? minor : [road.id], crossingRoadIds: prev?.crossingRoadIds ?? [], ...(prev?.laneConnections ? { laneConnections: prev.laneConnections } : {}) } } }]);
         } },
         { label: 'Apri incrocio', run: () => { select({ kind: 'node', ids: [nodeId] }); dismissSuggestion(key); } },
       ],
@@ -197,7 +208,7 @@ function forCrossing(net: Network, a: CrossingSource): Suggestion[] {
     detail: 'Segnale di indicazione «attraversamento pedonale» su entrambi i lati; su strade veloci o poco visibili anche il pericolo (fig. II.14) a 150 m fuori dai centri, 50 m in città.',
     actions: [{ label: 'Posiziona i segnali', primary: true, run: () => {
       const n = useApp.getState().network!, cur = n.roads[road.id] ?? road;
-      if (commit('asset.add', { assets: approachSigns(n, cur, along, 1, 'it.sign.attraversamento_pedonale', { crossingId: a.id }) }).ok) dismissSuggestion(kSign);
+      applySuggestion(kSign, 'Segnali attraversamento', [{ type: 'asset.add', payload: { assets: approachSigns(n, cur, along, 1, 'it.sign.attraversamento_pedonale', { crossingId: a.id }) } }]);
     } }, { label: 'Ignora', run: done(kSign) }],
     valid: (n) => a.exists(n) && !Object.values(n.assets).some((x) => x.properties.crossingId === a.id),
   });
@@ -208,7 +219,7 @@ function forCrossing(net: Network, a: CrossingSource): Suggestion[] {
       detail: 'Su strade urbane fino a 50 km/h l\'attraversamento rialzato abbassa le velocità e dà continuità al percorso pedonale senza rampe.',
       actions: [{ label: 'Rialza (10 cm, rampe 1,20 m)', primary: true, run: () => {
         if (!useApp.getState().network!.roads[road.id]) { toast.warn('Strada modificata', "La strada dell'attraversamento è stata cambiata: rialzalo con lo strumento Moderazione (D)."); dismissSuggestion(key); return; }
-        if (commit('feature.set', { feature: { id: newId('f'), kind: 'raised_crossing', roadId: road.id, station: Math.round(along * 10) / 10, lengthM: 4, rampM: 1.2, heightM: 0.1, state: 'project', properties: {}, provenance: PROJECT } }).ok) dismissSuggestion(key);
+        applySuggestion(key, 'Attraversamento rialzato', [{ type: 'feature.set', payload: { feature: { id: newId('f'), kind: 'raised_crossing', roadId: road.id, station: Math.round(along * 10) / 10, lengthM: 4, rampM: 1.2, heightM: 0.1, state: 'project', properties: {}, provenance: PROJECT } } }]);
       } }, { label: 'Ignora', run: done(key) }],
       valid: (n) => a.exists(n),
     });
@@ -237,8 +248,8 @@ function forZone(zone: Zone): Suggestion[] {
         const poly = zone.polygon.map((p) => f.toMetric(p) as geom.V);
         const ops = Object.values(n.roads).filter((r) => VEHICULAR(r) && r.speedKmh > 30 && geom.pointInRing(geom.sampleAt(r.axis.map((p) => f.toMetric(p) as geom.V), geom.lengthOf(r.axis.map((p) => f.toMetric(p) as geom.V)) / 2).p, poly))
           .map((r) => ({ type: 'road.update', payload: { roadId: r.id, changes: { speedKmh: 30 } } }));
-        if (ops.length && commit('batch', { label: `Zona 30 · ${zone.name}`, ops }).ok) toast.success('Limite 30 km/h', `${ops.length} strade`);
-        dismissSuggestion(k2);
+        if (!ops.length) { toast.info('Nessuna strada da modificare', 'Non ci sono strade veicolari oltre 30 km/h all’interno della zona.'); dismissSuggestion(k2); return; }
+        applySuggestion(k2, `Zona 30 · ${zone.name}`, ops);
       } }, { label: 'Ignora', run: done(k2) }],
       valid: (n) => !!n.zones[zone.id],
     });
@@ -256,8 +267,8 @@ function forFeature(net: Network, id: string): Suggestion[] {
     detail: 'I rallentatori vanno presegnalati con il segnale di pericolo «dosso» prima dell\'elemento, in entrambi i sensi di marcia.',
     actions: [{ label: 'Posiziona a 30 m', primary: true, run: () => {
       const n = useApp.getState().network!, f = n.features?.[id], cur = f?.roadId ? n.roads[f.roadId] : undefined;
-      if (!f || !cur) { dismissSuggestion(key); return; }
-      if (commit('asset.add', { assets: approachSigns(n, cur, f.station ?? 0, 30, 'it.sign.dosso', { featureId: id }) }).ok) dismissSuggestion(key);
+      if (!f || !cur) { toast.warn('Elemento non disponibile', 'Il dosso o la strada sono stati rimossi.'); return; }
+      applySuggestion(key, 'Preavviso dosso', [{ type: 'asset.add', payload: { assets: approachSigns(n, cur, f.station ?? 0, 30, 'it.sign.dosso', { featureId: id }) } }]);
     } }, { label: 'Ignora', run: done(key) }],
     valid: (n) => !!n.features?.[id] && !Object.values(n.assets).some((a) => a.properties.featureId === id),
   }];
@@ -266,7 +277,7 @@ function forFeature(net: Network, id: string): Suggestion[] {
     out.push({
       key: k2, icon: 'warning', title: 'Abbassa il limite a 30 km/h', ref: 'art. 179 c. 6 Reg.',
       detail: `Con ${road.speedKmh} km/h il dosso è limitato a ${Math.round((humpLimits(road.speedKmh)?.maxHeightM ?? 0) * 100)} cm; a 30 km/h può arrivare a 7 cm ed è più efficace.`,
-      actions: [{ label: 'Imposta 30 km/h', primary: true, run: () => { if (!useApp.getState().network!.roads[road.id] || commit('road.update', { roadId: road.id, changes: { speedKmh: 30 } }).ok) dismissSuggestion(k2); } }, { label: 'Ignora', run: done(k2) }],
+      actions: [{ label: 'Imposta 30 km/h', primary: true, run: () => { applySuggestion(k2, 'Limite 30 km/h', [{ type: 'road.update', payload: { roadId: road.id, changes: { speedKmh: 30 } } }]); } }, { label: 'Ignora', run: done(k2) }],
       valid: (n) => (n.roads[road.id]?.speedKmh ?? 0) > 30 && !!n.features?.[id],
     });
   }

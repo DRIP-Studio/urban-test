@@ -1,3 +1,4 @@
+import { materialCanvas } from '../models/materials';
 import type { FurnitureItem, MaterialItem } from '../api/types';
 import { furnitureSprite } from './furnitureSprite';
 import { patternImage } from './patterns';
@@ -90,7 +91,13 @@ export function installImageLoader(map: MLMap, materials: readonly MaterialItem[
     if (id.startsWith('mat:')) {
       const [, mid = '', z = '18'] = id.split(':');
       const m = byId.get(mid);
-      const img = m ? patternImage(m, Number(z)) : null;
+      let img: ImageData | null = null;
+      if (m?.id.startsWith('custom.')) {
+        const source = await materialCanvas(m, Number(z)), canvas = document.createElement('canvas');
+        const width = Math.max(8, Math.min(512, Math.round(m.scaleM * 2 ** (Number(z) + 1) / (78271.52 * Math.cos(40.94 * Math.PI / 180)))));
+        canvas.width = width; canvas.height = Math.max(8, Math.round(width * source.height / source.width));
+        const g = canvas.getContext('2d')!; g.drawImage(source, 0, 0, canvas.width, canvas.height); img = g.getImageData(0, 0, canvas.width, canvas.height);
+      } else img = m ? patternImage(m, Number(z)) : null;
       if (img) map.addImage(id, img, { pixelRatio: 2 });
       return;
     }

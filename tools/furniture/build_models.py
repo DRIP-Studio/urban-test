@@ -462,31 +462,26 @@ MODELS = {
 
 
 def bounds(parts):
-    """Approximate bounds (rotation-aware via the rotated half-diagonal) for the catalogue dims."""
-    lo = [math.inf] * 3
-    hi = [-math.inf] * 3
+    """Exact rotated box/ellipsoid bounds and conservative circular cylinder envelopes."""
+    lo, hi = [math.inf] * 3, [-math.inf] * 3
     for p in parts:
-        if p["shape"] in ("sphere", "ellipsoid"):
-            rad = [p["r"]] * 3 if p["shape"] == "sphere" else p["size"]
-            c = p["at"]
-            ext = rad if not p.get("rot") else [max(rad)] * 3
+        rx, ry, rz = [math.radians(v) for v in p.get("rot", [0, 0, 0])]
+        cx, sx, cy, sy, cz, sz = math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry), math.cos(rz), math.sin(rz)
+        matrix = [[cz*cy, cz*sy*sx-sz*cx, cz*sy*cx+sz*sx], [sz*cy, sz*sy*sx+cz*cx, sz*sy*cx-cz*sx], [-sy, cy*sx, cy*cx]]
+        center = list(p["at"])
+        if p["shape"] in {"sphere", "ellipsoid"}:
+            radii = p.get("size") if p["shape"] == "ellipsoid" else [p["r"], p["r"], p["r"] * .9]
+            ext = [math.sqrt(sum((matrix[i][j]*radii[j])**2 for j in range(3))) for i in range(3)]
+        elif p["shape"] == "box":
+            half = [v / 2 for v in p["size"]]
+            ext = [sum(abs(matrix[i][j])*half[j] for j in range(3)) for i in range(3)]
+            if not p.get("rot"): center[2] += half[2]
         else:
-            if p["shape"] == "box":
-                sx, sy, sz = p["size"]
-            else:
-                rr = max(p["r"], p.get("r2", 0))
-                sx = sy = rr * 2
-                sz = p["h"]
-            if p.get("rot"):
-                c = p["at"]
-                e = math.sqrt(sx * sx + sy * sy + sz * sz) / 2
-                ext = [e, e, e]
-            else:
-                c = [p["at"][0], p["at"][1], p["at"][2] + sz / 2]
-                ext = [sx / 2, sy / 2, sz / 2]
-        for k in range(3):
-            lo[k] = min(lo[k], c[k] - ext[k])
-            hi[k] = max(hi[k], c[k] + ext[k])
+            radius, half_height = max(p["r"], p.get("r2", 0)), p["h"] / 2
+            ext = [radius*math.hypot(matrix[i][0], matrix[i][1])+abs(matrix[i][2])*half_height for i in range(3)]
+            if not p.get("rot"): center[2] += half_height
+        for i in range(3):
+            lo[i] = min(lo[i], center[i]-ext[i]); hi[i] = max(hi[i], center[i]+ext[i])
     return lo, hi
 
 
@@ -504,6 +499,7 @@ def main():
         parts = MODELS[item["id"]]
         item["model"] = parts
         lo, hi = bounds(parts)
+        item["placement"] = {"units": "m", "pivot": [0, 0, 0], "forward": "+Y", "up": "+Z", "boundsMin": [r(v) for v in lo], "boundsMax": [r(v) for v in hi], "pbrDistanceM": 500}
         # Footprint symmetric about the anchor (the map centres the symbol on it).
         item["dims"] = {"w": r(max(0.1, 2 * max(abs(lo[0]), abs(hi[0])))), "d": r(max(0.1, 2 * max(abs(lo[1]), abs(hi[1])))), "h": r(max(0.02, hi[2]))}
     CATALOG.write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

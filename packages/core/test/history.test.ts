@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LocalFrame, OperationRejected, ScenarioHistory, ScenarioReadOnly, bearingDeg, distanceM,
-  type Asset, type CityBaseline, type Road, type Scenario,
+  LocalFrame, NetworkReplayer, OperationRejected, ScenarioHistory, ScenarioReadOnly, bearingDeg, distanceM,
+  type Asset, type CityBaseline, type Operation, type Road, type Scenario,
 } from '../src/index';
 
 const osm = { kind: 'osm', source: 'OpenStreetMap contributors (ODbL)' } as const;
@@ -37,6 +37,16 @@ const scenario = (over: Partial<Scenario> = {}): Scenario => ({
 
 let n = 0;
 const ids = () => `op-${++n}`;
+
+it('worker structured clones preserve replay checkpoints, but changed content under the same id invalidates them', () => {
+  const replayer = new NetworkReplayer();
+  const op: Operation = { id: 'stable-id', type: 'road.update', payload: { roadId: 'r1', changes: { speedKmh: 30 } }, author: 'tester', at: '2026-10-08' };
+  const first = replayer.derive(baseline, [op]).net;
+  expect(replayer.derive(baseline, structuredClone([op])).net).toBe(first);
+  const changed = { ...op, payload: { roadId: 'r1', changes: { speedKmh: 40 } } };
+  expect(replayer.derive(baseline, [changed]).net.roads.r1!.speedKmh).toBe(40);
+  expect(replayer.derive(baseline, [op]).net.roads.r1!.speedKmh).toBe(30);
+});
 
 describe('ScenarioHistory', () => {
   it('commits, undoes and redoes without touching the baseline', () => {

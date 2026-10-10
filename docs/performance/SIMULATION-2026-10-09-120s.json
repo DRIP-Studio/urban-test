@@ -1,0 +1,167 @@
+{
+  "date": "2026-10-09",
+  "environment": "Chromium headless, ANGLE SwiftShader, 1440x900, Windows; isolated real API + worker, Frattamaggiore network",
+  "method": "Synthetic spatially distributed real routed initial agents, dailyTrips=0, 1x playback; post-GC JS heaps (not GPU/system memory). 120 seconds wall at 50k each mode. Four Map/Twin transitions. Rendering budget is independent of physical agents. No hours-long or 50k individual mesh certification.",
+  "results": {
+    "microscopic": {
+      "errors": [],
+      "workloads": [
+        {
+          "agents": 1000,
+          "wallS": 5.34,
+          "simulatedS": 5.25,
+          "renderedMax": 993,
+          "tickMaxMs": 1,
+          "fpsMin": 25.80521838849722,
+          "fpsMax": 25.80521838849722,
+          "mainHeapStartMB": 125.81582260131836,
+          "mainHeapEndMB": 120.68779754638672,
+          "workerHeapStartMB": 11.1279296875,
+          "workerHeapEndMB": 15.04550552368164,
+          "transitions": 0,
+          "balance": 1000
+        },
+        {
+          "agents": 5000,
+          "wallS": 5.25,
+          "simulatedS": 5.25,
+          "renderedMax": 2000,
+          "tickMaxMs": 2.100000001490116,
+          "fpsMin": 60.73277578662933,
+          "fpsMax": 60.73277578662933,
+          "mainHeapStartMB": 120.39368438720703,
+          "mainHeapEndMB": 121.14307022094727,
+          "workerHeapStartMB": 12.291275024414062,
+          "workerHeapEndMB": 19.01708984375,
+          "transitions": 0,
+          "balance": 5000
+        },
+        {
+          "agents": 10000,
+          "wallS": 5.35,
+          "simulatedS": 5.25,
+          "renderedMax": 2000,
+          "tickMaxMs": 22.5,
+          "fpsMin": 29.651593773083423,
+          "fpsMax": 29.651593773083423,
+          "mainHeapStartMB": 121.52985763549805,
+          "mainHeapEndMB": 121.65229415893555,
+          "workerHeapStartMB": 12.952800750732422,
+          "workerHeapEndMB": 20.585102081298828,
+          "transitions": 0,
+          "balance": 10000
+        },
+        {
+          "agents": 25000,
+          "wallS": 5.47,
+          "simulatedS": 5.75,
+          "renderedMax": 2000,
+          "tickMaxMs": 7.700000002980232,
+          "fpsMin": 60.70859872584456,
+          "fpsMax": 60.70859872584456,
+          "mainHeapStartMB": 121.36897659301758,
+          "mainHeapEndMB": 121.43460845947266,
+          "workerHeapStartMB": 24.163089752197266,
+          "workerHeapEndMB": 23.168563842773438,
+          "transitions": 0,
+          "balance": 25000
+        },
+        {
+          "agents": 50000,
+          "wallS": 122.89,
+          "simulatedS": 121.25,
+          "renderedMax": 4096,
+          "tickMaxMs": 84.19999999552965,
+          "fpsMin": 3.7425149700598803,
+          "fpsMax": 60.92688773499037,
+          "mainHeapStartMB": 121.9626235961914,
+          "mainHeapEndMB": 166.13061141967773,
+          "workerHeapStartMB": 31.385997772216797,
+          "workerHeapEndMB": 25.32245635986328,
+          "transitions": 4,
+          "balance": 50000
+        }
+      ]
+    },
+    "hybrid": {
+      "errors": [],
+      "workloads": [
+        {
+          "agents": 1000,
+          "wallS": 5.37,
+          "simulatedS": 5.5,
+          "renderedMax": 993,
+          "tickMaxMs": 6.600000001490116,
+          "fpsMin": 19.70720720717965,
+          "fpsMax": 19.70720720717965,
+          "mainHeapStartMB": 128.7775001525879,
+          "mainHeapEndMB": 119.9100112915039,
+          "workerHeapStartMB": 11.300724029541016,
+          "workerHeapEndMB": 15.348289489746094,
+          "transitions": 0,
+          "balance": 1000
+        },
+        {
+          "agents": 5000,
+          "wallS": 5.24,
+          "simulatedS": 5.25,
+          "renderedMax": 2000,
+          "tickMaxMs": 1.8000000044703484,
+          "fpsMin": 60.330333300277026,
+          "fpsMax": 60.330333300277026,
+          "mainHeapStartMB": 120.3311653137207,
+          "mainHeapEndMB": 120.63628387451172,
+          "workerHeapStartMB": 12.292678833007812,
+          "workerHeapEndMB": 19.07818603515625,
+          "transitions": 0,
+          "balance": 5000
+        },
+        {
+          "agents": 10000,
+          "wallS": 5.25,
+          "simulatedS": 5.25,
+          "renderedMax": 2000,
+          "tickMaxMs": 1.7000000029802322,
+          "fpsMin": 26.624593235342005,
+          "fpsMax": 26.624593235342005,
+          "mainHeapStartMB": 120.24763488769531,
+          "mainHeapEndMB": 121.07546615600586,
+          "workerHeapStartMB": 12.96175765991211,
+          "workerHeapEndMB": 20.626537322998047,
+          "transitions": 0,
+          "balance": 10000
+        },
+        {
+          "agents": 25000,
+          "wallS": 5.29,
+          "simulatedS": 5.25,
+          "renderedMax": 2000,
+          "tickMaxMs": 3.100000001490116,
+          "fpsMin": 27.335741481868396,
+          "fpsMax": 27.335741481868396,
+          "mainHeapStartMB": 120.56284713745117,
+          "mainHeapEndMB": 121.03326797485352,
+          "workerHeapStartMB": 14.336936950683594,
+          "workerHeapEndMB": 23.941165924072266,
+          "transitions": 0,
+          "balance": 25000
+        },
+        {
+          "agents": 50000,
+          "wallS": 122.79,
+          "simulatedS": 122,
+          "renderedMax": 4096,
+          "tickMaxMs": 91.39999999850988,
+          "fpsMin": 4.77646159722836,
+          "fpsMax": 60.720684849601355,
+          "mainHeapStartMB": 121.60400772094727,
+          "mainHeapEndMB": 165.60892486572266,
+          "workerHeapStartMB": 32.01326370239258,
+          "workerHeapEndMB": 25.150344848632812,
+          "transitions": 4,
+          "balance": 50000
+        }
+      ]
+    }
+  }
+}

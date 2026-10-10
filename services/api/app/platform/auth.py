@@ -1,10 +1,9 @@
 """Authentication: DRIP ID / Keycloak (OpenID Connect), provisional local admin, API keys, sessions.
 
 * Sessions are HMAC-signed tokens in an HttpOnly cookie (no server-side session store).
-* OIDC uses Authorization Code + PKCE. The ID token comes straight from the token endpoint over TLS,
-  which OIDC Core §3.1.3.7 accepts in place of the signature check; issuer, audience, expiry and nonce
-  are verified. Bearer access tokens from the DRIP platform are checked with token introspection
-  (RFC 7662), so no JWT crypto dependency is needed.
+* OIDC uses Authorization Code + PKCE and asymmetric JWT verification via discovered JWKS.
+  Issuer, client binding, expiry, nonce and signature are verified before roles or entitlements.
+  External bearer tokens use provider introspection (RFC 7662).
 * The local admin is provisional: ``admin`` / ``admin`` on first run, password change forced at the
   first login, and the account expires after 30 days unless renewed by an administrator.
 """
@@ -20,7 +19,9 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
+
+import jwt
 
 import httpx
 
@@ -261,6 +262,7 @@ def read_session(token: str | None) -> dict | None:
 # ------------------------------------------------------------------ OpenID Connect (DRIP ID, Keycloak)
 
 _discovery: dict[str, tuple[float, dict]] = {}
+_jwks_clients: dict[str, jwt.PyJWKClient] = {}
 _pending: dict[str, dict] = {}
 _introspected: dict[str, tuple[float, dict | None]] = {}
 
@@ -279,6 +281,14 @@ def discover(issuer: str) -> dict:
     r = httpx.get(issuer.rstrip("/") + "/.well-known/openid-configuration", timeout=10, headers={"User-Agent": SETTINGS.user_agent})
     r.raise_for_status()
     doc = r.json()
+    if doc.get("issuer") != issuer:
+        raise PermissionError("Discovery OIDC: issuer diverso da quello configurato")
+    for key in ("authorization_endpoint", "token_endpoint", "jwks_uri"):
+        parsed = urlsplit(str(doc.get(key) or ""))
+        if not parsed.hostname or parsed.username or parsed.password or not (parsed.scheme == "https" or parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}):
+            raise PermissionError(f"Discovery OIDC: {key} non sicuro o mancante")
+    if len(_discovery) >= 16:
+        _discovery.pop(next(iter(_discovery)))
     _discovery[issuer] = (time.time(), doc)
     return doc
 
@@ -310,6 +320,32 @@ def map_role(roles: set[str]) -> str:
     return max(mapped, key=lambda r: ROLE_RANK[r]) if mapped else cfg.get("defaultRole", "editor")
 
 
+def verify_oidc_jwt(token: str, provider_cfg: dict, metadata: dict, *, access: bool = False) -> dict:
+    """Verify asymmetric signature/JWKS, issuer, lifetime and the configured client binding."""
+    try:
+        uri = metadata["jwks_uri"]
+        client = _jwks_clients.get(uri)
+        if client is None:
+            client = jwt.PyJWKClient(uri, cache_jwk_set=True, lifespan=300, timeout=10,
+                                     headers={"User-Agent": SETTINGS.user_agent})
+            if len(_jwks_clients) >= 16:
+                _jwks_clients.pop(next(iter(_jwks_clients)))
+            _jwks_clients[uri] = client
+        key = client.get_signing_key_from_jwt(token)
+        claims = jwt.decode(token, key.key, algorithms=["RS256", "RS384", "RS512", "ES256", "ES384", "PS256", "PS384"],
+                            audience=provider_cfg["clientId"], issuer=provider_cfg["issuer"], leeway=60,
+                            options={"require": ["exp", "iss", "sub"] if access else ["exp", "iss", "sub", "aud", "iat"], "verify_aud": not access})
+        aud = claims.get("aud")
+        audiences = aud if isinstance(aud, list) else [aud]
+        if access and provider_cfg["clientId"] not in audiences and claims.get("azp") != provider_cfg["clientId"]:
+            raise PermissionError("Access token non destinato al client Urban")
+        if not access and len(audiences) > 1 and claims.get("azp") != provider_cfg["clientId"]:
+            raise PermissionError("Authorized party del token diversa dal client Urban")
+        return claims
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
+        raise PermissionError("Token OIDC non verificabile: firma, issuer, destinatario o validità") from exc
+
+
 def oidc_finish(code: str, state: str) -> tuple[dict, str, dict]:
     pend = _pending.pop(state, None)
     if not pend or time.time() - pend["at"] > 600:
@@ -324,21 +360,11 @@ def oidc_finish(code: str, state: str) -> tuple[dict, str, dict]:
         raise PermissionError(f"Il provider di identità ha rifiutato l'accesso ({r.status_code})")
     tok = r.json()
     id_token = tok.get("id_token") or ""
-    try:
-        claims = json.loads(_unb64(id_token.split(".")[1]))
-    except (IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise PermissionError("Risposta del provider di identità non valida") from exc
-    aud = claims.get("aud")
-    auds = aud if isinstance(aud, list) else [aud]
-    if claims.get("iss") != meta.get("issuer", p["issuer"]) or p["clientId"] not in auds:
-        raise PermissionError("Token di identità non destinato a DRIP Urban")
-    if claims.get("exp", 0) < time.time() - 60 or claims.get("nonce") != pend["nonce"]:
-        raise PermissionError("Token di identità scaduto o riutilizzato")
-    # Access-token claims carry the Keycloak roles (the ID token may not).
-    try:
-        access_claims = json.loads(_unb64((tok.get("access_token") or "").split(".")[1]))
-    except (IndexError, ValueError, json.JSONDecodeError):
-        access_claims = {}
+    claims = verify_oidc_jwt(id_token, p, meta)
+    if claims.get("nonce") != pend["nonce"]:
+        raise PermissionError("Nonce del token di identità non valido")
+    # Roles/entitlements must never come from an unsigned decoded access token.
+    access_claims = verify_oidc_jwt(tok["access_token"], p, meta, access=True) if str(tok.get("access_token") or "").count(".") == 2 else {}
     roles = _roles_from_claims(claims, p["clientId"]) | _roles_from_claims(access_claims, p["clientId"])
     identity = {
         "sub": f"{p['id']}:{claims.get('sub')}", "name": claims.get("name") or claims.get("preferred_username") or claims.get("email") or "Utente",

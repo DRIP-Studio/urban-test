@@ -18,11 +18,11 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
   use: {
-    baseURL: `http://localhost:${WEB_PORT}`,
+    baseURL: `http://127.0.0.1:${WEB_PORT}`,
     viewport: { width: 1440, height: 900 },
     acceptDownloads: true,
     trace: 'retain-on-failure',
     // PW_CHROMIUM_PATH: use a preinstalled Chromium when the pinned browser build is not available.
-    launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}) },
+    launchOptions: { args: process.env.DRIP_E2E_GPU==='hardware'?['--use-angle=d3d11','--ignore-gpu-blocklist','--enable-gpu']:['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], ...(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {}) },
   },
 });

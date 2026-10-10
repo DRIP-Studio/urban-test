@@ -48,7 +48,7 @@ h1, h2, h3 { text-wrap: balance; }
 }
 
 /* ------------------------------------------------------------------ workspace layout */
-.workspace { display: grid; grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h); height: 100%; }
+.workspace { display: grid; grid-template-rows: var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h); height: 100%; }
 .ws-body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 0; position: relative; }
 .ws-body > .ws-center { grid-column: 2; }
 .ws-body > .inspector { grid-column: 3; }
@@ -252,3 +252,25 @@ h1, h2, h3 { text-wrap: balance; }
 .live-dot.is-on { background: var(--ok); }
 .live-dot.is-busy { background: var(--drip-accent); animation: live-pulse 0.9s ease-in-out infinite; }
 @keyframes live-pulse { 50% { opacity: 0.35; } }
+
+.sheet.sheet-lab { width: min(780px, calc(100vw - 64px)); }
+.sheet-lab .lab-table-scroll td:first-child { white-space: normal; min-width: 210px; }
+.sheet-lab .lab-table-scroll th { min-width: 90px; }
+
+.works-gantt{margin:16px 0;display:grid;gap:6px}.works-row{display:grid;grid-template-columns:140px 1fr 165px;gap:12px;align-items:center;background:var(--bg-2);border:1px solid var(--line);padding:10px;color:inherit;text-align:left}.works-track{height:24px;position:relative;background:#292b2c;overflow:hidden}.works-bar{position:absolute;height:100%;background:#89949b;min-width:3px}.works-construction{background:var(--project)}.works-completed{background:#75a58a}
+
+.cinematic-panel{position:absolute;bottom:54px;left:68px;width:min(560px,calc(100% - 110px));max-height:310px;overflow:auto;background:rgba(20,21,22,.96);border:1px solid #414446;border-radius:8px;padding:10px;z-index:5}.cinematic-panel summary{cursor:pointer;font-size:12px;font-weight:600}.cinematic-panel>div{padding-top:12px}.scene-live-caption{border-left:3px solid var(--project);padding-left:10px;color:#f1f0eb}
+@media print{.topbar,.project-timeline,.tool-rail,.present-nav,.scene-edit,.present-rail button,.present-rail input{display:none!important}.present{height:auto!important;min-height:100vh}.present-rail{overflow:visible!important}.present-stage{min-height:650px}.scenes li{break-inside:avoid}}
+
+.present-annotation{max-width:230px;background:#1b2024;color:white;padding:8px 12px;border-left:3px solid #e8772e;font-size:13px;box-shadow:0 2px 10px #0004}.present-live{position:absolute;top:65px;left:28px;padding:10px;background:#171c20;color:#eee;font-size:12px;z-index:3}
+
+.boundary-content { display: contents; }
+.view-error { position: relative; margin: auto; padding: 24px; max-width: 600px; background: var(--ink-1); color: var(--text-1); border: 1px solid var(--line-2); border-radius: 8px; z-index: 5; }
+.view-error p { line-height: 1.6; }.view-error pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dock.is-expanded { height: min(65vh, 650px); }
+
+/* Preserve the visible state and labels when motion is reduced, including literal-duration loaders. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .spinner { animation: none !important; border-color: var(--line-2); border-top-color: var(--drip-accent); }
+}

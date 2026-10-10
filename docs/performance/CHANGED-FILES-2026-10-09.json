@@ -1,0 +1,1159 @@
+{
+  "date": "2026-10-09",
+  "scope": "Cumulative current working tree; includes pre-existing changes, not exclusively this continuation",
+  "count": 288,
+  "files": [
+    {
+      "status": " M",
+      "path": "CHANGELOG.md"
+    },
+    {
+      "status": " M",
+      "path": "CURRENT-ISSUES.md"
+    },
+    {
+      "status": " M",
+      "path": "RECURRENT-BUGS.md"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/App.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/api/client.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/api/types.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/Elios.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/civicTools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/planTools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/rulesTools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/signalTools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/terrainTools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/tools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/elios/transitTools.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/engine/engine.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/engine/engine.worker.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/engine/protocol.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/hub/Hub.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/map/MapView.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/map/images.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/map/layers.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/map/mapStore.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/map/signalsLive.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/map/sources.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/models/buildings.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/models/gltf.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/models/models.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/models/vehicles.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/AnalyzePanel.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/ComparePanel.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/ExportSheet.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/Inspector.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/Navigator.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/PavingLibrary.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/PlatformSettings.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/ProfileStudio.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/RoundaboutPanel.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/RulesPanels.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/SignalStudio.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/StreetscapePanels.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/ToolSettings.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/TrafficStudio.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/panels/TransitPanel.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/present/BeforeAfter.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/present/PresentView.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/AppsLauncher.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/Chrome.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/Login.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/TopBar.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/UserMenu.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/Workspace.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/shell/commands.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/state/plans.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/state/store.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/state/suggestions.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/state/terrain.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/tools/picks.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/tools/roadOps.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/tools/roundabout.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/tools/snap.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/tools/streetscape.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/traffic/live.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/traffic/signals.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/transit/model.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/twin/TwinView.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/twin/buildingMesh.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/twin/daylight.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/twin/heights.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/twin/pending.ts"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/ui/app.css"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/ui/controls.tsx"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/src/ui/panels.css"
+    },
+    {
+      "status": " M",
+      "path": "apps/web/test/gltf.test.ts"
+    },
+    {
+      "status": " M",
+      "path": "docs/ARCHITECTURE.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/DESIGN-SYSTEM.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/PLATFORM.md"
+    },
+    {
+      "status": " M",
+      "path": "docs/QA.md"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/junction-lab.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/map-1024.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/map-design.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/mode-analyze.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/mode-traffic.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/mode-transit.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/__screenshots__/views.spec.ts/present.png"
+    },
+    {
+      "status": " M",
+      "path": "e2e/buildings.spec.ts"
+    },
+    {
+      "status": " M",
+      "path": "e2e/global-setup.ts"
+    },
+    {
+      "status": " M",
+      "path": "e2e/screenshot.css"
+    },
+    {
+      "status": " M",
+      "path": "e2e/views.spec.ts"
+    },
+    {
+      "status": " M",
+      "path": "e2e/workflow.spec.ts"
+    },
+    {
+      "status": " M",
+      "path": "package-lock.json"
+    },
+    {
+      "status": " M",
+      "path": "packages/assets/furniture/catalog.json"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/package.json"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/alignment.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/graph.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/junction.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/network.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/restrictions.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/routing.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/simulation.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/traffic.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/vertical.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/analysis/zones.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/index.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/model/types.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/ops/builtin.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/ops/network-ops.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/ops/replay.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/ops/streetscape-ops.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/physical/roundabout.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/src/physical/streetscape.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/test/analysis.test.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/test/history.test.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/test/network.test.ts"
+    },
+    {
+      "status": " M",
+      "path": "packages/core/test/physical.test.ts"
+    },
+    {
+      "status": " M",
+      "path": "playwright.config.ts"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/city/legacy_city.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/elios.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/main.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/auth.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/config.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/integrations.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/license.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/middleware.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/routes.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/platform/updates.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/projects/service.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/providers.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/terrain.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/app/transit.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/requirements.txt"
+    },
+    {
+      "status": " M",
+      "path": "services/api/tests/test_api.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/tests/test_large.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/tests/test_platform.py"
+    },
+    {
+      "status": " M",
+      "path": "services/api/tests/test_terrain.py"
+    },
+    {
+      "status": " M",
+      "path": "tools/furniture/build_models.py"
+    },
+    {
+      "status": " M",
+      "path": "tools/windows/launcher.py"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/elios/analysisTools.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/elios/scope.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/engine/scenarioLab.worker.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/engine/simulation.worker.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/map/utilities.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/map/works.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/models/furnitureGlb.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/models/materials.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/models/solidGlb.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/AssetManager.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/CivilStudio.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/GeometryEditor.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/GradingEditor.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/MaterialEditor.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/ModelingSheet.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/ScenarioLab.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/SignalOptimizer.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/UnderpassEditor.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/UtilitiesSheet.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/panels/WorksSheet.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/present/SceneGraphics.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/present/canvasGraphics.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/present/interactiveExport.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/shell/ProjectTimeline.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/shell/projectSearch.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/state/projectTime.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/state/utilityFocus.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/traffic/simulationScope.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/CinematicPanel.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/TwinInspector.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/TwinVehiclePanel.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/buildingLod.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/cameraContext.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/cameraRig.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/editing.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/gizmo.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/materials3d.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/physicalTiles.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/underpasses.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/viewState.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/twin/weather.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/src/ui/ErrorBoundary.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/account.test.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/building-lod.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/controls.test.tsx"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/elios-editor.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/elios-scope.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/engine-backpressure.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/physical-tiles.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/project-search.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/road-snap.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/simulation-scope.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/snap.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/suggestions.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/terrain-scope.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "apps/web/test/worker-simulation.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "docs/AUDIT-2026-10-08.md"
+    },
+    {
+      "status": "??",
+      "path": "docs/HANDOFF-SIMULATION-2026-10-08.md"
+    },
+    {
+      "status": "??",
+      "path": "docs/RELEASE-READINESS-2026-10-09.md"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/BUDGETS-2026-10-09.md"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/CHANGED-FILES-2026-10-09.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/LEGACY-REPRO-2026-10-09.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/SIMULATION-2026-10-08.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/SIMULATION-2026-10-09-120s.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/SIMULATION-2026-10-09-hardware.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/SIMULATION-2026-10-09.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/URBAN-2026-10-09-before.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/URBAN-2026-10-09-hardware-initial.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/URBAN-2026-10-09-hardware.json"
+    },
+    {
+      "status": "??",
+      "path": "docs/performance/URBAN-2026-10-09-software.json"
+    },
+    {
+      "status": "??",
+      "path": "e2e/asset-navigator.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/civil-utilities.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/editor-regression.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/fixtures/legacy-vehicles.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/grading.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/imported-lod.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/login-2.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/materials.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/modeling.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/platform-keys.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/presentation-2.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/production-export.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/profile-extrema.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/project-clock.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/renderer-recovery.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/scenario-lab.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/signage.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/simulation-controls.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/simulation-legacy.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/simulation-long.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/simulation-scale.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/terrain-laz.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/transit-freshness.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/transit-operations.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/twin-editing.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/underpass-ai.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/urban-performance.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/worker-heap.ts"
+    },
+    {
+      "status": "??",
+      "path": "e2e/works.spec.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/civil.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/clock.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/crossfall.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/grading.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/multimodal.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/road-axis.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/scenario-lab.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/signal-controller.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/solid.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/transit.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/turn-routing.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/underpass.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/utilities.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/analysis/works.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/civil-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/clock-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/material-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/presentation-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/transit-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/underpass-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/utility-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/src/ops/works-ops.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/civil.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/clock.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/grading.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/hybrid.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/marking-custom.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/materials.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/multimodal.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/presentation.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/signal-controller.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/simulation-scale.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/solid.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/temporal-simulation.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/transit.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/turn-routing.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/underpass.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/utilities.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "packages/core/test/works.test.ts"
+    },
+    {
+      "status": "??",
+      "path": "services/api/app/model_audit.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/app/platform/policy.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/app/textures.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_license_state.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_managed_policy.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_model_audit.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_native_package.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_oidc_signatures.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_provider_reliability.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_release_installation.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_textures.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_transit_realtime.py"
+    },
+    {
+      "status": "??",
+      "path": "services/api/tests/test_update_download.py"
+    },
+    {
+      "status": "??",
+      "path": "tools/windows/update_package.py"
+    }
+  ]
+}

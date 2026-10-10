@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import {createContext,useContext, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { ApiKeyInfo, IdentityProviderCfg, Job, LicenseInfo, LocalUser, PlatformConfig, Role, UpdateInfo, WebhookInfo, WmsService } from '../api/types';
 import { loadWms } from '../map/wms';
@@ -7,6 +7,8 @@ import { toast } from '../state/toasts';
 import { Button, Field, IconButton, NumberField, Section, Segmented, Select, Skeleton, TextField, Toggle } from '../ui/controls';
 import { confirmAction } from '../ui/confirm';
 
+const ManagementContext=createContext<PlatformConfig['management']>(undefined);
+function useDenied(action:string,key?:string){const p=useContext(ManagementContext);return Boolean(p?.denyActions.includes(action)||key&&p?.lockedKeys.includes(key));}
 const ROLE_OPTS: { value: Role; label: string }[] = [
   { value: 'viewer', label: 'Lettura' }, { value: 'editor', label: 'Modifica' }, { value: 'publisher', label: 'Pubblicazione civica' }, { value: 'admin', label: 'Amministratore' },
 ];
@@ -62,6 +64,7 @@ function AccountSection() {
 }
 
 function LicenseSection() {
+  const denied=useDenied('license.manage');
   const license = useSession((s) => s.license);
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,6 +84,10 @@ function LicenseSection() {
         <dt>Valida fino al</dt><dd>{fmtDate(license.validUntil)}{license.daysLeft !== undefined ? ` · ${license.daysLeft} giorni` : ''}</dd>
         <dt>Origine</dt><dd>{license.source === 'key' ? `Chiave ${license.keyHint ?? ''}` : license.source === 'drip-id' ? 'Abbonamento collegato al DRIP ID' : 'Periodo di prova'}</dd>
         {license.seats ? <><dt>Postazioni</dt><dd>{license.seats}</dd></> : null}
+        <dt>Organizzazione</dt><dd>{license.organisation??'Non comunicata dalla piattaforma'}</dd>
+        <dt>Posti occupati</dt><dd>{license.seatsUsed??'Non comunicati'}</dd>
+        <dt>Validazione</dt><dd>{license.validation==='local_trial'?'Prova locale':license.validation==='expired'?'Validazione scaduta':'Risposta verificata'}</dd>
+        <dt>Connettività</dt><dd>{license.connectivity?.state==='last_attempt_failed'?'Ultimo tentativo fallito':license.connectivity?.state==='last_verified'?`Ultima verifica ${fmtDate(license.connectivity.lastVerifiedAt)}`:'Connessione centrale non verificata'}</dd>
         <dt>Piattaforma</dt><dd className="mono">{license.platformUrl}</dd>
         <dt>Postazione</dt><dd className="mono">{license.deviceId}</dd>
       </dl>
@@ -89,12 +96,12 @@ function LicenseSection() {
       {admin ? (
         <div className="provider-row">
           <input className="text-field" placeholder="Chiave di licenza DRIP (XXXX-XXXX-…)" value={key} onChange={(e) => setKey(e.target.value)} aria-label="Chiave di licenza" />
-          <Button size="sm" variant="primary" disabled={key.length < 8} busy={busy === 'act'} onClick={() => void run('act', () => api.post('/api/license/activate', { key }), 'Licenza attivata')}>Attiva</Button>
+          <Button size="sm" variant="primary" disabled={denied||key.length < 8} busy={busy === 'act'} onClick={() => void run('act', () => api.post('/api/license/activate', { key }), 'Licenza attivata')}>Attiva</Button>
         </div>
       ) : null}
       <div className="row">
         <Button size="sm" icon="refresh" busy={busy === 'ref'} onClick={() => void run('ref', () => api.post('/api/license/refresh'), 'Licenza verificata')}>Verifica ora</Button>
-        {admin && license.source === 'key' ? <Button size="sm" variant="ghost" onClick={() => void confirmAction('Disattivare la licenza su questa postazione?', 'La postazione libera il posto sull\'abbonamento DRIP.', { confirmLabel: 'Disattiva', danger: true }).then((y) => { if (y) void run('deact', () => api.post('/api/license/deactivate'), 'Licenza disattivata'); })}>Disattiva</Button> : null}
+        {admin && license.source === 'key' ? <Button size="sm" variant="ghost" disabled={denied} onClick={() => void confirmAction('Disattivare la licenza su questa postazione?', 'Rimuove la licenza memorizzata su questa postazione. La liberazione del posto si gestisce sulla piattaforma centrale.', { confirmLabel: 'Disattiva', danger: true }).then((y) => { if (y) void run('deact', () => api.post('/api/license/deactivate'), 'Licenza disattivata'); })}>Disattiva</Button> : null}
       </div>
       <p className="muted">L'abbonamento si gestisce sulla piattaforma DRIP; con DRIP ID il piano si collega da solo all'accesso. Offline la licenza resta valida 14 giorni dall'ultima verifica.</p>
     </Section>
@@ -102,6 +109,7 @@ function LicenseSection() {
 }
 
 function UpdatesSection() {
+ const denied=useDenied('updates.manage');
   const update = useSession((s) => s.update);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -126,17 +134,21 @@ function UpdatesSection() {
   return (
     <Section title="Aggiornamenti">
       <dl className="kv">
+        <dt>Canale</dt><dd>{update?.channel??'—'}</dd>
         <dt>Versione installata</dt><dd className="mono">{update?.current ?? '…'}</dd>
         <dt>Ultima verifica</dt><dd>{update?.checkedAt ? new Date(update.checkedAt).toLocaleString('it-IT') : 'mai'}</dd>
         {update?.latest ? <><dt>Ultima pubblicata</dt><dd className="mono">{update.latest.version}</dd></> : null}
+        {update?.ready&&<><dt>Integrità download</dt><dd>SHA-256 verificata · {update.ready.version}</dd></>}
+        {update?.installation&&<><dt>Ultima installazione</dt><dd>{update.installation.status==='installed'?'Installata':update.installation.status==='rolled_back'?'Ripristinata':'Fallita'} · {update.installation.version} {update.installation.error&&<span className="warn-line">{update.installation.error}</span>}</dd></>}
         {update?.pending ? <><dt>In attesa</dt><dd>{update.pending.version}: si installa al prossimo avvio</dd></> : null}
       </dl>
       {update?.latest?.notes && update.available ? <p className="muted">{update.latest.notes}</p> : null}
       {update?.error ? <p className="warn-line">{update.error}</p> : null}
       <div className="row">
         <Button size="sm" icon="refresh" busy={busy === 'check'} onClick={() => void check()}>Cerca aggiornamenti</Button>
-        {admin && update?.available ? <Button size="sm" variant="primary" icon="download" busy={busy === 'dl'} onClick={() => void download()}>Scarica e prepara</Button> : null}
+        {admin && update?.available ? <Button size="sm" variant="primary" icon="download" disabled={denied} busy={busy === 'dl'} onClick={() => void download()}>Scarica e prepara</Button> : null}
       </div>
+      {admin&&update?.installation?.status==='installed'&&update.installation.backup&&<Button size="sm" disabled={denied} onClick={()=>void confirmAction('Preparare il ripristino della versione precedente?','Si applica al prossimo avvio; progetti e impostazioni vengono preservati.',{confirmLabel:'Prepara ripristino'}).then(async yes=>{if(!yes)return;try{const result=await api.post<{message:string}>('/api/update/rollback');toast.success('Ripristino',result.message);await loadPlatformStatus();}catch(e){toast.error('Ripristino',err(e));}})}>Ripristina versione precedente</Button>}
       {progress ? <p className="muted">{progress}</p> : null}
       <p className="muted">Il pacchetto viene scaricato dalla piattaforma DRIP, verificato con SHA-256 e installato dal programma di avvio: progetti e impostazioni non vengono toccati.</p>
     </Section>
@@ -164,35 +176,39 @@ function AccessSection() {
   useEffect(() => { api.get<PlatformConfig>('/api/platform/config').then(setCfg).catch(() => setCfg(null)); }, []);
   if (!cfg) return null;
   const save = async (patch: Partial<PlatformConfig> & Record<string, unknown>) => {
+    if(Object.keys(patch).some(locked)){toast.error('Gestione centrale','Impostazione bloccata dalla policy');return;}
     try { setCfg(await api.put<PlatformConfig>('/api/platform/config', patch)); toast.success('Impostazioni salvate'); }
     catch (e) { toast.error('Impostazioni', err(e)); }
   };
+  const locked=(key:string)=>Boolean(cfg.management?.denyActions.includes('platform.manage')||cfg.management?.lockedKeys.includes(key)||cfg.management?.denyActions.includes(key==='updates'?'updates.manage':key==='identityProviders'||['authMode','sessionHours','defaultRole','localLogin'].includes(key)?'identity.manage':key==='licenseEnforcement'?'license.manage':'platform.manage'));
   const setProvider = (np: IdentityProviderCfg & { clientSecret?: string }) => void save({ identityProviders: cfg.identityProviders.map((x) => (x.id === np.id ? { ...np, clientSecret: np.clientSecret ?? '' } : { ...x, clientSecret: '' })) as never });
   return (
     <Section title="Accesso e identità (DRIP ID, Keycloak)">
-      <Field label="Modalità">
+      {cfg.management?.managed&&<div className="managed-policy-note"><strong>Gestito da {cfg.management.organisation}</strong><p className="muted">Policy revisione {cfg.management.revision} · configurazioni bloccate: {cfg.management.lockedKeys.join(', ')||'nessuna'}. Applicazione server anche alle API.</p><p className="muted">Azioni locali vietate: {cfg.management.denyActions.join(', ')||'nessuna'}</p></div>}
+      <fieldset disabled={locked('authMode')} className="policy-field"><Field label="Modalità">
         <Segmented<'protected' | 'open'> label="Modalità di accesso" value={cfg.authMode} onChange={(v) => void confirmAction(v === 'open' ? 'Disattivare il login?' : 'Attivare il login?', v === 'open' ? 'Chiunque usi questo computer potrà aprire e modificare i progetti senza credenziali.' : 'Servirà accedere con DRIP ID, Keycloak o un utente locale.', { confirmLabel: 'Conferma', danger: v === 'open' }).then((y) => { if (y) void save({ authMode: v }); })}
           options={[{ value: 'protected', label: 'Con login' }, { value: 'open', label: 'Postazione singola' }]} />
-      </Field>
+      </Field></fieldset>
       <div className="grid-2">
-        <Field label="Durata sessione"><NumberField value={cfg.sessionHours} unit="ore" min={1} max={168} decimals={0} ariaLabel="Durata sessione" onCommit={(v) => void save({ sessionHours: v })} /></Field>
-        <Field label="Ruolo predefinito"><Select value={cfg.defaultRole} ariaLabel="Ruolo predefinito" options={ROLE_OPTS} onChange={(v) => void save({ defaultRole: v })} /></Field>
+        <fieldset className="policy-field" disabled={locked('sessionHours')}><Field label="Durata sessione"><NumberField value={cfg.sessionHours} unit="ore" min={1} max={168} decimals={0} ariaLabel="Durata sessione" onCommit={(v) => void save({ sessionHours: v })} /></Field></fieldset>
+        <fieldset className="policy-field" disabled={locked('defaultRole')}><Field label="Ruolo predefinito"><Select value={cfg.defaultRole} ariaLabel="Ruolo predefinito" options={ROLE_OPTS} onChange={(v) => void save({ defaultRole: v })} /></Field></fieldset>
       </div>
-      <Toggle checked={cfg.localLogin} label="Consenti l'accesso con utenti locali" onChange={(v) => void save({ localLogin: v })} />
-      {cfg.identityProviders.map((p) => <ProviderEditor key={p.id} p={p} onChange={setProvider} />)}
+      <fieldset className="policy-field" disabled={locked('localLogin')}><Toggle checked={cfg.localLogin} label="Consenti l'accesso con utenti locali" onChange={(v) => void save({ localLogin: v })} /></fieldset>
+      <fieldset disabled={locked('identityProviders')} className="policy-field">{cfg.identityProviders.map((p) => <ProviderEditor key={p.id} p={p} onChange={setProvider} />)}</fieldset>
       <p className="muted">Ruoli Keycloak riconosciuti: drip-urban-admin, drip-urban-publisher, drip-urban-editor, drip-urban-viewer (realm o client). Indirizzo di ritorno da registrare sul client: <span className="mono">{location.origin}/api/auth/oidc/callback</span></p>
-      <Field label="Piattaforma DRIP (licenze, aggiornamenti)"><TextField value={cfg.platformUrl} ariaLabel="URL piattaforma" onCommit={(v) => void save({ platformUrl: v.trim() })} /></Field>
-      <Field label="Piattaforma civica (Frattamaggiore Si Trasforma o altro comune)"><TextField value={cfg.fstUrl ?? ''} ariaLabel="URL piattaforma civica" placeholder="https://frattamaggioresitrasforma.studiodrip.it" onCommit={(v) => void save({ fstUrl: v.trim() })} /></Field>
+      <fieldset className="policy-field" disabled={locked('platformUrl')}><Field label="Piattaforma DRIP (licenze, aggiornamenti)"><TextField value={cfg.platformUrl} ariaLabel="URL piattaforma" onCommit={(v) => void save({ platformUrl: v.trim() })} /></Field></fieldset>
+      <fieldset className="policy-field" disabled={locked('fstUrl')}><Field label="Piattaforma civica (Frattamaggiore Si Trasforma o altro comune)"><TextField value={cfg.fstUrl ?? ''} ariaLabel="URL piattaforma civica" placeholder="https://frattamaggioresitrasforma.studiodrip.it" onCommit={(v) => void save({ fstUrl: v.trim() })} /></Field></fieldset>
       <div className="grid-2">
-        <Field label="Canale aggiornamenti"><Select value={cfg.updates.channel} ariaLabel="Canale" options={[{ value: 'stable', label: 'Stabile' }, { value: 'beta', label: 'Beta' }]} onChange={(v) => void save({ updates: { ...cfg.updates, channel: v } })} /></Field>
-        <Field label="Applicazione licenza"><Select value={cfg.licenseEnforcement} ariaLabel="Applicazione licenza" options={[{ value: 'soft', label: 'Solo avvisi' }, { value: 'strict', label: 'Blocca funzioni fuori piano' }]} onChange={(v) => void save({ licenseEnforcement: v })} /></Field>
+        <fieldset className="policy-field" disabled={locked('updates')}><Field label="Canale aggiornamenti"><Select value={cfg.updates.channel} ariaLabel="Canale" options={[{ value: 'stable', label: 'Stabile' }, { value: 'beta', label: 'Beta' }]} onChange={(v) => void save({ updates: { ...cfg.updates, channel: v } })} /></Field></fieldset>
+        <fieldset className="policy-field" disabled={locked('licenseEnforcement')}><Field label="Applicazione licenza"><Select value={cfg.licenseEnforcement} ariaLabel="Applicazione licenza" options={[{ value: 'soft', label: 'Solo avvisi' }, { value: 'strict', label: 'Blocca funzioni fuori piano' }]} onChange={(v) => void save({ licenseEnforcement: v })} /></Field></fieldset>
       </div>
-      <Toggle checked={cfg.updates.autoCheck} label="Cerca aggiornamenti all'avvio" onChange={(v) => void save({ updates: { ...cfg.updates, autoCheck: v } })} />
+      <fieldset className="policy-field" disabled={locked('updates')}><Toggle checked={cfg.updates.autoCheck} label="Cerca aggiornamenti all'avvio" onChange={(v) => void save({ updates: { ...cfg.updates, autoCheck: v } })} /></fieldset>
     </Section>
   );
 }
 
 function UsersSection() {
+ const denied=useDenied('users.manage');
   const [users, setUsers] = useState<LocalUser[] | null>(null);
   const [draft, setDraft] = useState({ username: '', name: '', role: 'editor' as Role, password: '' });
   const load = () => api.get<LocalUser[]>('/api/auth/users').then(setUsers).catch(() => setUsers(null));
@@ -208,9 +224,9 @@ function UsersSection() {
           <li key={u.username}>
             <span className="avatar">{(u.name || u.username).slice(0, 2).toUpperCase()}</span>
             <span className="grow"><strong>{u.username}</strong> · {ROLE_IT[u.role]}{u.provisional ? ` · provvisorio fino al ${fmtDate(u.expiresAt)}` : ''}{u.disabled ? ' · disattivato' : ''}</span>
-            {u.provisional ? <IconButton icon="refresh" size={14} label="Rinnova 30 giorni" onClick={() => void upsert({ ...u, renew: true }, 'Credenziali rinnovate')} /> : null}
-            <IconButton icon={u.disabled ? 'unlock' : 'lock'} size={14} label={u.disabled ? 'Riattiva' : 'Disattiva'} onClick={() => void upsert({ ...u, disabled: !u.disabled }, u.disabled ? 'Utente riattivato' : 'Utente disattivato')} />
-            <IconButton icon="trash" size={14} tone="danger" label="Elimina" onClick={() => void confirmAction(`Eliminare ${u.username}?`, 'L\'utente non potrà più accedere.', { confirmLabel: 'Elimina', danger: true }).then(async (y) => { if (y) { try { await api.del(`/api/auth/users/${encodeURIComponent(u.username)}`); await load(); } catch (e) { toast.error('Utenti', err(e)); } } })} />
+            {u.provisional ? <IconButton icon="refresh" size={14} label="Rinnova 30 giorni" disabled={denied} onClick={() => void upsert({ ...u, renew: true }, 'Credenziali rinnovate')} /> : null}
+            <IconButton icon={u.disabled ? 'unlock' : 'lock'} size={14} label={u.disabled ? 'Riattiva' : 'Disattiva'} disabled={denied} onClick={() => void upsert({ ...u, disabled: !u.disabled }, u.disabled ? 'Utente riattivato' : 'Utente disattivato')} />
+            <IconButton icon="trash" size={14} tone="danger" label="Elimina" disabled={denied} onClick={() => void confirmAction(`Eliminare ${u.username}?`, 'L\'utente non potrà più accedere.', { confirmLabel: 'Elimina', danger: true }).then(async (y) => { if (y) { try { await api.del(`/api/auth/users/${encodeURIComponent(u.username)}`); await load(); } catch (e) { toast.error('Utenti', err(e)); } } })} />
           </li>
         ))}
       </ul>
@@ -220,13 +236,15 @@ function UsersSection() {
         <Field label="Ruolo"><Select value={draft.role} ariaLabel="Ruolo" options={ROLE_OPTS} onChange={(v) => setDraft({ ...draft, role: v })} /></Field>
         <Field label="Password iniziale"><input className="text-field" type="password" autoComplete="new-password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} /></Field>
       </div>
-      <Button size="sm" icon="plus" disabled={!draft.username || draft.password.length < 10} onClick={() => void upsert(draft, 'Utente creato').then(() => setDraft({ username: '', name: '', role: 'editor', password: '' }))}>Aggiungi utente</Button>
+      <Button size="sm" icon="plus" disabled={denied||!draft.username || draft.password.length < 10} onClick={() => void upsert(draft, 'Utente creato').then(() => setDraft({ username: '', name: '', role: 'editor', password: '' }))}>Aggiungi utente</Button>
       <p className="muted">Al primo accesso ogni nuovo utente deve cambiare la password.</p>
     </Section>
   );
 }
 
 function ApiSection() {
+ const [keyScopes,setKeyScopes]=useState(['projects:read','scenarios:read','exports:read']);const [keyExpiry,setKeyExpiry]=useState(()=>new Date(Date.now()+90*86400000).toISOString().slice(0,10));
+ const denied=useDenied('keys.manage');
   const [keys, setKeys] = useState<ApiKeyInfo[] | null>(null);
   const [hooks, setHooks] = useState<{ hooks: WebhookInfo[]; events: string[] } | null>(null);
   const [newKey, setNewKey] = useState<{ name: string; role: Role }>({ name: '', role: 'editor' });
@@ -244,16 +262,17 @@ function ApiSection() {
       <strong>Chiavi API</strong>
       <ul className="row-list">
         {keys.map((k) => (
-          <li key={k.id}><span className="grow"><strong>{k.name}</strong> · {ROLE_IT[k.role]} · <span className="mono">{k.prefix}</span>{k.lastUsedAt ? ` · usata ${new Date(k.lastUsedAt).toLocaleString('it-IT')}` : ''}</span>
-            <IconButton icon="trash" size={14} tone="danger" label="Revoca" onClick={() => void api.del(`/api/platform/keys/${k.id}`).then(load)} /></li>
+          <li key={k.id}><span className="grow"><strong>{k.name}</strong> · {ROLE_IT[k.role]} · <span className="mono">{k.prefix}</span> · creata {fmtDate(k.createdAt)} · scade {fmtDate(k.expiresAt)}<small>{k.scopes?.join(' · ')}</small>{k.lastUsedAt ? ` · usata ${new Date(k.lastUsedAt).toLocaleString('it-IT')}` : ''}</span>
+            <IconButton icon="trash" size={14} tone="danger" label="Revoca" disabled={denied} onClick={() => void api.del(`/api/platform/keys/${k.id}`).then(load)} /></li>
         ))}
       </ul>
       {shown ? <p className="secret-once">Copia ora la chiave, non verrà più mostrata: <span className="mono">{shown}</span></p> : null}
       <div className="provider-row">
         <input className="text-field" placeholder="Nome (es. Piattaforma DRIP)" value={newKey.name} onChange={(e) => setNewKey({ ...newKey, name: e.target.value })} aria-label="Nome chiave" />
-        <Select value={newKey.role} ariaLabel="Ruolo chiave" options={ROLE_OPTS} onChange={(v) => setNewKey({ ...newKey, role: v })} />
-        <Button size="sm" disabled={newKey.name.length < 2} onClick={async () => { try { const k = await api.post<ApiKeyInfo>('/api/platform/keys', newKey); setShown(k.key ?? null); setNewKey({ name: '', role: 'editor' }); load(); } catch (e) { toast.error('Chiave API', err(e)); } }}>Crea</Button>
+        <Select value={newKey.role} ariaLabel="Ruolo chiave" options={ROLE_OPTS} onChange={(v) => {setNewKey({ ...newKey, role: v });setKeyScopes(['projects:read','scenarios:read','exports:read']);}} />
+        <Button size="sm" disabled={denied||newKey.name.length < 2||!keyScopes.length||!keyExpiry} onClick={async () => { try { const k = await api.post<ApiKeyInfo>('/api/platform/keys', {...newKey,scopes:keyScopes,expiresAt:keyExpiry?`${keyExpiry}T23:59:59Z`:undefined}); setShown(k.key ?? null); setNewKey({ name: '', role: 'editor' }); load(); } catch (e) { toast.error('Chiave API', err(e)); } }}>Crea</Button>
       </div>
+      <Field label="Scadenza chiave"><input type="date" aria-label="Scadenza chiave API" className="text-field" value={keyExpiry} min={new Date().toISOString().slice(0,10)} onChange={e=>setKeyExpiry(e.target.value)}/></Field><div className="grid-2">{['projects:read','scenarios:read','exports:read',...(newKey.role!=='viewer'?['projects:write','scenarios:write','integrations:use']:[]),...(['publisher','admin'].includes(newKey.role)?['civic:publish']:[]),...(newKey.role==='admin'?['platform:admin']:[])].map(scope=><Toggle key={scope} label={`Ambito ${scope}`} checked={keyScopes.includes(scope)} onChange={on=>setKeyScopes(current=>on?[...current,scope]:current.filter(s=>s!==scope))}/>)}</div><p className="muted">Ambiti e ruolo vengono verificati dal server a ogni chiamata. Le nuove chiavi scadono; le chiavi legacy senza scadenza restano riconoscibili e possono essere revocate.</p>
       <strong>Webhook</strong>
       <ul className="row-list">
         {hooks.hooks.map((h) => (
@@ -313,10 +332,12 @@ function WmsEditor({ s, onChange, onRemove }: { s: WmsService; onChange: (s: Wms
 
 /** Official technical maps (regional CTR/DBT, cadastre) as WMS basemaps and overlays, proxied by the server. */
 function WmsSection() {
+  const [denied,setDenied] = useState(false);
   const [list, setList] = useState<readonly WmsService[] | null>(null);
-  useEffect(() => { api.get<PlatformConfig>('/api/platform/config').then((c) => setList(c.wms ?? [])).catch(() => setList(null)); }, []);
+  useEffect(() => { api.get<PlatformConfig>('/api/platform/config').then((c) => {setList(c.wms ?? []);setDenied(!!c.management?.managed && (c.management.lockedKeys.includes('wms') || c.management.lockedKeys.includes('*') || c.management.denyActions.includes('providers.manage') || c.management.denyActions.includes('platform.manage')));}).catch(() => setList(null)); }, []);
   if (!list) return null;
   const save = async (next: readonly WmsService[]) => {
+    if(denied)return;
     try {
       const cfg = await api.put<PlatformConfig>('/api/platform/config', { wms: next });
       setList(cfg.wms);
@@ -331,10 +352,11 @@ function WmsSection() {
   return (
     <Section title="Carte tecniche e catasto (WMS)" count={list.filter((s) => s.enabled).length} defaultOpen={false}>
       <p className="muted">Servizi WMS ufficiali (carta tecnica regionale, DBT, catasto) usati come base cartografica o come livello sopra la città. Le tessere passano dal server di DRIP Urban, che contatta solo gli indirizzi elencati qui.</p>
-      {list.map((s) => (
+      {denied&&<p className="managed-policy-note">Servizi cartografici gestiti dalla policy centrale.</p>}
+      <fieldset className="policy-field" disabled={denied}>{list.map((s) => (
         <WmsEditor key={s.id} s={s} onChange={(n) => void save(list.map((x) => (x.id === n.id ? n : x)))} onRemove={() => void save(list.filter((x) => x.id !== s.id))} />
       ))}
-      <Button size="sm" icon="plus" disabled={list.length >= 20} onClick={add}>Aggiungi servizio WMS</Button>
+      <Button size="sm" icon="plus" disabled={list.length >= 20} onClick={add}>Aggiungi servizio WMS</Button></fieldset>
     </Section>
   );
 }
@@ -342,13 +364,15 @@ function WmsSection() {
 /** Account, subscription, updates and (for administrators) identity, users and API integrations. */
 export function PlatformSettings() {
   const role = useSession((s) => s.session?.user?.role);
+  const [management,setManagement]=useState<PlatformConfig['management']>();
+  useEffect(()=>{let active=true;if(role==='admin')void api.get<PlatformConfig>('/api/platform/config').then(cfg=>{if(active)setManagement(cfg.management);}).catch(()=>{});return()=>{active=false;};},[role]);
   useEffect(() => { void loadPlatformStatus(); }, []);
   return (
-    <>
+    <ManagementContext.Provider value={management}>
       <AccountSection />
       <LicenseSection />
       <UpdatesSection />
       {role === 'admin' ? <><AccessSection /><WmsSection /><UsersSection /><ApiSection /></> : null}
-    </>
+    </ManagementContext.Provider>
   );
 }

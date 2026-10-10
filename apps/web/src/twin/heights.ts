@@ -1,3 +1,4 @@
+import {gradingElevation,gradedTerrainElevation,corridorCrossfall} from '@drip-urban/core';
 import { LocalFrame, crossSection, designElevation, geom, layoutSection, type LngLat, type Network, type Road, type TerrainGrid, type VerticalProfile } from '@drip-urban/core';
 
 /**
@@ -85,7 +86,7 @@ export interface HeightOptions {
   readonly relativeHeight?: number;
 }
 
-interface Axis { readonly pts: V[]; readonly length: number; readonly v: VerticalProfile; readonly halfLeft: number; readonly halfRight: number }
+interface Axis { readonly pts: V[]; readonly length: number; readonly v?: VerticalProfile; readonly halfLeft: number; readonly halfRight: number }
 
 /** Kerb height of sidewalks on a profiled road (the physical model carries it as `heightM`). */
 export const KERB_M = 0.15;
@@ -107,7 +108,7 @@ export class HeightModel {
     this.frame = new LocalFrame(origin);
     const roads = net ? Object.values(net.roads) : [];
     for (const r of roads) for (const n of [r.from, r.to]) (this.byNode.get(n) ?? this.byNode.set(n, []).get(n)!).push(r);
-    this.profiled = roads.filter((r) => (r.vertical?.pvis.length ?? 0) >= 2);
+    this.profiled = roads.filter((r) => (r.vertical?.pvis.length ?? 0) >= 2 || !!r.corridor);
   }
 
   get hasProfiles(): boolean { return this.profiled.length > 0; }
@@ -115,7 +116,9 @@ export class HeightModel {
 
   terrain(lon: number, lat: number): number {
     const z = sampleClamped(this.grid, lon, lat);
-    return Number.isFinite(z) ? z : 0;
+    let ground=Number.isFinite(z)?z:0;
+    for(const area of Object.values(this.net?.areas??{}))if(area.grading&&area.state!=='removed')ground=gradedTerrainElevation(area,[lon,lat],ground);
+    return ground;
   }
 
   /** Ellipsoidal height for Cesium from an orthometric ground height, plus an unscaled offset (kerbs, objects). */
@@ -128,7 +131,7 @@ export class HeightModel {
     if (this.axes.has(roadId)) return this.axes.get(roadId)!;
     const r = this.net?.roads[roadId];
     let a: Axis | null = null;
-    if (r?.vertical && r.vertical.pvis.length >= 2) {
+    if (r && (r.vertical && r.vertical.pvis.length >= 2 || r.corridor)) {
       const pts = r.axis.map((q) => this.frame.toMetric(q) as V);
       const lay = layoutSection(r);
       a = { pts, length: geom.lengthOf(pts), v: r.vertical, halfLeft: Math.abs(lay.outerLeft), halfRight: Math.abs(lay.outerRight) };
@@ -149,8 +152,9 @@ export class HeightModel {
   roadZ(roadId: string, lon: number, lat: number): number | null {
     const a = this.axis(roadId);
     if (!a) return null;
-    const s = this.station(roadId, lon, lat)!.station;
-    const z = designElevation(a.v, Math.min(a.length, Math.max(0, s)));
+    const point=this.frame.toMetric([lon,lat]) as V,pr=geom.project(a.pts,point),t=geom.sampleAt(a.pts,pr.along).t;
+    const offset=(point[0]-pr.at[0])*(-t[1])+(point[1]-pr.at[1])*t[0];
+    const z = (a.v?designElevation(a.v, Math.min(a.length, Math.max(0, pr.along))):this.terrain(lon,lat))+corridorCrossfall(this.net?.roads[roadId]?.corridor,pr.along,offset);
     return Number.isFinite(z) ? z : null;
   }
 
@@ -178,7 +182,8 @@ export class HeightModel {
   }
 
   /** Base (orthometric) of a surface vertex: profiled road → grade line; junction → node platform; else terrain. */
-  surfaceZ(props: { roadId?: string | null; nodeId?: string | null }, lon: number, lat: number): number {
+  surfaceZ(props: { roadId?: string | null; nodeId?: string | null;areaId?:string|null }, lon: number, lat: number): number {
+    if(props.areaId){const area=this.net?.areas[props.areaId];if(area?.grading)return gradingElevation(area,[lon,lat]);}
     if (props.roadId) { const z = this.roadZ(props.roadId, lon, lat); if (z !== null) return z; }
     if (props.nodeId) { const z = this.nodeZ(props.nodeId); if (z !== null) return z; }
     return this.terrain(lon, lat);
@@ -190,8 +195,8 @@ export class HeightModel {
       const a = this.axis(r.id)!;
       const pr = geom.project(a.pts, this.frame.toMetric([lon, lat]) as V);
       if (pr.d <= Math.max(a.halfLeft, a.halfRight) && pr.along > 0 && pr.along < a.length) {
-        const z = designElevation(a.v, pr.along);
-        if (Number.isFinite(z)) return z;
+        const z = this.roadZ(r.id,lon,lat);
+        if (z!==null&&Number.isFinite(z)) return z;
       }
     }
     return this.terrain(lon, lat);
@@ -212,7 +217,7 @@ export function densifyRing(ring: readonly LngLat[], frame: LocalFrame, stepM = 
 }
 
 /** Flat [lon, lat, h, …] with ellipsoidal heights for a surface ring; `lift` is added unscaled. */
-export function ringHeights(hm: HeightModel, ring: readonly LngLat[], props: { roadId?: string | null; nodeId?: string | null }, lift: number): { flat: number[]; min: number } {
+export function ringHeights(hm: HeightModel, ring: readonly LngLat[], props: { roadId?: string | null; nodeId?: string | null;areaId?:string|null }, lift: number): { flat: number[]; min: number } {
   const flat: number[] = [];
   let min = Infinity;
   for (const p of ring) {
@@ -307,14 +312,14 @@ export function corridorSlopes(road: Road, grid: TerrainGrid, origin: LngLat, st
 }
 
 /** Terrain heightmap tile (row 0 = north) for Cesium's CustomHeightmapTerrainProvider, ellipsoidal heights. */
-export function heightmapTile(grid: TerrainGrid, rect: { west: number; south: number; east: number; north: number }, width: number, height: number, geoidM: number): Float32Array {
+export function heightmapTile(grid: TerrainGrid, rect: { west: number; south: number; east: number; north: number }, width: number, height: number, geoidM: number,sample?: (lon:number,lat:number)=>number): Float32Array {
   const out = new Float32Array(width * height);
   const fallback = gridRange(grid).min;
   for (let j = 0; j < height; j++) {
     const lat = rect.north - ((rect.north - rect.south) * j) / (height - 1);
     for (let i = 0; i < width; i++) {
       const lon = rect.west + ((rect.east - rect.west) * i) / (width - 1);
-      const z = sampleClamped(grid, lon, lat);
+      const z = sample?sample(lon,lat):sampleClamped(grid, lon, lat);
       out[j * width + i] = (Number.isFinite(z) ? z : fallback) + geoidM;
     }
   }

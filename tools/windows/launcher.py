@@ -45,62 +45,46 @@ def _open_when_ready(url: str, health: str) -> None:
     print("Il server non risponde dopo 60 s: controlla i messaggi qui sopra.")
 
 
-# Never overwritten by an update: the Python environment, user data, local caches.
-_KEEP = {".venv", ".git", "node_modules", ".data"}
-
-
 def _install_pending_update() -> None:
-    """Installs an update downloaded and verified by the API (app/platform/updates.py).
-
-    The zip mirrors the repository layout. Files are extracted over the installation, except the
-    Python environment and data folders; the previous version is kept in updates/backup-<ver>.zip.
-    """
+    """Install a validated staged release before starting the server."""
     sys.path.insert(0, str(API))
-    from app.settings import SETTINGS, VERSION  # noqa: E402
-
+    from app.settings import SETTINGS, VERSION
+    from app.storage import atomic_write_json
+    from update_package import install
+    import json
+    import subprocess
+    from datetime import datetime, timezone
     updates = SETTINGS.data_dir / "updates"
     marker = updates / "pending.json"
-    if not marker.is_file():
-        return
-    import hashlib
-    import json
-    import shutil
-    import subprocess
-    import zipfile
-
-    info = json.loads(marker.read_text(encoding="utf-8"))
-    pkg = updates / info["file"]
+    if not marker.is_file(): return
+    receipt = {"at": datetime.now(timezone.utc).isoformat(), "from": VERSION}
     try:
-        digest = hashlib.sha256(pkg.read_bytes()).hexdigest()
-        if digest != info["sha256"]:
-            raise RuntimeError("impronta SHA-256 non valida")
-        print(f"Installazione dell'aggiornamento {info['version']} (da {VERSION})…")
-        backup = updates / f"backup-{VERSION}.zip"
-        with zipfile.ZipFile(backup, "w", zipfile.ZIP_DEFLATED) as zb:
-            for f in ROOT.rglob("*"):
-                rel = f.relative_to(ROOT)
-                if f.is_file() and not (set(rel.parts) & _KEEP):
-                    zb.write(f, rel.as_posix())
-        with zipfile.ZipFile(pkg) as z:
-            for member in z.infolist():
-                rel = Path(member.filename)
-                if rel.is_absolute() or ".." in rel.parts or set(rel.parts) & _KEEP:
-                    continue
-                target = ROOT / rel
-                if member.is_dir():
-                    target.mkdir(parents=True, exist_ok=True)
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with z.open(member) as src, open(target, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
-        req = API / "requirements.txt"
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(req)], check=False)
-        print(f"Aggiornamento {info['version']} installato. Copia della versione precedente: {backup}")
-    except Exception as exc:  # noqa: BLE001 — never block the start for a failed update
-        print(f"Aggiornamento non installato ({exc}). DRIP Urban parte con la versione attuale.")
-    finally:
+        info = json.loads(marker.read_text(encoding="utf-8"))
+        name = info["file"]
+        if Path(name).name != name or "\\" in name or ":" in name:
+            raise ValueError("Nome pacchetto non valido")
+        package = updates / name
+        receipt["version"] = info["version"]
+        def prepare(stage):
+            requirements = stage / "services/api/requirements.txt"
+            if requirements.is_file():
+                subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements)], check=True)
+        backup = updates / ("backup-" + str(int(time.time())) + ".zip")
+        rolling_back = info.get("action") == "rollback"
+        receipt.update(install(ROOT, package, info["sha256"], backup, SETTINGS.data_dir, prepare,
+                               remove=info.get("remove", []) if rolling_back else (),
+                               require_release=not rolling_back))
+        receipt["status"] = "rolled_back" if rolling_back else "installed"
+        print(f"Aggiornamento {info['version']} installato. Backup: {backup}")
         marker.unlink(missing_ok=True)
         (updates / "ready.json").unlink(missing_ok=True)
+    except Exception as error:
+        receipt.update(status="failed", error=str(error))
+        print(f"Aggiornamento fallito: {error}. Consultare updates/installation.json.")
+        # Preserve the request and package for diagnosis; do not silently discard failure.
+        marker.replace(updates / "failed-request.json")
+    finally:
+        atomic_write_json(updates / "installation.json", receipt)
 
 
 def main() -> int:

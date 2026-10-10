@@ -1,10 +1,12 @@
+import { SignalOptimizer } from './SignalOptimizer';
+import { ScheduleEditor } from '../ui/ScheduleEditor';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { LocalFrame, activeTurns, planIssues, type CoordinationResult, type DetectedCorridor, type PlantDesign, type JunctionAnalysis, type LaneGroup, type SignalPhase, type SignalPlan, type TurnKind, type ApproachControl } from '@drip-urban/core';
+import { LocalFrame, analyzeSignalJunction, activeTurns, planIssues, type CoordinationResult, type DetectedCorridor, type PlantDesign, type JunctionAnalysis, type LaneGroup, type SignalPhase, type SignalPlan, type TurnKind, type ApproachControl } from '@drip-urban/core';
 import { engine } from '../engine/engine';
 import { setSignalPreview } from '../map/signalsLive';
 import { commit, newId, useApp } from '../state/store';
 import { toast } from '../state/toasts';
-import { Button, Empty, Field, NumberField, Section, Segmented, Skeleton, Stat, Toggle, FieldGroup } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Skeleton, Stat, Toggle, FieldGroup, TextField } from '../ui/controls';
 import { drawJunction, useJunctionAnalysis, type JunctionResult } from './JunctionLab';
 
 const COLORS = ['#83b4d1', '#e8772e', '#c98bb0', '#6fae86', '#d9a441', '#7e8fa3'];
@@ -23,11 +25,13 @@ export function SignalStudio() {
   const { nodeId, data, loading, error } = useJunctionAnalysis();
   const net = useApp((s) => s.network);
   const existing = net && nodeId ? Object.values(net.signalPlans).find((p) => p.nodeId === nodeId) : undefined;
+  const [additionalPlans,setAdditionalPlans]=useState<SignalPlan[]>([]);
   const [plan, setPlan] = useState<SignalPlan | null>(null);
   const [design, setDesign] = useState<JunctionResult['suggested']['design'] | null>(null);
   const [t, setT] = useState(0);
   const timeline = useRef<HTMLDivElement>(null);
   const drag = useRef<{ i: number; startX: number; start: number; pxPerS: number } | null>(null);
+  useEffect(() => { setAdditionalPlans([]); },[nodeId]);
   useEffect(() => {
     setPlan(existing ?? (data?.suggested ? stripDesign(data.suggested) : null));
     setDesign(existing ? null : data?.suggested.design ?? null);
@@ -42,13 +46,16 @@ export function SignalStudio() {
   const total = plan.phases.reduce((s, p) => s + p.greenS + p.yellowS + p.allRedS, 0);
   const setPhase = (i: number, p: Partial<SignalPhase>) => setPlan({ ...plan, phases: plan.phases.map((x, j) => (j === i ? { ...x, ...p } : x)) });
   const save = () => {
-    const r = commit('signal.setPlan', planPayload({ ...plan, id: plan.id || `plan:${nodeId}` }, a));
+    const plans=[{...plan,id:plan.id||`plan:${nodeId}`},...additionalPlans];
+    const ops=plans.map(p=>{const analysis=p.nodeId===nodeId?a:net&&useApp.getState().baseline?analyzeSignalJunction(net,useApp.getState().baseline!.origin,p):null;if(!analysis)throw Error('Incrocio non disponibile');return {type:'signal.setPlan',payload:planPayload(p,analysis)};});
+    const r = commit('batch',{label:`Applica ${plans.length} piani verificati`,ops});
+    if(r.ok)setAdditionalPlans([]);
     if (r.ok) toast.success(existing ? 'Piano aggiornato' : 'Piano applicato', `${plan.phases.length} fasi · ciclo ${plan.cycleS} s`);
   };
   const propose = async (permissiveLeft: boolean) => {
     const r = await engine.job<JunctionResult | null>('junction', { nodeId, permissiveLeft });
     if (!r) return;
-    setPlan({ ...stripDesign(r.suggested), id: plan.id, disabledHeads: plan.disabledHeads, unsignalized: plan.unsignalized, coordination: plan.coordination });
+    setPlan({ ...stripDesign(r.suggested), id: plan.id, programmes: plan.programmes, disabledHeads: plan.disabledHeads, unsignalized: plan.unsignalized, coordination: plan.coordination });
     setDesign(r.suggested.design);
   };
   const pxPerS = (timeline.current?.getBoundingClientRect().width ?? 600) / Math.max(total, 1);
@@ -66,10 +73,12 @@ export function SignalStudio() {
         <div className="ss-actions">
           {Math.abs(total - plan.cycleS) > 0.5 ? <Button size="sm" onClick={() => setPlan({ ...plan, cycleS: total })}>Ciclo = somma fasi ({total} s)</Button> : null}
           <Button size="sm" variant="ghost" icon="sparkle" onClick={() => void propose(!!plan.permissiveLeft)}>Proposta automatica</Button>
-          {existing ? <Button size="sm" variant="danger" onClick={() => commit('signal.removePlan', { planId: existing.id })}>Rimuovi piano</Button> : null}
+          {existing ? <Button size="sm" variant="danger" title="Elimina il controllo semaforico: incrocio non regolato. Per precedenza o STOP usa Junction Lab." onClick={() => { if (commit('signal.removePlan', { planId: existing.id }).ok) toast.success('Controllo semaforico rimosso', 'Incrocio non regolato · imposta precedenza o STOP in Junction Lab.'); }}>Rimuovi piano</Button> : null}
           <Button variant="project" icon="check" disabled={issues.length > 0} onClick={save}>{existing ? 'Aggiorna piano' : 'Applica piano'}</Button>
         </div>
       </div>
+      {additionalPlans.length>0&&<p className="muted">La prossima applicazione aggiorna anche {additionalPlans.length} piani di rete in un unico batch annullabile.</p>}
+      <SignalOptimizer plan={plan} analysis={a} onChoose={plans=>{setPlan(plans.find(p=>p.nodeId===nodeId)!);setAdditionalPlans(plans.filter(p=>p.nodeId!==nodeId));}}/>
       {design ? (
         <p className="ss-design">
           <strong>{design.method}</strong> · ciclo {design.cycleS} s · tempo perso {design.lostTimeS} s · Y = {design.criticalRatio}
@@ -131,6 +140,7 @@ export function SignalStudio() {
           <p className="muted">Nella simulazione DRIP Flow il piano è eseguito con i tempi di base; l'estensione dinamica per presenza veicoli è un parametro di progetto documentato nel piano.</p>
         </Section>
       ) : null}
+      <TimingProgrammes plan={plan} onChange={setPlan} />
       {existing ? <Coordination plan={existing} /> : <Section title="Coordinamento con altri incroci"><p className="muted">Applica prima il piano di questo incrocio, poi collegalo agli altri semafori.</p></Section>}
     </div>
   );
@@ -205,8 +215,7 @@ function HeadsSection({ plan, analysis, existing, onChange }: { plan: SignalPlan
   ];
   const set = (key: string, installed: boolean) => {
     const next = installed ? [...off].filter((k) => k !== key) : [...off, key];
-    onChange(next);
-    if (existing) commit('signal.setHeads', { planId: existing.id, disabledHeads: next });
+    if (!existing || commit('signal.setHeads', { planId: existing.id, disabledHeads: next }).ok) onChange(next);
   };
   return (
     <Section title="Lanterne installate" count={heads.length - heads.filter((h) => off.has(h.key)).length} defaultOpen={false}>
@@ -218,7 +227,7 @@ function HeadsSection({ plan, analysis, existing, onChange }: { plan: SignalPlan
           </li>
         ))}
       </ul>
-      <p className="muted">Una lanterna rimossa resta nel piano (tempi e fasi) ma non compare in mappa, nel Twin e negli export: utile per lanterne non presenti nello stato di fatto o da eliminare.</p>
+      <p className="muted">Questo comando nasconde soltanto la lanterna: i veicoli continuano a rispettare il piano. Per togliere il controllo semaforico usa «Rami e punto di arresto»; per tutto l’incrocio usa «Rimuovi piano».</p>
     </Section>
   );
 }
@@ -423,4 +432,23 @@ function CorridorDiagram({ result }: { result: CoordResult }) {
         <tbody>{result.windows.map((o) => <tr key={o.planId}><td>{net.signalPlans[o.planId]?.name}</td><td className="mono">{o.distanceM} m</td><td className="mono">{o.travelS} s</td><td className="mono">{o.offsetS} s</td><td className="mono">{o.cycleS} s{o.halfCycle ? ' (½)' : ''}</td></tr>)}</tbody></table>
     </div>
   );
+}
+
+function TimingProgrammes({ plan, onChange }: { plan: SignalPlan; onChange: (p: SignalPlan) => void }) {
+  const update = (id: string, change: Partial<NonNullable<SignalPlan['programmes']>[number]>) => onChange({ ...plan, programmes: plan.programmes?.map((p) => p.id === id ? { ...p, ...change } : p) });
+  return <Section title="Programmi per giorno e orario" defaultOpen={false}>
+    <p className="muted">Il primo programma attivo governa Flow, mappa e Twin. Fuori dalle fasce si usa il piano base. I verdi conservano i movimenti verificati; tutti i tempi vengono validati quando applichi il piano.</p>
+    {plan.programmes?.map((p) => <div key={p.id} className="panel-stack">
+      <Field label="Nome programma"><TextField value={p.name} ariaLabel="Nome programma semaforico" onCommit={(name) => update(p.id, { name })} /></Field>
+      <ScheduleEditor value={p.schedule} onChange={(schedule) => update(p.id, { schedule })} />
+      <div className="grid-2">{p.phases.map((phase, index) => <Field key={phase.id} label={`${phase.name} · verde`}><NumberField value={phase.greenS} min={5} max={120} unit="s" ariaLabel={`${p.name} verde ${index + 1}`} onCommit={(greenS) => {
+        const phases = p.phases.map((v, i) => i === index ? { ...v, greenS } : v), cycleS = phases.reduce((sum, v) => sum + v.greenS + v.yellowS + v.allRedS, 0);
+        update(p.id, { phases, cycleS, offsetS: p.offsetS % cycleS });
+      }} /></Field>)}
+        <Field label={`Offset · ciclo ${p.cycleS} s`}><NumberField value={p.offsetS} min={0} max={p.cycleS - 1} unit="s" ariaLabel={`Offset ${p.name}`} onCommit={(offsetS) => update(p.id, { offsetS })} /></Field>
+      </div>
+      <Button icon="trash" size="sm" onClick={() => onChange({ ...plan, programmes: plan.programmes!.filter((v) => v.id !== p.id) })}>Rimuovi programma</Button>
+    </div>)}
+    <Button icon="plus" onClick={() => onChange({ ...plan, programmes: [...(plan.programmes ?? []), { id: newId('program'), name: `Programma ${(plan.programmes?.length ?? 0) + 1}`, schedule: [{ days: [0, 1, 2, 3, 4], from: '07:00', to: '09:00' }], cycleS: plan.cycleS, offsetS: plan.offsetS, phases: plan.phases.map((phase) => ({ ...phase })) }] })}>Copia tempi in un programma orario</Button>
+  </Section>;
 }

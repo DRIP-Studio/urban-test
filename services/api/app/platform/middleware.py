@@ -12,7 +12,7 @@ from http.cookies import SimpleCookie
 
 import anyio
 
-from . import auth, config, integrations
+from . import auth, config, integrations, policy
 
 PUBLIC = (
     re.compile(r"^/api/health$"),
@@ -71,8 +71,12 @@ class AuthMiddleware:
         if identity is None and bearer.lower().startswith("bearer "):
             tok = bearer[7:].strip()
             identity = integrations.check_key(tok) if tok.startswith("drip_") else await anyio.to_thread.run_sync(auth.introspect, tok)
-        mode = config.load()["authMode"]
-        if identity is None and mode == "open":
+        try:
+            mode = config.load()["authMode"]
+        except (PermissionError, ValueError) as exc:
+            await _send_json(send,503,{"detail":{"message":str(exc),"code":"central_policy_unavailable"}})
+            return
+        if identity is None and mode == "open" and not bearer:
             identity = _legacy_local_user()
 
         token = auth.current_user.set(identity)
@@ -81,12 +85,23 @@ class AuthMiddleware:
                 if identity is None:
                     await _send_json(send, 401, {"detail": {"message": "Accesso richiesto", "code": "auth_required"}})
                     return
+                if identity.get("via") == "apikey":
+                    required = integrations.required_key_scope(path, method)
+                    if required and required not in identity.get("scopes", []):
+                        await _send_json(send, 403, {"detail": {"message": "Ambito della chiave insufficiente: " + required, "code": "api_scope"}})
+                        return
                 if identity.get("mustChangePassword") and not _match(PASSWORD_CHANGE, path):
                     await _send_json(send, 403, {"detail": {"message": "Cambia la password provvisoria per continuare", "code": "must_change_password"}})
                     return
                 if _match(ADMIN, path) and method != "GET" and not auth.has_role(identity, "admin"):
                     await _send_json(send, 403, {"detail": {"message": "Serve il ruolo di amministratore", "code": "forbidden"}})
                     return
+                if method in {"POST", "PUT", "PATCH", "DELETE"}:
+                    try:
+                        policy.check_request(path)
+                    except PermissionError as exc:
+                        await _send_json(send,403,{"detail":{"message":str(exc),"code":"central_policy"}})
+                        return
                 if method in {"POST", "PUT", "PATCH", "DELETE"} and not _match(WRITE_EXEMPT, path) and not auth.has_role(identity, "editor"):
                     await _send_json(send, 403, {"detail": {"message": "Il tuo ruolo consente solo la consultazione", "code": "read_only"}})
                     return

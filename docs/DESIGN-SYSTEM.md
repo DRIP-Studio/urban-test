@@ -62,6 +62,10 @@ studiodrip.it non era raggiungibile dall'ambiente di sviluppo: i token derivano 
 
 ## Componenti (`ui/controls.tsx`)
 
+Dal passaggio dell’8 ottobre, `NumberField` interpreta una callback che restituisce `{ok:false}` come modifica rifiutata: ripristina il valore del modello e imposta `aria-invalid`. Le callback già esistenti che restituiscono `void` restano compatibili.
+
+Snap: il pulsante in barra di stato e F9 controllano `snapEnabled`, senza cancellare le impostazioni per tipo. Le preferenze sono memorizzate in `drip-urban:map`; Alt continua a sospendere l’aggancio nei percorsi di disegno/posa che lo supportano. Nodi/estremi e assi si configurano anche dalla palette comandi. L’interruttore globale prevale su tutte le preferenze.
+
 | Componente | Note |
 |---|---|
 | `Button` | varianti `default`, `primary`, `project`, `ghost`, `danger`; stato `busy` |
@@ -96,3 +100,8 @@ Gli SVG in `packages/assets/brand` sono vettorializzati dai PNG ufficiali, in va
   - oggetti statici e cartelli sono layer GPU, non marker DOM (RB-01, RB-02);
   - le icone si generano tramite `setMissingStyleImageResolver`, così sono presenti dal primo fotogramma.
 - Larghezza minima supportata della postazione: 1024 px, verificata in e2e senza scorrimento orizzontale. Sotto i 1280 px le azioni secondarie della top bar (scorciatoie, tema) passano nel menu utente.
+
+
+## Fonte pubblica verificata il 2026-10-09
+
+Il sito ufficiale https://studiodrip.it risponde HTTP 200; il precedente impedimento di raggiungibilita non e piu attuale. Stylesheet pubblico rilevato dal suo HTML: https://studiodrip.it/wp-content/themes/drip-studio/assets/drip/styles.css?ver=10.16.4. Token rilevati: paper #F3EFE8, ink #0D0D0D, blue #83B4D1, pink #D6A6B3, cobalt #3150FF, orange #EF643C, green #66866F, yellow #E2BD53, red #D64C53; famiglie Ginto/Playfair e scala 8/13/21/34/55/89. Il prodotto conserva i token semantici di stato/traffico e la palette del progetto esistente; l'accento di selezione e il nero sono gia coincidenti con la fonte pubblica. I token del sito non provano diritti di redistribuzione dei font proprietari o accesso agli API centrali.

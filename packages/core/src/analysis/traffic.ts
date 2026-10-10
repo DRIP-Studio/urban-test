@@ -10,7 +10,15 @@ import { junctionDelay } from './routing';
 export const WEEKDAY_PROFILE = [0.6, 0.3, 0.2, 0.2, 0.4, 1.4, 4.2, 8.1, 8.6, 6.0, 5.2, 5.4, 6.2, 6.6, 5.4, 5.6, 6.4, 7.6, 8.2, 6.4, 3.9, 2.6, 1.6, 1.0];
 export const WEEKEND_PROFILE = [1.2, 0.8, 0.5, 0.3, 0.3, 0.5, 1.2, 2.8, 4.6, 6.2, 7.4, 7.6, 7.2, 6.4, 5.4, 5.6, 6.2, 7.0, 7.6, 7.2, 5.4, 4.0, 2.6, 1.7];
 
+/** Continuous hourly interpolation; profiles are explicit planning assumptions, not observations. */
+export function hourlyDemandShare(day: number, hour: number, holiday = false): number {
+  const profile = holiday || day >= 5 ? WEEKEND_PROFILE : WEEKDAY_PROFILE;
+  const normalized = ((hour % 24) + 24) % 24, h = Math.floor(normalized), fraction = normalized - h;
+  return profile[h]! * (1 - fraction) + profile[(h + 1) % 24]! * fraction;
+}
 export interface TrafficParams {
+  readonly holiday?: boolean;
+  readonly date?: string;
   /** Daily car trips generated/attracted by the study area (estimate, editable). */
   readonly dailyTrips: number;
   /** Share of trips crossing the area from/to its edges. */
@@ -116,11 +124,10 @@ function cluster(zs: Zone[], frame: LocalFrame, cellM: number): Zone[] {
 
 export function estimateTraffic(net: Network, baseline: CityBaseline, params: TrafficParams = DEFAULT_TRAFFIC): TrafficResult {
   const frame = new LocalFrame(baseline.origin);
-  const g = buildGraph(net, frame, { mode: 'car', day: params.day, minutes: params.hour * 60 });
+  const g = buildGraph(net, frame, { mode: 'car', day: params.day, minutes: params.hour * 60, holiday: params.holiday, date: params.date });
   const zs = cluster(zones(net, baseline, g, frame), frame, 260);
   const internal = zs.filter((z) => !z.external), external = zs.filter((z) => z.external);
-  const profile = params.day >= 5 ? WEEKEND_PROFILE : WEEKDAY_PROFILE;
-  const hourly = params.dailyTrips * (1 + params.growthPercent / 100) * (profile[params.hour]! / 100);
+  const hourly = params.dailyTrips * (1 + params.growthPercent / 100) * hourlyDemandShare(params.day, params.hour, params.holiday) / 100;
   const P = internal.reduce((s, z) => s + z.prod, 0) || 1, A = internal.reduce((s, z) => s + z.attr, 0) || 1;
   // Morning peak: production → attraction; evening reverses. Through traffic between gateways.
   const reverse = params.hour >= 15;

@@ -73,7 +73,7 @@ function ScenarioMenu() {
           <div className="menu-sep" />
           <MenuItem icon={<Icon name="plus" size={15} />} label="Nuovo scenario vuoto" onClick={() => { close(); void create(); }} />
           <MenuItem icon={<Icon name="duplicate" size={15} />} label="Duplica scenario corrente" disabled={scenario.isBaseline} onClick={() => { close(); void create(scenario.id); }} />
-          <MenuItem icon={<Icon name="chart" size={15} />} label="Confronta scenari" onClick={() => { close(); setMode('analyze'); setDock('compare'); }} />
+          <MenuItem icon={<Icon name="chart" size={15} />} label="Scenario Lab · confronta scenari" onClick={() => { close(); setMode('analyze'); setDock('compare'); }} />
         </div>
       )}
     </Popover>

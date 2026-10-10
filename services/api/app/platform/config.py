@@ -141,13 +141,16 @@ def load() -> dict:
             cfg["identityProviders"] = list(by_id.values())
         elif k in cfg:
             cfg[k] = v
-    return _env_overrides(cfg)
+    from . import policy
+    return policy.overlay(_env_overrides(cfg))
 
 
 EDITABLE = {"authMode", "sessionHours", "platformUrl", "identityProviders", "roleMapping", "defaultRole", "localLogin", "updates", "licenseEnforcement", "fstUrl", "wms", "services"}
 
 
 def save(patch: dict) -> dict:
+    from . import policy
+    policy.check_patch(patch)
     with _lock:
         stored = read_json(_path(), {}) or {}
         for k, v in patch.items():
@@ -174,7 +177,13 @@ def save(patch: dict) -> dict:
                     url = str(s.get("url") or "").strip()
                     if url and not url.startswith("https://"):
                         raise ValueError(f"{s['label']}: serve un indirizzo https://")
-                    clean.append({"id": str(s["id"])[:40], "label": str(s["label"])[:40], "description": str(s.get("description") or "")[:80], "url": url})
+                    feature = str(s.get("requiredFeature") or "").strip()
+                    if feature and feature not in {"design", "analyze", "traffic", "transit", "twin", "civic", "elios", "api", "models3d", "largeCity", "liveTraffic", "multiUser"}:
+                        raise ValueError(f"{s['label']}: entitlement DRIP Urban sconosciuto")
+                    sid = str(s["id"]).strip()[:40]
+                    if any(item["id"] == sid for item in clean):
+                        raise ValueError("Id servizio duplicato")
+                    clean.append({"id": sid, "label": str(s["label"])[:40], "description": str(s.get("description") or "")[:80], "url": url, **({"requiredFeature": feature} if feature else {})})
                 v = clean
             if k == "identityProviders":
                 for p in v:

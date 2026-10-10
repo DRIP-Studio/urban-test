@@ -1,5 +1,6 @@
 import { ROAD_TEMPLATES, geom, isPedestrianRoad, roadFromTemplate, type LngLat, type RoadNode } from '@drip-urban/core';
 import { newId } from '../state/store';
+import { useMapUi } from '../map/mapStore';
 import { MERGE_M, type NetworkIndex, type SnapResult } from './snap';
 
 /** Catmull-Rom spline through control points, sampled every ~1.5 m (curve tool). */
@@ -74,7 +75,9 @@ export function planRoad(idx: NetworkIndex, points: readonly SnapResult[], axisL
     // Crossing near an end of the crossed road: go through that existing junction instead of splitting.
     const crossed = idx.net.roads[c.roadId]!;
     const crossedLen = geom.lengthOf(idx.axis(c.roadId));
-    const node = c.along < MERGE_M ? crossed.from : crossedLen - c.along < MERGE_M ? crossed.to
+    const settings = useMapUi.getState();
+    const mergeDistance = settings.snapEnabled && settings.snap.node ? MERGE_M : 1e-5;
+    const node = c.along < mergeDistance ? crossed.from : crossedLen - c.along < mergeDistance ? crossed.to
       : endpoint({ at: idx.frame.toLngLat(c.at), kind: 'edge', roadId: c.roadId, along: c.along });
     if (stops.some((x) => x.node === node)) continue;
     stops.push({ s: c.s, node });

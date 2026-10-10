@@ -1,15 +1,21 @@
+import {trafficKey,type TrafficState} from './traffic-state';
 import { LocalFrame } from '../geo/projection';
 import { lengthOf, project, type V } from '../geo/polyline';
 import type { Lane, LngLat, Network, Road, TravelMode, Zone } from '../model/types';
 import { checkRestrictions, windowActive, type VehicleSpec } from './restrictions';
 import { isPedestrianRoad } from '../physical/section';
+import { axisTouchesZone } from './zones';
 
 export interface RoutingContext {
+  readonly trafficState?: TrafficState;
   readonly mode: TravelMode;
   /** Local time used for zone schedules (ZTL) — day 0 = Monday. */
   readonly day: number;
   readonly minutes: number;
   readonly vehicle?: VehicleSpec;
+  readonly permits?: readonly string[];
+  readonly holiday?: boolean;
+  readonly date?: string;
 }
 
 export interface GraphEdge {
@@ -36,25 +42,10 @@ export interface RoadGraph {
 }
 
 const WALK_KMH = 4.8, BIKE_KMH = 15;
-const VEHICLE: ReadonlySet<TravelMode> = new Set(['car', 'truck', 'bus', 'emergency']);
-
-function pointInPolygon(p: LngLat, poly: readonly LngLat[]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i]!, b = poly[j]!;
-    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1] || 1e-12) + a[0]) inside = !inside;
-  }
-  return inside;
-}
+const VEHICLE: ReadonlySet<TravelMode> = new Set(['car', 'motorcycle', 'truck', 'bus', 'emergency']);
 
 export function zoneActive(z: Zone, day: number, minutes: number): boolean {
-  if (!z.schedule || !z.schedule.length) return true;
-  return z.schedule.some((s) => {
-    if (!s.days.includes(day)) return false;
-    const [fh, fm] = s.from.split(':').map(Number), [th, tm] = s.to.split(':').map(Number);
-    const a = (fh ?? 0) * 60 + (fm ?? 0), b = (th ?? 0) * 60 + (tm ?? 0);
-    return a <= b ? minutes >= a && minutes < b : minutes >= a || minutes < b;
-  });
+  return windowActive(z.schedule, day, minutes);
 }
 
 const metricCache = new WeakMap<Road, number>();
@@ -73,7 +64,7 @@ export function laneCapacity(road: Road): number {
   return base[road.roadClass] ?? 900;
 }
 
-export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext): RoadGraph {
+export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext, includeRestricted = false): RoadGraph {
   const nodeIds: string[] = [];
   const index = new Map<string, number>();
   const idx = (id: string) => {
@@ -81,7 +72,8 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
     if (i === undefined) { i = nodeIds.length; nodeIds.push(id); index.set(id, i); }
     return i;
   };
-  const activeZones = Object.values(net.zones).filter((z) => zoneActive(z, ctx.day, ctx.minutes));
+  const day = ctx.holiday ? 6 : ctx.day;
+  const activeZones = (includeRestricted ? [] : Object.values(net.zones)).filter((z) => zoneActive(z, day, ctx.minutes));
   const edges: GraphEdge[] = [];
   const out: number[][] = [];
   const blocked = new Map<string, string>();
@@ -91,21 +83,22 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
     const pedestrianRoad = isPedestrianRoad(road);
     if (vehicle && pedestrianRoad) continue;
     if (ctx.mode === 'walk' && road.roadClass === 'trunk') continue;
-    const mid = road.axis[Math.floor(road.axis.length / 2)]!;
+
     let speed = ctx.mode === 'walk' ? WALK_KMH : ctx.mode === 'bike' ? Math.min(BIKE_KMH, road.speedKmh) : road.speedKmh;
     if (ctx.mode === 'truck') speed = Math.min(speed, 50);
     if (ctx.mode === 'emergency') speed = speed * 1.25;
     let closedReason: string | null = null;
     for (const z of activeZones) {
-      if (!pointInPolygon(mid, z.polygon)) continue;
-      const delivering = ctx.mode === 'truck' && windowActive(z.deliveryWindows ?? [], ctx.day, ctx.minutes) && !!z.deliveryWindows?.length;
-      if ((z.kind === 'ztl' || z.kind === 'pedestrian' || z.kind === 'school') && vehicle && !z.allowedModes.includes(ctx.mode) && !delivering) closedReason = `${z.name} (${z.kind.toUpperCase()}) attiva`;
+      if (!axisTouchesZone(road.axis, z.polygon)) continue;
+      const delivering = ctx.mode === 'truck' && windowActive(z.deliveryWindows ?? [], day, ctx.minutes) && !!z.deliveryWindows?.length;
+      const permitted = ctx.permits?.some((permit) => z.permits?.includes(permit));
+      if ((z.kind === 'ztl' || z.kind === 'pedestrian' || z.kind === 'school') && vehicle && !z.allowedModes.includes(ctx.mode) && !delivering && !permitted) closedReason = `${z.name} (${z.kind.toUpperCase()}) attiva`;
       if (z.kind === 'work' && ctx.mode !== 'walk' && !z.allowedModes.includes(ctx.mode)) closedReason = `Cantiere ${z.name}`;
       if (z.speedKmh && vehicle) speed = Math.min(speed, z.speedKmh);
       if (z.kind === 'zone30' && vehicle) speed = Math.min(speed, 30);
     }
     // Road restrictions (authored or OSM): HGV bans, mass/size limits, closures, with time windows.
-    const rc = vehicle ? checkRestrictions(road, ctx.mode, ctx.vehicle, ctx.day, ctx.minutes) : { blocked: null, penalty: 1 };
+    const rc = vehicle && !includeRestricted ? checkRestrictions(road, ctx.mode, ctx.vehicle, day, ctx.minutes) : { blocked: null, penalty: 1 };
     if (rc.blocked) closedReason = rc.blocked;
     if (closedReason) { blocked.set(road.id, closedReason); continue; }
 
@@ -118,11 +111,12 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
         if (road.oneway === 'backward' && fwd) continue;
         const lanes = lanesFor(fwd);
         // Trucks use general traffic lanes (lane modes list 'car'); road-level bans are checked above.
-        const allows = (l: Lane) => l.modes.includes(ctx.mode) || ctx.mode === 'emergency' || (ctx.mode === 'truck' && l.modes.includes('car'));
+        const allows = (l: Lane) => l.modes.includes(ctx.mode) || ctx.mode === 'emergency' || ((ctx.mode === 'truck' || ctx.mode === 'motorcycle') && l.modes.includes('car'));
         // A preferential lane outside its time window is a general traffic lane.
-        const restricted = (l: Lane) => l.restriction && l.restriction !== 'none' && windowActive(l.restrictionSchedule, ctx.day, ctx.minutes);
+        const restricted = (l: Lane) => l.restriction && l.restriction !== 'none' && windowActive(l.restrictionSchedule, day, ctx.minutes);
         const usable = lanes.filter((l) => {
-          if (!restricted(l)) return l.restriction === 'closed' ? false : allows(l) || (l.restriction === 'bus_only' && ctx.mode !== 'walk' && ctx.mode !== 'bike');
+          if (!restricted(l)) return allows(l) || (l.restriction === 'bus_only' && ctx.mode !== 'walk' && ctx.mode !== 'bike');
+          if (includeRestricted) return allows(l);
           if (l.restriction === 'closed') return false;
           if (l.restriction === 'bus_only') return ctx.mode === 'bus' || ctx.mode === 'emergency';
           if (l.restriction === 'bike_only') return ctx.mode === 'bike';
@@ -133,12 +127,16 @@ export function buildGraph(net: Network, frame: LocalFrame, ctx: RoutingContext)
       dirs.push(fwd);
     }
     for (const fwd of dirs) {
+      const observation=vehicle&&!includeRestricted?ctx.trafficState?.segments[trafficKey(road.id,fwd)]:undefined;
+      if(observation?.closed){blocked.set(road.id,`Chiusura ${observation.provider}`);continue;}
+      const observedSpeed=observation?.speedKmh;
+      const edgeSpeed=observedSpeed!==null&&observedSpeed!==undefined?Math.min(speed,Math.max(.5,observedSpeed)):speed;
       const from = idx(fwd ? road.from : road.to), to = idx(fwd ? road.to : road.from);
       while (out.length < nodeIds.length) out.push([]);
       const lanes = Math.max(1, road.lanes.filter((l) => (fwd ? l.direction !== 'backward' : l.direction !== 'forward')).length);
       const e: GraphEdge = {
-        id: edges.length, roadId: road.id, forward: fwd, from, to, lengthM: length, speedKmh: speed,
-        costS: (length / (speed / 3.6)) * rc.penalty, capacityVph: laneCapacity(road) * lanes,
+        id: edges.length, roadId: road.id, forward: fwd, from, to, lengthM: length, speedKmh: edgeSpeed,
+        costS: (length / (edgeSpeed / 3.6)) * rc.penalty, capacityVph: laneCapacity(road) * lanes,
       };
       edges.push(e);
       out[from]!.push(e.id);

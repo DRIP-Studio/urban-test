@@ -1,5 +1,6 @@
+import {captureEliosScope} from './scope';
 import {
-  FUNCTIONAL_LABEL, STANDARD_LABEL, effectiveFunctionalClasses, environmentalIslands, horizontalAlignment, islandZone, proposeFunctionalClasses, pumsIndicators, sizeDrainage, urbanStandards,
+  verticalExtrema, checkVertical, stationing, FUNCTIONAL_LABEL, STANDARD_LABEL, effectiveFunctionalClasses, environmentalIslands, horizontalAlignment, islandZone, proposeFunctionalClasses, pumsIndicators, sizeDrainage, urbanStandards,
 } from '@drip-urban/core';
 import { runDrainage, useDrainage } from '../state/drainage';
 import { loadPlan, usePlans } from '../state/plans';
@@ -10,13 +11,20 @@ const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({
 
 registerEliosTools([
   {
+    name:'vertical_profile_report',kind:'read',label:'Profilo e punti alti/bassi',
+    description:'Quote authored, raccordi verticali, punti alti/bassi esatti e verifiche del profilo della strada. Non inventa un rilievo quando il profilo manca.',
+    parameters:OBJ({roadName:{type:'STRING',description:'Nome strada; vuoto usa selezione'}}),
+    run(a){const {network,baseline,selection}=useApp.getState();if(!network||!baseline)throw Error('Progetto non aperto');const road=a.roadName?matchRoads(network,String(a.roadName))[0]:selection?.kind==='road'?network.roads[selection.ids[0]!]:undefined;if(!road)throw Error('Seleziona una strada');return{roadId:road.id,name:road.name,source:'Profilo authored dello scenario',missingProfile:!road.vertical,pvis:road.vertical?.pvis??[],extrema:road.vertical?verticalExtrema(road.vertical):[],issues:road.vertical?checkVertical(road,road.vertical,stationing(road,baseline.origin).length):[]};},
+  },
+  {
     name: 'urban_standards', kind: 'read', label: 'Standard urbanistici verificati',
     description: 'Verifica degli standard del DM 1444/1968 (istruzione, interesse comune, verde, parcheggi: 18 m²/abitante) sull\'intero comune: abitanti stimati, dotazioni, saldo. Usa il piano urbanistico importato se presente.',
     parameters: OBJ({ includePlanned: { type: 'BOOLEAN', description: 'Conta anche le aree riservate dal piano' } }),
     async run(a) {
+      const guard=captureEliosScope();
       const { baseline, network } = useApp.getState();
       const doc = usePlans.getState().loaded ? usePlans.getState().doc : await loadPlan();
-      const r = urbanStandards(baseline!, network, doc, { includePlanned: !!a.includePlanned });
+      guard.assert();const r = urbanStandards(baseline!, network, doc, { includePlanned: !!a.includePlanned });
       return { residents: Math.round(r.town.residents), rows: r.town.rows.map((x) => ({ standard: STANDARD_LABEL[x.kind], requiredM2: Math.round(x.requiredM2), availableM2: Math.round(x.computedM2), balanceM2: Math.round(x.balanceM2), perResident: Math.round(x.perResidentM2 * 10) / 10, norm: x.standardPerResident })), planZones: doc.zones.length, method: r.method };
     },
   },
@@ -84,7 +92,7 @@ registerEliosTools([
       const road = a.roadName ? matchRoads(network!, String(a.roadName))[0] : selection?.kind === 'road' ? network!.roads[selection.ids[0]!] : undefined;
       if (!road) throw new Error('Indica una strada o selezionala sulla mappa');
       const al = horizontalAlignment(road, baseline!.origin);
-      return { road: road.name, lengthM: Math.round(al.lengthM), designSpeedKmh: al.designSpeedKmh, rMinM: Math.round(al.rMinM), curves: al.elements.filter((e) => e.kind === 'curve').map((e) => ({ from: Math.round(e.s0), to: Math.round(e.s1), radiusM: Math.round(e.radiusM!), deflectionDeg: Math.round(e.deflectionDeg!), direction: e.direction })), issues: al.issues.map((i) => i.message) };
+      return { road: road.name, lengthM: Math.round(al.lengthM), designSpeedKmh: al.designSpeedKmh, rMinM: Math.round(al.rMinM), curves: al.elements.filter((e) => e.kind !== 'tangent'&&e.radiusM).map((e) => ({ from: Math.round(e.s0), to: Math.round(e.s1), radiusM: Math.round(e.radiusM!), deflectionDeg: Math.round(e.deflectionDeg!), direction: e.direction })), issues: al.issues.map((i) => i.message) };
     },
   },
 ]);

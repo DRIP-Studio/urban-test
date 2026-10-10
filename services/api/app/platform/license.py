@@ -130,7 +130,7 @@ def apply_identity_entitlement(claims: dict) -> None:
         data = _load()
         data["identity"] = {
             "plan": claims.get("drip_plan"), "features": claims.get("drip_features"), "validUntil": claims.get("drip_valid_until"),
-            "customer": claims.get("drip_customer") or claims.get("drip_org"), "seenAt": _now().isoformat(timespec="seconds"),
+            "organisation":claims.get("drip_org"), "seatsUsed":claims.get("drip_seats_used"), "customer": claims.get("drip_customer") or claims.get("drip_org"), "seenAt": _now().isoformat(timespec="seconds"),
         }
         _save(data)
 
@@ -146,15 +146,36 @@ def status() -> dict:
         plan = res.get("plan") or "base"
         valid_until = res.get("validUntil")
         checked = data.get("checkedAt") or data.get("identity", {}).get("seenAt")
-        offline_days = (_now() - datetime.fromisoformat(checked)).days if checked else 0
-        expired = bool(valid_until) and datetime.fromisoformat(str(valid_until).replace("Z", "+00:00")) < _now()
-        state = "expired" if expired else ("offline_grace" if offline_days > 2 else (res.get("status") or "active"))
-        if offline_days > GRACE_DAYS:
-            state = "offline_expired"
-        features = res.get("features") or PLANS.get(plan, PLANS["base"])["features"]
+        try:
+            checked_at = datetime.fromisoformat(str(checked).replace("Z", "+00:00")) if checked else None
+            until = datetime.fromisoformat(str(valid_until).replace("Z", "+00:00")) if valid_until else None
+            if (checked_at and checked_at.tzinfo is None) or (until and until.tzinfo is None):
+                raise ValueError("Timezone mancante")
+            offline_days = (_now() - checked_at).days if checked_at else GRACE_DAYS + 1
+            expired = bool(until and until <= _now())
+            state = res.get("status") or "active"
+            # Offline tolerance applies only to an entitlement that was actually active.
+            # Revoked/suspended responses must never turn into an active grace subscription.
+            if state in {"active", "offline_grace", "trialing"}:
+                if expired:
+                    state = "expired"
+                elif offline_days > GRACE_DAYS:
+                    state = "offline_expired"
+                elif offline_days > 2:
+                    state = "offline_grace"
+        except (ValueError, TypeError, OverflowError):
+            state = "expired"
+        features = res.get("features")
+        if features is None:
+            features = PLANS.get(plan, PLANS["base"])["features"]
+        if not isinstance(features, list) or not all(isinstance(f, str) for f in features):
+            features = []
         return {
             "status": state, "plan": plan, "planLabel": PLANS.get(plan, {}).get("label", plan), "source": source,
             "validUntil": valid_until, "customer": res.get("customer"), "seats": res.get("seats"),
+            "organisation": res.get("organisation"), "seatsUsed": res.get("seatsUsed"),
+            "validation": "expired" if state in {"expired","offline_expired"} else "verified_response",
+            "connectivity": {"state": "last_attempt_failed" if data.get("error") else "last_verified" if checked else "not_verified", "lastVerifiedAt": checked},
             "features": features if state in {"active", "offline_grace", "trialing"} else ["design", "analyze"],
             "limits": res.get("limits") or PLANS.get(plan, PLANS["base"])["limits"],
             "keyHint": data.get("keyHint"), "checkedAt": checked, "error": data.get("error"),
@@ -169,7 +190,8 @@ def status() -> dict:
         "validUntil": ends.isoformat(timespec="seconds"), "daysLeft": max(0, (ends - _now()).days),
         "features": PLANS["trial"]["features"] if active else ["design", "analyze"], "limits": PLANS["trial"]["limits"],
         "enforcement": cfg["licenseEnforcement"], "deviceId": config.device_id(), "catalog": FEATURES, "platformUrl": cfg["platformUrl"],
-        "error": data.get("error"),
+        "error": data.get("error"), "validation":"local_trial", "organisation":None,"seatsUsed":None,
+        "connectivity":{"state":"not_verified","lastVerifiedAt":None},
     }
 
 

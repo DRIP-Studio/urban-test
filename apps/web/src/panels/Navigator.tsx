@@ -7,9 +7,10 @@ import { toast } from '../state/toasts';
 import { drawRoutePins, usePicks } from '../tools/picks';
 import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, Toggle, FieldGroup } from '../ui/controls';
 import { Icon } from '../ui/Icon';
+import { useProjectClock } from '../state/projectTime';
 
 const MODES: { value: TravelMode; label: string }[] = [
-  { value: 'car', label: 'Auto' }, { value: 'truck', label: 'Camion' }, { value: 'bus', label: 'Bus' },
+  { value: 'car', label: 'Auto' }, { value: 'motorcycle', label: 'Moto' }, { value: 'truck', label: 'Camion' }, { value: 'bus', label: 'Bus' },
   { value: 'bike', label: 'Bici' }, { value: 'walk', label: 'A piedi' }, { value: 'emergency', label: 'Emergenza' },
 ];
 const DAYS = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
@@ -85,9 +86,12 @@ function PlaceSearch({ label, value, onPick }: { label: string; value: string; o
       setQ('');
       return;
     }
+    const scope = useApp.getState(), pid = scope.project?.id, sid = scope.scenario?.id;
     setBusy(true);
     try {
       const found = await api.get<{ name: string; at: [number, number] }[]>(`/api/geocode?q=${encodeURIComponent(text)}${project ? `&bbox=${project.bbox.join(',')}` : ''}`);
+      const current = useApp.getState();
+      if(current.project?.id !== pid || current.scenario?.id !== sid) return;
       if (!found.length) toast.info('Nessun risultato', `«${text}» non trovato nell'area del progetto.`);
       else { onPick(found[0]!.at); setQ(''); }
     } catch (e) { toast.error('Ricerca indirizzo', e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
@@ -105,7 +109,8 @@ function PlaceSearch({ label, value, onPick }: { label: string; value: string; o
 }
 
 export function Navigator() {
-  const { mode, departure, from, to, via, addingVia, vehicle, result, routing, traffic, altIndex } = usePicks();
+  const { time } = useProjectClock();
+  const { strategy, accessM, transferM, mode, permits, from, to, via, addingVia, vehicle, result, routing, traffic, altIndex } = usePicks();
   const net = useApp((s) => s.network);
   const origin = useApp((s) => s.baseline?.origin);
   const set = usePicks.setState;
@@ -129,13 +134,15 @@ export function Navigator() {
   return (
     <>
       <Section title="Navigatore sullo scenario">
-        <FieldGroup label="Mezzo"><Segmented<TravelMode> label="Mezzo" size="sm" value={mode} options={MODES} onChange={(v) => { set({ mode: v }); rerun(); }} /></FieldGroup>
+        <Field label="Tipo di viaggio"><Select ariaLabel="Tipo di viaggio" value={strategy} options={[{value:'road',label:'Rete stradale'},{value:'transit',label:'TPL con accesso pedonale'},{value:'multimodal',label:'A piedi + TPL · arrivo più rapido'}]} onChange={(v)=>{set({strategy:v as typeof strategy,via:[],result:null});rerun();}} /></Field>
+        {strategy !== 'road' ? <><div className="grid-2"><Field label="Accesso / uscita a piedi"><NumberField ariaLabel="Distanza accesso TPL" value={accessM} unit="m" min={0} max={10000} onCommit={(v)=>{set({accessM:v});rerun();}} /></Field><Field label="Cambio linea a piedi"><NumberField ariaLabel="Distanza cambio TPL" value={transferM} unit="m" min={0} max={10000} onCommit={(v)=>{set({transferM:v});rerun();}} /></Field></div><p className="muted">Fermate, frequenze e velocità dello scenario; cambi sulla rete pedonale. Un verso per linea, nessun dato in tempo reale.</p></> : null}
+        {strategy === 'road' ? <FieldGroup label="Mezzo"><Segmented<TravelMode> label="Mezzo" size="sm" value={mode} options={MODES} onChange={(v) => { set({ mode: v }); rerun(); }} /></FieldGroup> : null}
         <div className="grid-2">
-          <Field label="Giorno"><Select value={String(departure.day)} ariaLabel="Giorno" options={DAYS.map((d, i) => ({ value: String(i), label: d }))} onChange={(v) => { set({ departure: { ...departure, day: Number(v) } }); rerun(); }} /></Field>
-          <Field label="Partenza"><NumberField value={departure.minutes / 60} unit="h" min={0} max={23.75} step={0.25} ariaLabel="Ora di partenza" onCommit={(v) => { set({ departure: { ...departure, minutes: Math.round(v * 60) } }); rerun(); }} /></Field>
+          <Field label="Partenza dal clock globale"><span>{DAYS[time.day]} {time.date} · {fmtClock(time.minutes)}</span></Field>
+          <Field label="Permesso ZTL"><Select value={permits[0] ?? ''} ariaLabel="Permesso ZTL" options={[{ value: '', label: 'Nessun permesso' }, ...[...new Set(Object.values(net?.zones ?? {}).flatMap((z) => z.permits ?? []))].map((value) => ({ value, label: value }))]} onChange={(v) => { set({ permits: v ? [v] : [] }); rerun(); }} /></Field>
         </div>
-        <Toggle label="Tempi con il traffico stimato (congestione)" checked={traffic} onChange={(v) => { set({ traffic: v }); rerun(); }} />
-        {mode === 'truck' ? (
+        {strategy === 'road' ? <Toggle label="Tempi con la fonte traffico del progetto" checked={traffic} onChange={(v) => { set({ traffic: v }); rerun(); }} /> : null}
+        {strategy === 'road' && mode === 'truck' ? (
           <div className="grid-2">
             <Field label="Massa a pieno carico"><NumberField value={vehicle.weightT} unit="t" min={3.5} max={44} step={0.5} decimals={1} ariaLabel="Massa" onCommit={(v) => { set({ vehicle: { ...vehicle, weightT: v } }); rerun(); }} /></Field>
             <Field label="Altezza"><NumberField value={vehicle.heightM} unit="m" min={2} max={4.5} step={0.1} decimals={2} ariaLabel="Altezza" onCommit={(v) => { set({ vehicle: { ...vehicle, heightM: v } }); rerun(); }} /></Field>
@@ -156,7 +163,7 @@ export function Navigator() {
         <div className="inspector-actions">
           <Button icon="route" onClick={() => setTool('route')}>Scegli sulla mappa</Button>
           <Button icon="refresh" variant="ghost" disabled={!from || !to} onClick={() => usePicks.getState().swapEnds()}>Inverti A↔B</Button>
-          <Button icon="waypoint" disabled={!from || !to || via.length >= 8} variant={addingVia ? 'primary' : 'default'} onClick={() => { set({ addingVia: !addingVia }); setTool('route'); }}>{addingVia ? 'Clic sulla tappa…' : 'Aggiungi tappa'}</Button>
+          <Button icon="waypoint" disabled={strategy !== 'road' || !from || !to || via.length >= 8} variant={addingVia ? 'primary' : 'default'} onClick={() => { set({ addingVia: !addingVia }); setTool('route'); }}>{addingVia ? 'Clic sulla tappa…' : 'Aggiungi tappa'}</Button>
           <Button variant="ghost" onClick={() => { set({ from: null, to: null, via: [], addingVia: false, result: null }); setSource('route', null); setSource('compare', null); setSource('draft', null); }}>Azzera</Button>
         </div>
       </Section>
@@ -181,13 +188,13 @@ export function Navigator() {
           <Section title="Oggi e progetto">
             <div className="stats-row">
               <Stat label="Durata progetto" value={p.found ? fmtT(p.durationS) : 'non raggiungibile'} delta={p.found && t.found ? { value: Math.round((p.durationS - t.durationS) / 6) / 10, goodWhen: 'down', unit: ' min' } : undefined} />
-              <Stat label="Arrivo" value={p.found ? fmtClock(departure.minutes + p.durationS / 60) : '—'} />
+              <Stat label="Arrivo" value={p.found ? fmtClock(time.minutes + p.durationS / 60) : '—'} />
               <Stat label="Distanza" value={p.found ? fmtD(p.distanceM) : '—'} delta={p.found && t.found ? { value: Math.round(p.distanceM - t.distanceM), goodWhen: 'down', unit: ' m' } : undefined} />
               <Stat label="Oggi" value={t.found ? fmtT(t.durationS) : 'non raggiungibile'} />
             </div>
-            <p className="muted">Linea tratteggiata grigia: la città di oggi. Linea azzurra: lo scenario (sensi unici, chiusure, ZTL attive all'orario scelto, velocità, rotatorie, semafori). {traffic ? 'Tempi con la congestione della stima DRIP del traffico (BPR).' : 'Tempi a flusso libero più i ritardi agli incroci.'}</p>
+            <p className="muted">Linea tratteggiata grigia: la città di oggi. Linea azzurra: lo scenario (sensi unici, chiusure, ZTL attive all'orario scelto, velocità, rotatorie, semafori). {traffic ? 'Tempi con le velocità della fonte traffico del progetto; chiusure osservate applicate solo se valide.' : 'Tempi a flusso libero più i ritardi agli incroci.'}</p>
             {[...p.warnings, ...(!t.found ? ['Oggi non esiste un percorso con queste regole'] : [])].map((w) => <p key={w} className="warn-line"><Icon name="warning" size={14} />{w}</p>)}
-            {p.found ? <Steps r={p} departMin={departure.minutes} /> : null}
+            {p.found ? <Steps r={p} departMin={time.minutes} /> : null}
             {p.found ? <div className="inspector-actions"><Button icon="download" variant="ghost" onClick={exportGpx}>Esporta GPX</Button></div> : null}
           </Section>
         </>

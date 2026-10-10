@@ -1,11 +1,13 @@
+import {refreshTrafficState,trafficSourceMode} from '../traffic/live';
 import { create } from 'zustand';
 import { LocalFrame, geom, type LngLat, type Route, type TravelMode } from '@drip-urban/core';
 import { api } from '../api/client';
 import { engine } from '../engine/engine';
 import { fc, type Feature } from '../engine/geojson';
 import { setSource } from '../map/mapStore';
-import { newId, useApp } from '../state/store';
+import { commit, newId, useApp } from '../state/store';
 import { toast } from '../state/toasts';
+import { getProjectTime, useProjectTime } from '../state/projectTime';
 import { MODES, defaultLine, upgradeLine, type BikeShare, type LineStop, type TransitLine, type TransitMode } from '../transit/model';
 
 export type TransitStop = LineStop;
@@ -14,6 +16,9 @@ export interface GtfsFeed { source: string; importedAt: string; agencies: { name
 interface TransitDoc { gtfs?: GtfsFeed; design?: Record<string, TransitRouteDesign[]>; bikeshare?: Record<string, BikeShare> }
 
 interface PicksState {
+  strategy: 'road' | 'transit' | 'multimodal';
+  accessM: number;
+  transferM: number;
   mode: TravelMode;
   departure: { day: number; minutes: number };
   from: LngLat | null;
@@ -24,6 +29,7 @@ interface PicksState {
   addingVia: boolean;
   /** Truck profile used when mode = truck (or any vehicle limits). */
   vehicle: { weightT: number; heightM: number; widthM: number; lengthM: number; axleLoadT: number; hazmat: boolean };
+  permits: string[];
   result: { today: Route; project: Route; alternatives: Route[] } | null;
   /** Index of the alternative shown as «project» route. */
   altIndex: number;
@@ -53,10 +59,12 @@ interface PicksState {
 const scenarioId = () => useApp.getState().scenario?.id ?? 'baseline';
 /** Bumped on every local save: a slower load must not overwrite newer local data. */
 let transitVersion = 0;
+let routeRequest = 0;
 
 export const usePicks = create<PicksState>((set, get) => ({
-  mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, via: [], addingVia: false, result: null, routing: false, altIndex: 0, traffic: false,
+  strategy: 'road', accessM: 1200, transferM: 500, mode: 'car', departure: { day: 1, minutes: 8 * 60 }, from: null, to: null, via: [], addingVia: false, result: null, routing: false, altIndex: 0, traffic: false,
   vehicle: { weightT: 18, heightM: 3.8, widthM: 2.55, lengthM: 10, axleLoadT: 8, hazmat: false },
+  permits: [],
   isoAt: null, isoMode: 'walk', isoMinutes: null, transit: {}, selectedRouteId: null, newLineMode: 'bus',
 
   pickRoutePoint(ll) {
@@ -67,19 +75,25 @@ export const usePicks = create<PicksState>((set, get) => ({
     drawRoutePins();
   },
   async runRoute() {
-    const { from, to, via, mode, departure, vehicle, traffic } = get();
+    const { from, to, via, mode, vehicle, traffic, permits, strategy, accessM, transferM } = get();
+    const initial = useApp.getState(), scope = { pid: initial.project?.id, sid: initial.scenario?.id, revision: JSON.stringify(initial.scenario?.operations) };
+    const departure = getProjectTime(), request = ++routeRequest;
     if (!from || !to) return;
     set({ routing: true });
     try {
       const veh = mode === 'truck' ? vehicle : undefined;
-      const r = await engine.job<{ today: Route; project: Route; alternatives: Route[] }>('compareRoute', { from, to, via, traffic, ctx: { mode, day: departure.day, minutes: departure.minutes, ...(veh ? { vehicle: veh } : {}) } });
+      const trafficState=traffic?await refreshTrafficState():null;
+      if(traffic&&trafficSourceMode()!=='simulated'&&(!trafficState||!Object.keys(trafficState.segments).length))throw Error('Nessun dato utilizzabile per la fonte traffico scelta. Aggiorna la fonte o scegli Simulato.');
+      const r = await engine.job<{ today: Route; project: Route; alternatives: Route[] }>('compareRoute', { from, to, via, traffic, strategy, accessM, transferM, ctx: { ...(trafficState?{trafficState}:{}),mode, day: departure.day, minutes: departure.minutes, date: departure.date, holiday: departure.holiday, permits, ...(veh ? { vehicle: veh } : {}) } });
+      const current = useApp.getState();
+      if (request !== routeRequest || current.project?.id !== scope.pid || current.scenario?.id !== scope.sid || JSON.stringify(current.scenario?.operations) !== scope.revision) return;
       set({ result: r, altIndex: 0 });
       drawRoutes();
       setSource('compare', r.today.found ? fc([{ type: 'Feature', geometry: { type: 'LineString', coordinates: r.today.line.map((p) => [...p]) }, properties: {} }]) : null);
       if (!r.project.found) toast.warn('Percorso non trovato', r.project.warnings.join(' · '));
     } catch (e) {
-      toast.error('Navigatore', e instanceof Error ? e.message : String(e));
-    } finally { set({ routing: false }); }
+      if (request === routeRequest) toast.error('Navigatore', e instanceof Error ? e.message : String(e));
+    } finally { if (request === routeRequest) set({ routing: false }); }
   },
   selectAlternative(i) {
     const r = get().result;
@@ -99,7 +113,7 @@ export const usePicks = create<PicksState>((set, get) => ({
     const { isoAt, isoMode } = get();
     const net = useApp.getState().network;
     if (!isoAt || !net) return;
-    const minutes = await engine.job<Record<string, number>>('isochrone', { at: isoAt, mode: isoMode, minutes: 15 });
+    const minutes = await engine.job<Record<string, number>>('isochrone', { at: isoAt, mode: isoMode, minutes: 15, ctx: getProjectTime() });
     set({ isoMinutes: minutes });
     const feats: Feature[] = Object.entries(minutes).filter(([id]) => net.roads[id]).map(([id, m]) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: net.roads[id]!.axis.map((p) => [...p]) }, properties: { minutes: m } }));
     setSource('iso', fc(feats));
@@ -107,29 +121,35 @@ export const usePicks = create<PicksState>((set, get) => ({
   async loadTransit() {
     const p = useApp.getState().project;
     if (!p) return;
-    const started = transitVersion;
+    const started = transitVersion, startedScenario=scenarioId();
     const doc = (await api.get<TransitDoc | null>(`/api/projects/${encodeURIComponent(p.id)}/docs/transit`)) ?? {};
     // A local change saved while the request was in flight is newer than what the server sent back.
-    if (started !== transitVersion) return;
+    if (started !== transitVersion || useApp.getState().project?.id !== p.id || scenarioId()!==startedScenario) return;
     // 1.0 lines (single headway, bus/brt/tram) become multimodal lines with service bands.
     const design = Object.fromEntries(Object.entries(doc.design ?? {}).map(([sid, list]) => [sid, list.map((r) => upgradeLine(r))]));
-    set({ transit: { ...doc, design } });
+    const sid = scenarioId(), network = useApp.getState().network;
+    if(network&&!useApp.getState().scenario?.isBaseline&&(network.transit===undefined&&design[sid]?.length||network.bikeShare===undefined&&doc.bikeshare?.[sid]))commit('transit.set',{lines:network.transit??design[sid]??[],bikeShare:network.bikeShare??doc.bikeshare?.[sid]});
+    set({ transit: { ...doc, design: {...design, [sid]: [...(useApp.getState().network?.transit ?? [])]},bikeshare:{...doc.bikeshare,...(useApp.getState().network?.bikeShare?{[sid]:useApp.getState().network!.bikeShare!}:{})} } });
     drawTransit();
   },
   async saveTransit(doc) {
     const p = useApp.getState().project;
     if (!p) return;
+    const result = commit('transit.set', {lines: doc.design?.[scenarioId()] ?? [],bikeShare:doc.bikeshare?.[scenarioId()]});
+    if (!result.ok) return;
     transitVersion++;
     set({ transit: doc });
     drawTransit();
-    try { await api.put(`/api/projects/${encodeURIComponent(p.id)}/docs/transit`, doc); }
+    try { await api.put(`/api/projects/${encodeURIComponent(p.id)}/docs/transit`, {gtfs:doc.gtfs,bikeshare:Object.fromEntries(Object.entries(doc.bikeshare??{}).filter(([sid])=>sid!==scenarioId())),design:Object.fromEntries(Object.entries(doc.design ?? {}).filter(([sid])=>sid!==scenarioId()))}); }
     catch (e) { toast.error('Linee TPL non salvate', e instanceof Error ? e.message : String(e)); }
   },
   addTransitRoute(points) {
-    const b = useApp.getState().baseline;
-    if (!b) return;
+    const initial=useApp.getState(),b=initial.baseline,pid=initial.project?.id,sid=initial.scenario?.id,revision=JSON.stringify(initial.scenario?.operations);
+    if(!b||!pid||!sid||points.length<2)return;
+    const current=()=>{const state=useApp.getState();return state.project?.id===pid&&state.scenario?.id===sid&&JSON.stringify(state.scenario?.operations)===revision;};
     const mode = get().newLineMode;
     const finish = (line: LngLat[], followed: boolean) => {
+      if(!current()){toast.warn('Linea TPL','Scenario cambiato durante calcolo: ripeti il tracciamento');return;}
       const f = new LocalFrame(b.origin);
       const len = geom.lengthOf(line.map((p) => f.toMetric(p) as geom.V));
       const doc = get().transit;
@@ -142,10 +162,10 @@ export const usePicks = create<PicksState>((set, get) => ({
     };
     // Road modes follow the street network between the clicked points (as a bus would drive).
     if (MODES[mode].onRoad && points.length >= 2) {
-      const { departure } = get();
-      void engine.job<{ project: Route }>('compareRoute', { from: points[0], to: points[points.length - 1], via: points.slice(1, -1), ctx: { mode: 'bus', day: departure.day, minutes: departure.minutes } })
-        .then((r) => finish(r.project.found && r.project.line.length >= 2 ? [...r.project.line] : [...points], r.project.found))
-        .catch(() => finish([...points], false));
+      const departure = getProjectTime();
+      void engine.job<{ project: Route }>('compareRoute', { from: points[0], to: points[points.length - 1], via: points.slice(1, -1), ctx: { mode: mode==='tram'?'tram':'bus', ...departure } })
+        .then(r=>{if(!current())return;if(!r.project.found||r.project.line.length<2){toast.warn('Linea TPL non creata','Nessun percorso accessibile connesso tra i punti selezionati');return;}finish([...r.project.line],true);})
+        .catch(error=>{if(current())toast.error('Calcolo linea TPL',String(error));});
     } else finish([...points], false);
   },
   addBikeStation(ll) {
@@ -202,3 +222,22 @@ function drawRoutes(): void {
   const feats: Feature[] = result.alternatives.map((r, i) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: r.line.map((p) => [...p]) }, properties: { alt: i !== altIndex, rank: i === altIndex ? 1 : 0 } }));
   setSource('route', fc(feats));
 }
+
+// Routing snapshots update at calendar-minute boundaries, rather than on every animation tick.
+let routeTimeKey = '';
+function syncDeparture() {
+  if (!useApp.getState().project) return;
+  const time = getProjectTime(), key = `${time.date}:${Math.floor(time.minutes)}:${time.holiday}`;
+  if (key === routeTimeKey) return;
+  routeTimeKey = key;
+  usePicks.setState({ departure: { day: time.day, minutes: time.minutes } });
+  if (usePicks.getState().from && usePicks.getState().to) void usePicks.getState().runRoute();
+}
+useProjectTime.subscribe(syncDeparture);
+useApp.subscribe((s, previous) => { if (s.network?.clock !== previous.network?.clock || s.project?.id !== previous.project?.id) syncDeparture(); });
+
+useApp.subscribe((s,previous)=>{
+ if(s.network?.transit!==previous.network?.transit||s.network?.bikeShare!==previous.network?.bikeShare||s.scenario?.id!==previous.scenario?.id){
+  const state=usePicks.getState();usePicks.setState({transit:{...state.transit,design:{...state.transit.design,[s.scenario?.id??'baseline']:[...(s.network?.transit??[])]},bikeshare:{...state.transit.bikeshare,[s.scenario?.id??'baseline']:s.network?.bikeShare??{system:'Bike sharing',stations:[],dockless:false}}}});drawTransit();
+ }
+});

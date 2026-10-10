@@ -109,7 +109,7 @@ registerEliosTools([
     description: 'Calcola un percorso sullo scenario (oggi e progetto) con tappe intermedie, mezzo e orario; per i camion usa massa e dimensioni.',
     parameters: OBJ({
       points: { type: 'ARRAY', description: 'Punti [lon, lat] in ordine: origine, tappe, destinazione', items: { type: 'ARRAY', items: { type: 'NUMBER' }, description: '[lon, lat]' } },
-      mode: S('Mezzo', { enum: ['car', 'truck', 'bus', 'bike', 'walk', 'emergency'] }), day: N('Giorno 0 = lunedì'), hour: N('Ora di partenza'), weightT: N('Massa camion t'), heightM: N('Altezza camion m'),
+      mode: S('Mezzo', { enum: ['car', 'motorcycle', 'truck', 'bus', 'bike', 'walk', 'emergency'] }), day: N('Giorno 0 = lunedì'), hour: N('Ora di partenza'), weightT: N('Massa camion t'), heightM: N('Altezza camion m'),
     }, ['points']),
     async run(a) {
       const pts = (a.points as [number, number][]).map((p) => [Number(p[0]), Number(p[1])] as [number, number]);

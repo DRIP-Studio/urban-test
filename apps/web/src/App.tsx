@@ -1,3 +1,4 @@
+import {ErrorBoundary} from './ui/ErrorBoundary';
 import { useEffect } from 'react';
 import { Hub } from './hub/Hub';
 import { PublicationView } from './present/PublicationView';
@@ -23,7 +24,7 @@ export function App() {
     : route.view === 'hub' ? <Hub /> : route.view === 'workspace' ? <Workspace /> : null;
   return (
     <>
-      {body}
+      <ErrorBoundary key={route.view} label="Applicazione">{body}</ErrorBoundary>
       <CommandPalette />
       <Toasts />
       <ConfirmHost />

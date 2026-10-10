@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+import stat
 import io
 import json
 import shutil
@@ -207,12 +209,17 @@ def save_scenario(pid: str, sid: str, body: dict, base_revision: int | None, aut
         return {k: v for k, v in nxt.items() if k != "operations"} | {"opCount": len(ops)}
 
 
-def create_scenario(pid: str, name: str, author: str, copy_from: str | None = None, description: str | None = None) -> dict:
+def create_scenario(pid: str, name: str, author: str, copy_from: str | None = None, description: str | None = None, operations: list[dict] | None = None) -> dict:
     with _lock(pid):
         meta = get_meta(pid)
         base_ops: list = []
         if copy_from:
             base_ops = get_scenario(pid, copy_from).get("operations") or []
+        if operations is not None:
+            if not isinstance(operations, list) or any(not isinstance(op, dict) or not {"id", "type", "payload"} <= op.keys() for op in operations):
+                raise ValueError("Operazioni dello scenario non valide")
+            _validate_operations(operations)
+            base_ops = operations
         sid = "s-" + uuid.uuid4().hex[:8]
         s = {"id": sid, "name": name.strip() or "Nuovo scenario", "isBaseline": False, "locked": False, "archived": False,
              "createdAt": now_iso(), "operations": base_ops, "revision": 0, "author": author,
@@ -441,15 +448,39 @@ def duplicate_project(pid: str, author: str) -> dict:
 
 
 def export_package(pid: str) -> bytes:
+    """Native .dripu v2 container, with a complete integrity inventory; model schema stays v1."""
+    from app.settings import VERSION
     d = project_dir(pid)
-    get_meta(pid)
+    meta = get_meta(pid)
     buf = io.BytesIO()
+    inventory = {}
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for p in d.rglob("*"):
-            if p.is_file() and "snapshots" not in p.relative_to(d).parts:
-                z.write(p, p.relative_to(d).as_posix())
-        z.writestr("PACKAGE.json", json.dumps({"format": "drip-urban-project", "schemaVersion": 1, "exportedAt": now_iso()}))
+        for p in sorted(d.rglob("*")):
+            rel = p.relative_to(d)
+            if p.is_file() and "snapshots" not in rel.parts and rel.as_posix() != "PACKAGE.json":
+                data = p.read_bytes()
+                z.writestr(rel.as_posix(), data)
+                inventory[rel.as_posix()] = {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        z.writestr("PACKAGE.json", json.dumps({"format": "drip-urban-project", "schemaVersion": 2,
+                    "modelSchemaVersion": 1, "applicationVersion": VERSION, "projectId": pid,
+                    "name": meta.get("name"), "exportedAt": now_iso(), "files": inventory,
+                    "contents": ["baseline", "scenarios", "operations", "models", "textures", "presentation", "transit", "simulation", "terrain"]}))
     return buf.getvalue()
+
+
+def _validate_operations(ops: list, depth: int = 0) -> None:
+    if depth > 30 or not isinstance(ops, list):
+        raise ValueError("Operazioni o profondità batch non validi")
+    ids = set()
+    for op in ops:
+        if not isinstance(op, dict) or not isinstance(op.get("type"), str) or not op["type"] or not isinstance(op.get("payload"), dict):
+            raise ValueError("Schema operazione non valido")
+        if depth == 0:
+            if not isinstance(op.get("id"), str) or not op["id"] or op["id"] in ids:
+                raise ValueError("ID operazioni assenti o duplicati")
+            ids.add(op["id"])
+        if op["type"] == "batch":
+            _validate_operations(op["payload"].get("ops"), depth + 1)
 
 
 def import_package(data: bytes, author: str) -> dict:
@@ -458,34 +489,94 @@ def import_package(data: bytes, author: str) -> dict:
     try:
         z = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
-        raise ValueError("Il file non è un pacchetto DRIP Urban (.zip)") from exc
+        raise ValueError("Il file non è un pacchetto DRIP Urban (.dripu)") from exc
     names = z.namelist()
     if "PACKAGE.json" not in names or "project.json" not in names or "baseline.json.gz" not in names:
         raise ValueError("Pacchetto incompleto: servono PACKAGE.json, project.json, baseline.json.gz")
     total = 0
+    seen = set()
     for info in z.infolist():
         p = Path(info.filename)
-        if p.is_absolute() or ".." in p.parts or info.filename.startswith(("/", "\\")):
+        portable = info.filename.replace("\\", "/")
+        if p.is_absolute() or ".." in portable.split("/") or ":" in portable or info.filename.startswith(("/", "\\")) or "\x00" in info.filename:
             raise ValueError(f"Percorso non ammesso nel pacchetto: {info.filename}")
-        if p.parts and p.parts[0] not in {"project.json", "baseline.json.gz", "scenarios", "docs", "thumbnail.png", "PACKAGE.json", "audit.jsonl"}:
+        if portable != info.filename or stat.S_ISLNK(info.external_attr >> 16) or info.flag_bits & 1:
+            raise ValueError("Pacchetto con link, percorsi non portabili o cifratura non supportata")
+        if info.filename.casefold() in seen:
+            raise ValueError("Voce duplicata nel pacchetto")
+        seen.add(info.filename.casefold())
+        if p.parts and p.parts[0] not in {"project.json", "baseline.json.gz", "scenarios", "docs", "models", "textures", "thumbnail.png", "PACKAGE.json", "audit.jsonl"}:
             raise ValueError(f"Voce non ammessa nel pacchetto: {info.filename}")
         total += info.file_size
     if total > 400 * 1024 * 1024:
         raise ValueError("Pacchetto troppo grande una volta estratto")
-    meta = json.loads(z.read("project.json"))
+    try:
+        manifest = json.loads(z.read("PACKAGE.json"))
+        version = manifest.get("schemaVersion")
+        if manifest.get("format") != "drip-urban-project" or type(version) is not int or version not in {1, 2}:
+            raise ValueError("Formato o versione del pacchetto non supportata")
+        if version == 2:
+            if type(manifest.get("modelSchemaVersion")) is not int or manifest.get("modelSchemaVersion") != 1 or not isinstance(manifest.get("files"), dict):
+                raise ValueError("Schema modello o inventario del pacchetto non supportato")
+            files = {i.filename for i in z.infolist() if not i.is_dir() and i.filename != "PACKAGE.json"}
+            if files != set(manifest["files"]):
+                raise ValueError("Inventario del pacchetto incompleto")
+            for name in files:
+                entry = manifest["files"][name]
+                payload = z.read(name)
+                if not isinstance(entry, dict) or entry.get("bytes") != len(payload) or entry.get("sha256") != hashlib.sha256(payload).hexdigest():
+                    raise ValueError(f"Integrità del pacchetto non valida: {name}")
+        import gzip
+        try:
+            with gzip.GzipFile(fileobj=io.BytesIO(z.read("baseline.json.gz"))) as compressed:
+                baseline_payload = compressed.read(400 * 1024 * 1024 + 1)
+            if len(baseline_payload) > 400 * 1024 * 1024:
+                raise ValueError("Baseline espansa troppo grande")
+            baseline = json.loads(baseline_payload)
+            if not isinstance(baseline, dict) or not isinstance(baseline.get("nodes"), dict) or not isinstance(baseline.get("roads"), dict):
+                raise ValueError("Baseline: nodi e strade mancanti")
+        except (OSError, EOFError, json.JSONDecodeError) as exc:
+            raise ValueError("Baseline compressa non leggibile") from exc
+        meta = json.loads(z.read("project.json"))
+        if not isinstance(meta, dict) or meta.get("schemaVersion", 1) != 1 or not str(meta.get("name") or "").strip():
+            raise ValueError("Metadati progetto o schema modello non validi")
+        for name in names:
+            if name.startswith("scenarios/") and name.endswith(".json"):
+                safe_id(Path(name).stem, "scenario id")
+                scenario = json.loads(z.read(name))
+                if not isinstance(scenario, dict) or not isinstance(scenario.get("operations", []), list):
+                    raise ValueError("Scenario o lista operazioni non valida")
+                if scenario.get("id") != Path(name).stem:
+                    raise ValueError("ID scenario diverso dal file")
+                _validate_operations(scenario.get("operations", []))
+    except (json.JSONDecodeError, zipfile.BadZipFile, KeyError, TypeError) as exc:
+        raise ValueError("Manifest o contenuto del pacchetto non leggibile") from exc
     new_id = "p-" + uuid.uuid4().hex[:12]
     dst = project_dir(new_id)
-    dst.mkdir(parents=True)
-    for info in z.infolist():
-        if info.is_dir() or info.filename == "PACKAGE.json":
-            continue
-        out = dst / Path(info.filename)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(z.read(info))
-    for s in (dst / "scenarios").glob("*.json"):
-        safe_id(s.stem, "scenario id")
-    atomic_write_json(dst / "project.json", {**meta, "id": new_id, "updatedAt": now_iso(), "importedAt": now_iso()})
-    audit(new_id, author, "project.import", {"originalId": meta.get("id")})
+    staging = SETTINGS.projects_dir / (".import-" + uuid.uuid4().hex)
+    if not staging.resolve().is_relative_to(SETTINGS.projects_dir.resolve()):
+        raise ValueError("Cartella di import fuori dalla directory progetti")
+    staging.mkdir(parents=True)
+    try:
+        for info in z.infolist():
+            if info.is_dir() or info.filename == "PACKAGE.json":
+                continue
+            out = staging / Path(info.filename)
+            if not out.resolve().is_relative_to(staging.resolve()):
+                raise ValueError("Percorso import fuori dalla cartella temporanea")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(z.read(info))
+        atomic_write_json(staging / "project.json", {**meta, "id": new_id, "updatedAt": now_iso(), "importedAt": now_iso(), "packageVersion": 2})
+        if version == 1:
+            migration = read_json(staging / "docs" / "migration.json", {}) or {}
+            atomic_write_json(staging / "docs" / "migration.json", {"legacyReport": migration,
+                            "packageMigration": {"from": 1, "to": 2, "at": now_iso(), "method": "Contenuti e operazioni conservati; inventario SHA-256 aggiunto al prossimo export"}})
+        staging.rename(dst)
+    except Exception:
+        if staging.exists() and staging.resolve().is_relative_to(SETTINGS.projects_dir.resolve()):
+            shutil.rmtree(staging)
+        raise
+    audit(new_id, author, "project.import", {"originalId": meta.get("id"), "packageVersion": version})
     return get_meta(new_id)
 
 

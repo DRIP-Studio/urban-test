@@ -111,7 +111,7 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: calc(14 * var(
 .table td { padding: calc(8 * var(--px)) calc(6 * var(--px)); border-bottom: 1px solid var(--line-1); vertical-align: middle; }
 .swatch { display: inline-block; width: calc(10 * var(--px)); height: calc(10 * var(--px)); border-radius: calc(3 * var(--px)); margin-right: calc(6 * var(--px)); vertical-align: -1px; }
 .progress { display: block; height: calc(4 * var(--px)); background: var(--ink-4); border-radius: calc(4 * var(--px)); overflow: hidden; margin-top: calc(6 * var(--px)); }
-.progress span { display: block; height: 100%; background: var(--drip-accent); transition: width var(--t-panel); }
+.progress span { display: block; height: 100%; background: var(--drip-accent); transition: transform var(--t-std) var(--ease-out); }
 
 /* ------------------------------------------------------------------ overlays */
 .popover-root { position: relative; }
@@ -141,16 +141,16 @@ input[type='checkbox'] { accent-color: var(--drip-accent); width: calc(14 * var(
 .modal p { margin: 0; color: var(--text-2); line-height: var(--lh-text); }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .toasts { position: fixed; right: var(--s-4); bottom: calc(var(--statusbar-h) + var(--s-4)); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--s-2); width: calc(360 * var(--px));; pointer-events: none; }
-/* Toasts never swallow clicks meant for the panel or map below: only their own buttons are interactive. */
-.toasts .toast { pointer-events: none; }
+/* Only visible notifications receive pointer events; the surrounding stack leaves the map usable. */
+.toasts .toast { pointer-events: auto; }
 .toasts .toast button { pointer-events: auto; }
-.toast { display: flex; gap: calc(11 * var(--px)); align-items: flex-start; background: var(--glass); backdrop-filter: blur(calc(21 * var(--px))) saturate(150%); border-radius: var(--r-3); padding: calc(13 * var(--px)) calc(13 * var(--px)) calc(13 * var(--px)) calc(15 * var(--px)); box-shadow: var(--shadow-pop); animation: toast-in var(--t-spring) var(--spring-bounce) both; }
+.toast { display: flex; gap: calc(11 * var(--px)); align-items: flex-start; background: var(--glass); backdrop-filter: blur(calc(21 * var(--px))) saturate(150%); border-radius: var(--r-3); padding: calc(13 * var(--px)) calc(13 * var(--px)) calc(13 * var(--px)) calc(15 * var(--px)); box-shadow: var(--shadow-pop); transition: transform var(--t-std) var(--ease-out), opacity var(--t-std) var(--ease-out); }
 .toast > .icon { color: var(--drip-accent); margin-top: 1px; }
 .toast-success > .icon { color: var(--ok); } .toast-warn > .icon { color: var(--warn); } .toast-error > .icon { color: var(--err); }
 .toast-text { flex: 1; display: flex; flex-direction: column; gap: calc(2 * var(--px)); min-width: 0; }
 .toast-text span { color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
 .toast-close { background: none; border: 0; color: var(--text-3); padding: calc(2 * var(--px)); }
-@keyframes toast-in { from { opacity: 0; translate: 0 calc(21 * var(--px)); scale: 0.96; } to { opacity: 1; translate: 0 0; scale: 1; } }
+@starting-style { .toast { opacity: 0; transform: translateY(6px); } }
 .palette-backdrop { align-items: flex-start; padding-top: 12vh; }
 .palette { width: min(calc(620 * var(--px)), 100%); background: var(--glass); backdrop-filter: blur(calc(34 * var(--px))) saturate(160%); border-radius: var(--r-4); box-shadow: var(--shadow-pop); overflow: hidden; animation: modal-in var(--t-spring) var(--spring) both; }
 .palette-input { display: flex; align-items: center; gap: calc(10 * var(--px)); padding: calc(12 * var(--px)) calc(14 * var(--px)); border-bottom: 1px solid var(--line-1); color: var(--text-3); }
@@ -192,3 +192,6 @@ label.check { display: flex; gap: calc(8 * var(--px)); align-items: center; font
 .curv-chart .curve-band { fill: var(--drip-accent-soft); }
 .curv-chart .curv { fill: none; stroke: var(--drip-accent); stroke-width: 1.6; }
 .mk-group { display: flex; flex-direction: column; gap: calc(6 * var(--px)); margin-bottom: calc(8 * var(--px)); }
+
+/* High-frequency command access is immediate, including its backdrop. */
+.palette, .palette-backdrop { animation: none; }

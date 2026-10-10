@@ -1,3 +1,6 @@
+import { engine } from '../engine/engine';
+import { getProjectClock, useProjectClock } from '../state/projectTime';
+import type { TransitMetrics } from '@drip-urban/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LocalFrame, geom } from '@drip-urban/core';
 import { api } from '../api/client';
@@ -61,16 +64,17 @@ function Gtfs() {
 }
 
 function Realtime() {
-  const [data, setData] = useState<{ status: string; vehicles: { id: string; at: [number, number]; routeId: string }[]; message?: string } | null>(null);
-  const load = () => api.get<typeof data>('/api/transit/realtime').then((d) => {
+  const [data, setData] = useState<{ status: string; freshness?: string; ageS?: number | null; retrievedAt?: string; feedTimestamp?: number | null; vehicles: { id: string; at: [number, number]; routeId: string }[]; message?: string } | null>(null);
+  const load = () => { const pid=useApp.getState().project?.id; return api.get<typeof data>('/api/transit/realtime').then((d) => {
+    if(useApp.getState().project?.id!==pid)return;
     setData(d);
     setSource('rt-vehicles', d?.status === 'ok' ? fc(d.vehicles.map((v): Feature => ({ type: 'Feature', geometry: { type: 'Point', coordinates: v.at }, properties: { id: v.id, route: v.routeId } }))) : null);
-  }).catch(() => setData({ status: 'error', vehicles: [] }));
+  }).catch(()=>{if(useApp.getState().project?.id===pid){setData({status:'error',vehicles:[]});setSource('rt-vehicles',null);}}); };
   return (
     <Section title="Tempo reale (GTFS-RT)" defaultOpen={false}>
       <Button size="sm" icon="refresh" onClick={() => void load()}>Leggi posizioni veicoli</Button>
       {data?.status === 'not_configured' ? <p className="muted">URL GTFS-RT non configurato in Impostazioni: nessun dato live viene simulato.</p> : null}
-      {data?.status === 'ok' ? <p><ProvBadge kind="live" /> {data.vehicles.length} veicoli in servizio</p> : null}
+      {data?.status === 'ok' ? <><p>{data.freshness === 'recent' ? <ProvBadge kind="live" /> : <strong className="warn-line">{data.freshness === 'stale' ? 'Feed non aggiornato' : 'Data del feed non verificata'}</strong>} · {data.vehicles.length} posizioni nel feed</p><p className="muted">{data.feedTimestamp ? `Istante feed: ${new Date(data.feedTimestamp*1000).toLocaleString('it-IT')}` : 'Timestamp feed assente'}{data.ageS != null ? ` · età alla lettura ${Math.round(data.ageS/60)} min` : ''}. Ultima lettura: {data.retrievedAt ? new Date(data.retrievedAt).toLocaleString('it-IT') : 'non disponibile'}.</p></> : null}
       {data?.status === 'error' ? <p className="warn-line">{data.message ?? 'Feed non raggiungibile'}</p> : null}
     </Section>
   );
@@ -90,6 +94,12 @@ function LineEditor({ sel, upd, onDelete }: { sel: TransitRouteDesign; upd: (p: 
   const baseline = useApp((s) => s.baseline)!;
   const m = useMemo(() => lineMetrics(sel, baseline), [sel, baseline]);
   const spec = MODES[sel.mode];
+  const {time} = useProjectClock();
+  const [runtime,setRuntime]=useState<readonly TransitMetrics[]>(engine.lastSim?.metrics.transit??[]);
+  useEffect(()=>engine.onSim(frame=>setRuntime(frame?.metrics.transit??[])),[]);
+  const authoredLines=useApp(s=>s.network?.transit);
+  const lines=authoredLines??[];
+  const operational=runtime.find(r=>r.lineId===sel.id);
   return (
     <Section title={sel.name}>
       <div className="grid-2">
@@ -115,9 +125,17 @@ function LineEditor({ sel, upd, onDelete }: { sel: TransitRouteDesign; upd: (p: 
       <div className="stats-row"><Stat label="Bacino" value={n0(m.catchmentPop)} unit="abitanti" prov="estimated" /><Stat label="Saliti/giorno" value={n0(m.boardingsDay)} prov="estimated" /><Stat label="Riempimento punta" value={Math.round(m.loadFactorPeak * 100)} unit="%" /></div>
       <div className="stats-row"><Stat label="Vett·km/giorno" value={n0(m.vehKmDay)} /><Stat label="Costo esercizio" value={fmtEur(m.costYear)} unit="/anno" prov="estimated" /><Stat label="CO₂ evitata" value={n0(m.co2SavedTYear)} unit="t/anno" prov="estimated" /></div>
       {m.loadFactorPeak > 1 ? <p className="warn-line"><Icon name="warning" size={14} />Domanda stimata oltre la capacità in punta: aumenta la frequenza o la capacità dei veicoli.</p> : null}
+      <Field label="Sosta alle fermate"><NumberField ariaLabel="Sosta TPL" value={sel.dwellS??spec.dwellS} min={0} max={600} unit="s" onCommit={dwellS=>upd({dwellS})}/></Field>
+      <Button icon="play" onClick={()=>engine.simStart({mode:'microscopic',day:time.day,hour:time.hour,clock:getProjectClock(),dailyTrips:60000,scale:1,seed:42,scopeName:'Intero comune · TPL operativo'})}>Simula traffico e TPL</Button>
+      {operational && <><div className="stats-row"><Stat label="Mezzi attivi" value={operational.active}/><Stat label="Corse completate" value={operational.completed}/><Stat label="Saliti" value={operational.boarded}/><Stat label="In attesa" value={operational.waiting}/></div><div className="stats-row"><Stat label="Ritardo partenza" value={operational.meanDepartureDelayS.toFixed(1)} unit="s"/><Stat label="Attesa passeggeri" value={operational.passengerWaitS.toFixed(1)} unit="s"/><Stat label="Percorrenza effettiva" value={operational.meanTravelS.toFixed(1)} unit="s"/></div>{operational.issue&&<p role="alert" className="warn-line">{operational.issue}</p>}</>}
+      <p className="muted">Esercizio sul tracciato A → B. Domanda alle fermate: ipotesi esplicita in pax/h, zero se non inserita. I mezzi stradali rispettano traffico e semafori; i tracciati su sede propria usano velocità e soste impostate.</p>
       <ol className="steps">{sel.stops.map((s, i) => (
         <li key={s.id}><span className="pin">{i + 1}</span>
           <input className="text-field inline" defaultValue={s.name} aria-label={`Nome fermata ${i + 1}`} onBlur={(e) => e.target.value !== s.name && upd({ stops: sel.stops.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)) })} />
+          <NumberField ariaLabel={`Domanda fermata ${i+1}`} value={s.arrivalsPerHour??0} min={0} max={10000} unit="pax/h" onCommit={arrivalsPerHour=>upd({stops:sel.stops.map(st=>st.id===s.id?{...st,arrivalsPerHour}:st)})}/>
+          <Select ariaLabel={`Interscambio fermata ${i+1}`} value={s.transferTo?`${s.transferTo.lineId}|${s.transferTo.stopId}`:''} options={[{value:'',label:'Nessun interscambio'},...lines.filter(l=>l.id!==sel.id).flatMap(l=>l.stops.map(st=>({value:`${l.id}|${st.id}`,label:`${l.name} · ${st.name}`})))]} onChange={value=>{const [lineId,stopId]=value.split('|');upd({stops:sel.stops.map(st=>st.id===s.id?{...st,transferTo:value?{lineId:lineId!,stopId:stopId!,fraction:.5,walkS:120}:undefined}:st)});}}/>
+          {s.transferTo&&<><NumberField ariaLabel={`Quota interscambio ${i+1}`} value={s.transferTo.fraction*100} min={0} max={100} unit="%" onCommit={v=>upd({stops:sel.stops.map(st=>st.id===s.id?{...st,transferTo:{...s.transferTo!,fraction:v/100}}:st)})}/><NumberField ariaLabel={`Cammino interscambio ${i+1}`} value={s.transferTo.walkS} min={0} max={7200} unit="s ipotizzati" onCommit={walkS=>upd({stops:sel.stops.map(st=>st.id===s.id?{...st,transferTo:{...s.transferTo!,walkS}}:st)})}/></>}
+          <NumberField ariaLabel={`Quota discesa fermata ${i+1}`} value={(s.alightFraction??0)*100} min={0} max={100} unit="%" onCommit={v=>upd({stops:sel.stops.map(st=>st.id===s.id?{...st,alightFraction:v/100}:st)})}/>
           <button type="button" className="link" onClick={() => flyTo([s.at[0], s.at[1]], 18.5)}>vedi</button>
           <button type="button" className="link" onClick={() => upd({ stops: sel.stops.filter((x) => x.id !== s.id) })}>rimuovi</button></li>
       ))}</ol>

@@ -16,6 +16,7 @@ interface MapUiState {
   mpp: number;
   /** objects: furniture and signs align to the road, point markings centre on the lane. */
   snap: { node: boolean; edge: boolean; grid: boolean; angle: boolean; objects: boolean };
+  snapEnabled: boolean;
   gridM: number;
   /** Focus mode: tool rail and inspector hidden, map edge to edge. */
   focus: boolean;
@@ -29,12 +30,13 @@ export const useMapUi = create<MapUiState>(() => ({
   opacity: persisted.opacity ?? {},
   zoom: 15, center: [14.2745, 40.9416], pointer: null, ready: false, mpp: 1,
   snap: { node: true, edge: true, grid: false, angle: true, objects: true, ...(persisted.snap ?? {}) },
+  snapEnabled: persisted.snapEnabled ?? (persisted.snap ? Object.values(persisted.snap).some(Boolean) : true),
   gridM: persisted.gridM ?? 1,
   focus: false,
 }));
 
 useMapUi.subscribe((s) => {
-  try { localStorage.setItem('drip-urban:map', JSON.stringify({ basemap: s.basemap, visible: s.visible, opacity: s.opacity, snap: s.snap, gridM: s.gridM })); } catch { /* storage unavailable */ }
+  try { localStorage.setItem('drip-urban:map', JSON.stringify({ basemap: s.basemap, visible: s.visible, opacity: s.opacity, snap: s.snap, snapEnabled: s.snapEnabled, gridM: s.gridM })); } catch { /* storage unavailable */ }
 });
 
 let map: MLMap | null = null;

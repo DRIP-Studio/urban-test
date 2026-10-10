@@ -299,6 +299,30 @@ describe('existing sidewalks from building fronts', () => {
 });
 
 describe('approaches taken out of a signal plan', () => {
+  it('changing junction regulation removes the old plan and signal stop lines atomically, with undo', () => {
+    const h = new ScenarioHistory(baseline, scenario(), 't', ids);
+    const node = signalisableJunction(h.network);
+    const a = analyzeJunction(h.network, baseline.origin, node)!;
+    const plan = suggestSignalPlan(h.network, a);
+    h.commit({ type: 'signal.setPlan', payload: { plan, conflicts: a.incompatible } });
+    const roadId = a.arms[0]!.roadId;
+    h.commit({ type: 'junction.set', payload: { spec: { ...h.network.junctions[node]!, control: 'priority', minorRoadIds: [roadId] } } });
+    expect(Object.values(h.network.signalPlans).filter((p) => p.nodeId === node)).toHaveLength(0);
+    const lines = buildPhysicalModel(h.network, { origin: baseline.origin }).markings.filter((m) => m.nodeId === node && m.roadId === roadId);
+    expect(lines.some((m) => m.kind === 'give_way')).toBe(true);
+    expect(lines.some((m) => m.kind === 'stop_line')).toBe(false);
+    expect(signalHeads(h.network, baseline.origin).some((x) => x.nodeId === node)).toBe(false);
+    const g = buildGraph(h.network, new LocalFrame(baseline.origin), ctx);
+    const into = g.edges.find((e) => e.roadId === roadId && g.nodeIds[e.to] === node)!;
+    const out = g.edges.find((e) => e.roadId !== roadId && g.nodeIds[e.from] === node)!;
+    expect(junctionDelay(h.network, node, into, out)).toBe(5);
+    h.undo();
+    expect(h.network.signalPlans[plan.id]).toEqual(plan);
+    expect(h.network.junctions[node]!.control).toBe('signal');
+    h.commit({ type: 'signal.removePlan', payload: { planId: plan.id } });
+    expect(h.network.junctions[node]!.control).toBe('uncontrolled');
+    expect(buildPhysicalModel(h.network, { origin: baseline.origin }).markings.filter((m) => m.nodeId === node && m.kind === 'stop_line')).toHaveLength(0);
+  });
   it('give way: no heads, give-way line instead of stop line, no unserved group, back to signal restores', () => {
     const h = new ScenarioHistory(baseline, scenario(), 't', ids);
     const node = signalisableJunction(h.network);

@@ -1,9 +1,11 @@
+import { GeometryEditor } from './GeometryEditor';
+import { UnderpassEditor } from './UnderpassEditor';
 import type { BayPurpose, Marking, MarkingColor, MarkingKind, Road, RoadFeature, RoadFeatureKind, RoadStructure, TurnKind } from '@drip-urban/core';
 import { LocalFrame, geom, humpLimits } from '@drip-urban/core';
-import { commit, useApp } from '../state/store';
+import { commit, openDock, useApp } from '../state/store';
 import { CALMING } from '../tools/streetscape';
 import { useTool } from '../tools/toolState';
-import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, TextField, FieldGroup } from '../ui/controls';
+import { Button, Empty, Field, NumberField, Section, Segmented, Select, Stat, TextField, FieldGroup, Toggle } from '../ui/controls';
 
 /** Marking types with a small plan-view preview (white on asphalt). */
 type MkTool = MarkingKind | 'bollards';
@@ -140,6 +142,7 @@ export function MarkingInspector({ id }: { id: string }) {
   const m = net.markings?.[id];
   if (!m) return <Empty icon="info" title="Segnaletica non più presente" />;
   const def = MARKINGS.find((x) => x.kind === m.kind);
+  const roads=useApp((s)=>s.network?.roads ?? {});
   const set = (ch: Partial<Marking>) => commit('marking.set', { marking: { ...m, ...ch } });
   return (
     <>
@@ -151,6 +154,23 @@ export function MarkingInspector({ id }: { id: string }) {
       {m.kind === 'parking_bays' && m.bays ? <Field label="Destinazione"><Select<BayPurpose> value={m.bays.purpose ?? 'free'} ariaLabel="Destinazione" options={BAY_PURPOSE} onChange={(v) => set({ bays: { ...m.bays!, purpose: v } })} /></Field> : null}
       {m.kind === 'arrow' ? <Field label="Direzioni"><Select value={m.symbol ?? 'through'} ariaLabel="Direzioni" options={ARROWS} onChange={(v) => set({ symbol: v })} /></Field> : null}
       {m.kind.startsWith('line') ? <Field label="Larghezza striscia"><NumberField value={Math.round((m.widthM ?? 0.12) * 100)} unit="cm" min={10} max={50} step={1} decimals={0} ariaLabel="Larghezza" onCommit={(v) => set({ widthM: v / 100 })} /></Field> : null}
+      <div className="grid-2">
+        {m.kind==='line_dashed'||m.kind==='line_mixed'?<><Field label="Tratto · m"><NumberField value={m.dashM??3} min={.1} max={30} decimals={2} ariaLabel="Tratto segnaletica" onCommit={(dashM)=>set({dashM})}/></Field><Field label="Intervallo · m"><NumberField value={m.gapM??4.5} min={.05} max={30} decimals={2} ariaLabel="Intervallo segnaletica" onCommit={(gapM)=>set({gapM})}/></Field></>:null}
+        {m.kind==='line_double'||m.kind==='line_mixed'?<Field label="Distanza assi · m"><NumberField value={m.doubleSpacingM??.24} min={.05} max={3} decimals={2} ariaLabel="Spaziatura doppia linea" onCommit={(doubleSpacingM)=>set({doubleSpacingM})}/></Field>:null}
+        <Field label="Offset · m"><NumberField value={m.offsetM??0} min={-50} max={50} decimals={2} ariaLabel="Offset segnaletica" onCommit={(offsetM)=>set({offsetM})}/></Field>
+        <Field label="Scala"><NumberField value={m.scale??1} min={.1} max={20} decimals={2} ariaLabel="Scala segnaletica" onCommit={(scale)=>set({scale})}/></Field>
+      </div>
+      {['arrow','text','symbol'].includes(m.kind)?<><Toggle label="Ripeti lungo la geometria" checked={Boolean(m.repeatM)} onChange={(repeat)=>set({repeatM:repeat?20:undefined})}/>{m.repeatM?<Field label="Ripetizione · m"><NumberField value={m.repeatM} min={1} max={500} decimals={2} ariaLabel="Ripetizione segnaletica" onCommit={(repeatM)=>set({repeatM})}/></Field>:null}</>:null}
+      <Toggle label="Inverti direzione" checked={m.reverse??false} onChange={(reverse)=>set({reverse})}/>
+      {['hatch','zebra'].includes(m.kind)?<>
+        <div className="grid-2">{([['angleDeg','Angolo strisce',m.kind==='zebra'?0:45,-180,180],['stripeWidthM','Larghezza strisce',m.kind==='zebra'?.5:.3,.05,2],['spacingM','Passo strisce',1,.1,20],['borderM','Bordo',m.kind==='zebra'?0:.12,0,1]] as const).map(([key,label,fallback,min,max])=><Field key={key} label={`${label} · ${key==='angleDeg'?'°':'m'}`}><NumberField value={m.hatch?.[key]??fallback} min={min} max={max} decimals={2} ariaLabel={label} onCommit={(value)=>set({hatch:{angleDeg:m.kind==='zebra'?0:45,stripeWidthM:m.kind==='zebra'?.5:.3,spacingM:1,borderM:m.kind==='zebra'?0:.12,...m.hatch,[key]:value}})}/></Field>)}</div>
+        {m.kind==='zebra'&&m.geometry.length===2?<Button size="sm" onClick={()=>{const frame=new LocalFrame(useApp.getState().baseline!.origin),a=frame.toMetric(m.geometry[0]!),b=frame.toMetric(m.geometry[1]!),n=geom.leftNormal(geom.unit(geom.sub(b,a)));set({geometry:[frame.toLngLat(geom.add(a,geom.mul(n,-2))),frame.toLngLat(geom.add(b,geom.mul(n,-2))),frame.toLngLat(geom.add(b,geom.mul(n,2))),frame.toLngLat(geom.add(a,geom.mul(n,2)))]});}}>Converti in poligono libero</Button>:null}
+      </>:null}
+      {['line_solid','line_dashed','line_double','line_mixed','bus_lane','bike_lane'].includes(m.kind)?<>
+        <Select value={m.binding?.roadId??''} ariaLabel="Strada collegata segnaletica" options={[{value:'',label:'Geometria libera'},...Object.values(roads).map((r)=>({value:r.id,label:r.name||r.id}))]} onChange={(roadId)=>set({binding:roadId?{roadId,fromS:0,toS:20}:undefined})}/>
+        {m.binding?<><Select value={m.binding.laneId??''} ariaLabel="Corsia collegata segnaletica" options={[{value:'',label:'Asse stradale'},...roads[m.binding.roadId]!.lanes.map((l)=>({value:l.id,label:`Corsia ${l.index+1} · ${l.direction}`}))]} onChange={(laneId)=>set({binding:{...m.binding!,laneId:laneId||undefined}})}/><div className="grid-2"><Field label="Da progressiva"><NumberField value={m.binding.fromS} min={0} decimals={2} ariaLabel="Segnaletica da progressiva" onCommit={(fromS)=>set({binding:{...m.binding!,fromS}})}/></Field><Field label="A progressiva"><NumberField value={m.binding.toS} min={.1} decimals={2} ariaLabel="Segnaletica a progressiva" onCommit={(toS)=>set({binding:{...m.binding!,toS}})}/></Field></div></>:null}
+      </>:null}
+      {!m.binding?<GeometryEditor points={m.geometry} closed={['hatch','chevrons','box_junction','island'].includes(m.kind)||m.kind==='zebra'&&m.geometry.length>2} onCommit={(geometry)=>set({geometry})}/>:<p className="muted">Geometria derivata dalla strada e dalla corsia; segue le modifiche del progetto.</p>}
       <p className="muted">Larghezze di riferimento: 12 cm strade urbane, 15 cm extraurbane, 25 cm autostrade (art. 138 Reg.).</p>
     </Section>
     <div className="inspector-actions"><Button icon="trash" variant="danger" onClick={() => commit('marking.remove', { markingIds: [m.id] })}>Elimina</Button></div>
@@ -197,6 +217,7 @@ export function StructureSection({ road }: { road: Road }) {
   const s = road.structure;
   const set = (ch: Partial<RoadStructure> | null) => commit('road.setStructure', { roadIds: [road.id], structure: ch === null ? undefined : { type: 'viaduct', heightM: 7, layer: 1, piersEveryM: 30, ...s, ...ch } });
   return (
+    <>
     <Section title="Struttura (ponte, viadotto, galleria)" defaultOpen={!!s}>
       <Segmented<RoadStructure['type'] | 'none'> label="Struttura" size="sm" value={s?.type ?? 'none'} options={STRUCT}
         onChange={(v) => set(v === 'none' ? null : { type: v, layer: v === 'tunnel' ? -1 : Math.max(1, s?.layer ?? 1), heightM: v === 'tunnel' ? 8 : Math.max(5.5, s?.heightM ?? 7) })} />
@@ -210,20 +231,26 @@ export function StructureSection({ road }: { road: Road }) {
       {s && s.type !== 'tunnel' ? <p className="muted">Franco verticale sulle strade sottostanti ≥ 5,00 m <span className="mono">DM 5/11/2001 § 3.8</span>; barriere di sicurezza su impalcato <span className="mono">DM 21/6/2004</span>.</p> : null}
       {s?.type === 'tunnel' ? <p className="muted">Gallerie &gt; 500 m: requisiti di sicurezza <span className="mono">D.Lgs. 264/2006</span>; illuminazione <span className="mono">UNI 11095</span>.</p> : null}
     </Section>
+    <UnderpassEditor key={road.id} road={road}/>
+    </>
   );
 }
 
 /** Baseline building: size, floors, demolition / restore in the scenario (e.g. to place an imported model). */
 export function BuildingInspector({ id }: { id: string }) {
-  const b = useApp((s) => s.baseline?.buildings[id]);
+  const original = useApp((s) => s.baseline?.buildings[id]);
+  const style = useApp((s) => s.network?.buildingStyles?.[id]);
+  const b = original ? { ...original, ...style } : null;
   const net = useApp((s) => s.network)!;
   const origin = useApp((s) => s.baseline!.origin);
+  const materials = useApp((s) => s.catalogs?.materials.items ?? []);
   if (!b) return <Empty icon="info" title="Edificio non trovato" />;
   const f = new LocalFrame(origin);
   const ring = b.footprint.map((p) => f.toMetric(p) as geom.V);
   const area = geom.ringArea(ring);
   const h = b.heightM - b.minHeightM;
-  const floors = Math.max(1, Math.round(h / 3.2));
+  const floors = b.levels ?? Math.max(1, Math.round(h / 3.2));
+  const setStyle = (changes: object) => commit('building.style', { buildingId: id, style: { ...style, ...changes } });
   const removed = !!net.removedBuildings?.[id];
   return (
     <>
@@ -238,6 +265,17 @@ export function BuildingInspector({ id }: { id: string }) {
           <Stat label="Volume" value={Math.round(area * h).toLocaleString('it-IT')} unit="m³" />
           <Stat label="SUL (stima)" value={Math.round(area * floors).toLocaleString('it-IT')} unit="m²" />
         </div>
+        <div className="grid-2">
+          <Field label="Altezza progetto"><NumberField value={b.heightM} min={1} max={600} decimals={2} unit="m" ariaLabel="Altezza edificio" onCommit={(heightM) => setStyle({ heightM })} /></Field>
+          <Field label="Piani"><NumberField value={floors} min={1} max={200} decimals={0} ariaLabel="Piani edificio" onCommit={(levels) => setStyle({ levels })} /></Field>
+        </div>
+        <Select value={b.use ?? 'residential'} ariaLabel="Uso edificio" options={[{value:'residential',label:'Residenziale'},{value:'commercial',label:'Commerciale'},{value:'industrial',label:'Industriale'},{value:'public',label:'Servizio pubblico'}]} onChange={(use) => setStyle({use})} />
+        <Select value={b.roofShape ?? 'flat'} ariaLabel="Copertura edificio" options={[{value:'flat',label:'Terrazza piana'},{value:'gabled',label:'Due falde'},{value:'hipped',label:'Padiglione'}]} onChange={(roofShape) => setStyle({roofShape})} />
+        <Field label="Colore facciata"><input type="color" aria-label="Colore facciata" value={b.facadeColor ?? '#e4d3b4'} onChange={(e) => setStyle({facadeColor:e.target.value})} /></Field>
+        <Select value={b.facadeMaterial ?? ''} ariaLabel="Materiale facciata" options={[{value:'',label:'Procedurale'},...materials.filter((m) => m.id.startsWith('custom.')).map((m) => ({value:m.id,label:m.label}))]} onChange={(facadeMaterial) => setStyle({facadeMaterial:facadeMaterial || undefined})} />
+        <Select value={b.roofMaterial ?? ''} ariaLabel="Materiale tetto" options={[{value:'',label:'Procedurale'},...materials.filter((m) => m.id.startsWith('custom.')).map((m) => ({value:m.id,label:m.label}))]} onChange={(roofMaterial) => setStyle({roofMaterial:roofMaterial || undefined})} />
+        <Toggle label="Balconi procedurali" checked={b.balconies ?? false} onChange={(balconies) => setStyle({balconies})} />
+        <Button size="sm" onClick={() => openDock('materials')}>Editor materiali e texture</Button>
         <p className="muted">Fonte: {b.provenance.source}{b.provenance.kind === 'estimated' ? ' · altezza stimata' : ''}. Piani stimati a 3,20 m di interpiano.</p>
       </Section>
       <div className="inspector-actions">

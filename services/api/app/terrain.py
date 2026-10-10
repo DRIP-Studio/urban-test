@@ -205,11 +205,14 @@ MAX_POINTS = 40_000_000
 def read_las(data: bytes) -> tuple[list[float], list[float], list[float], list[int]]:
     """X, Y, Z and classification of a LAS 1.0–1.4 file (uncompressed). LAZ is refused."""
     import struct
+    import math
     if len(data) < 227 or data[:4] != b"LASF":
         raise ValueError("Non è un file LAS (firma LASF mancante)")
     vmaj, vmin = data[24], data[25]
     header_size, = struct.unpack_from("<H", data, 94)
     offset, = struct.unpack_from("<I", data, 96)
+    if vmaj != 1 or vmin > 4 or header_size < 227 or header_size > len(data) or offset < header_size or offset > len(data):
+        raise ValueError('Header/versione LAS non valida')
     fmt = data[104]
     if fmt & 0x80 or fmt & 0x40:
         raise ValueError("LAZ compresso non supportato: decomprimi in LAS")
@@ -224,7 +227,10 @@ def read_las(data: bytes) -> tuple[list[float], list[float], list[float], list[i
         raise ValueError(f"Formato punti LAS {fmt} non supportato")
     if count > MAX_POINTS:
         raise ValueError(f"Nuvola di {count:,} punti: oltre {MAX_POINTS:,}, ritaglia l'area o riduci la densità".replace(",", "."))
-    count = min(count, (len(data) - offset) // rec_len)
+    if rec_len < _LAS_CLASS_OFFSET[fmt] + 1 or count * rec_len > len(data) - offset:
+        raise ValueError('Record LAS troncati o dimensione non valida')
+    if any(not math.isfinite(v) for v in (sx,sy,sz,ox,oy,oz)) or min(sx,sy,sz) <= 0:
+        raise ValueError('Scala o offset LAS non validi')
     co = _LAS_CLASS_OFFSET[fmt]
     xs, ys, zs, cl = [], [], [], []
     for k in range(count):
@@ -234,6 +240,34 @@ def read_las(data: bytes) -> tuple[list[float], list[float], list[float], list[i
         xs.append(X * sx + ox); ys.append(Y * sy + oy); zs.append(Z * sz + oz)
         cl.append(c & 0x1F if fmt < 6 else c)
     return xs, ys, zs, cl
+
+
+def read_laz(data: bytes):
+    """Decode actual compressed LAZ using lazrs; retain compact numeric arrays, not boxed point objects."""
+    from io import BytesIO
+    from array import array
+    import laspy
+    import math
+    try:
+        with laspy.open(BytesIO(data)) as reader:
+            if not reader.header.are_points_compressed:
+                raise ValueError('Il file .laz non contiene punti compressi')
+            if reader.header.point_count > MAX_POINTS:
+                raise ValueError(f'Nuvola oltre {MAX_POINTS:,} punti: ritaglia la zona di lavoro')
+            if reader.header.point_format.id in (4,5,9,10):
+                raise ValueError('LAZ con waveform non supportato dal decoder lazrs; esporta punti senza waveform')
+            if any(not math.isfinite(float(v)) for v in (*reader.header.scales,*reader.header.offsets)) or min(reader.header.scales) <= 0:
+                raise ValueError('Scala o offset LAZ non validi')
+            xs,ys,zs,classes=array('d'),array('d'),array('d'),array('B')
+            for chunk in reader.chunk_iterator(250_000):
+                xs.extend(chunk.x);ys.extend(chunk.y);zs.extend(chunk.z);classes.extend(chunk.classification)
+            if len(xs) != reader.header.point_count:
+                raise ValueError('Punti LAZ troncati')
+            return xs,ys,zs,classes
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError('LAZ non decodificabile o danneggiato') from exc
 
 
 def read_xyz(text: str) -> tuple[list[float], list[float], list[float], list[int]]:

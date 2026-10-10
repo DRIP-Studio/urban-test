@@ -5,7 +5,7 @@ import { toast } from '../state/toasts';
 import { PavingLibrary } from './PavingLibrary';
 import { useMemo, useRef, useState } from 'react';
 import { ROAD_TEMPLATES, type AreaKind, type ZoneKind } from '@drip-urban/core';
-import { commit, select, useApp } from '../state/store';
+import { commit, newId, select, openDock, useApp } from '../state/store';
 import { useTool } from '../tools/toolState';
 import { toolById } from '../tools/registry';
 import { Button, Empty, Field, NumberField, Section, Select, TextField, Toggle } from '../ui/controls';
@@ -46,22 +46,29 @@ function ModelLibrary() {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [scale, setScale] = useState(1);
+  const [tilesUrl,setTilesUrl]=useState('');
+  const cityModels=useApp((s)=>s.network?.cityModels);
   const modelClear = useTool((s) => s.modelClear);
   const baseline = useApp((s) => s.baseline);
   const removed = Object.keys(useApp((s) => s.network?.removedBuildings) ?? {});
   if (!project) return null;
   const upload = async (f: File) => {
+    const scope = useApp.getState();
+    const isCurrent = () => useApp.getState().project?.id === project.id && useApp.getState().scenario?.id === scope.scenario?.id;
     setBusy(true);
     try {
       const buf = await f.arrayBuffer();
+      if (!isCurrent()) throw new Error('Progetto cambiato durante la lettura');
       const dims = gltfDims(buf);
       const fd = new FormData();
+      fd.append('pivot', JSON.stringify(dims.pivot));
       fd.append('file', f); fd.append('name', f.name.replace(/\.[^.]+$/, ''));
       fd.append('w', String(Math.max(0.05, dims.w))); fd.append('d', String(Math.max(0.05, dims.d))); fd.append('h', String(Math.max(0.05, dims.h))); fd.append('scale', String(scale));
       const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/models`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? `Errore ${res.status}`);
       const rec = await res.json() as { id: string; name: string };
       await loadModels();
+      if (!isCurrent()) return;
       useTool.setState({ furnitureId: `model:${rec.id}` });
       toast.success('Modello importato', `${rec.name}: ${(dims.w * scale).toFixed(1)} × ${(dims.d * scale).toFixed(1)} m, h ${(dims.h * scale).toFixed(1)} m · clic sulla mappa per posarlo`);
     } catch (e) { toast.error('Modello 3D', e instanceof Error ? e.message : String(e)); }
@@ -74,10 +81,14 @@ function ModelLibrary() {
         <Button icon="model3d" busy={busy} onClick={() => file.current?.click()}>Importa modello (.glb, .gltf)</Button>
         <Select value={String(scale)} ariaLabel="Unità del modello" onChange={(v) => setScale(Number(v))} options={[{ value: '1', label: 'metri' }, { value: '0.01', label: 'centimetri' }, { value: '0.001', label: 'millimetri' }, { value: '0.0254', label: 'pollici (SketchUp)' }]} />
       </div>
+      <Field label="Modello territoriale georeferenziato · 3D Tiles"><input type="url" className="text-field" value={tilesUrl} aria-label="URL 3D Tiles" placeholder="https://…/tileset.json" onChange={(e)=>setTilesUrl(e.target.value)} /></Field>
+      <Button size="sm" disabled={!tilesUrl.trim() || busy} onClick={()=>{void (async()=>{const scope=useApp.getState();const revision=JSON.stringify(scope.scenario?.operations);setBusy(true);try{const response=await fetch(tilesUrl);if(!response.ok)throw new Error(`HTTP ${response.status}`);const json=await response.json();if(!json.asset?.version||!json.root?.boundingVolume)throw new Error('Documento 3D Tiles non valido');const current=useApp.getState();if(current.project?.id!==scope.project?.id||current.scenario?.id!==scope.scenario?.id||JSON.stringify(current.scenario?.operations)!==revision)throw Error('Scenario cambiato durante la verifica del dataset');const result=commit('cityModel.set',{model:{id:newId('tiles'),name:new URL(tilesUrl).hostname,url:tilesUrl,enabled:true}});if(result.ok)setTilesUrl('');}catch(error){toast.error('Import 3D Tiles',String(error));}finally{setBusy(false);}})();}}>Collega modello reale</Button>
+      {Object.values(cityModels??{}).map((model)=><Toggle key={model.id} label={model.name} checked={model.enabled} onChange={(enabled)=>commit('cityModel.set',{model:{...model,enabled}})} />)}
+      <p className="muted">3D Tiles mantiene la georeferenziazione del dataset. Usa un URL accessibile dal browser e dati di cui possiedi i diritti; eventuali credenziali dipendono dal fornitore.</p>
       {list.map((m) => (
         <div key={m.id} className={`lib-row ${current === `model:${m.id}` ? 'is-on' : ''}`} role="button" tabIndex={0} onClick={() => useTool.setState({ furnitureId: `model:${m.id}` })}>
-          <Icon name="model3d" size={15} /><span>{m.name}</span><span className="hint">{(m.dims.w * m.scale).toFixed(1)}×{(m.dims.d * m.scale).toFixed(1)} m · {(m.sizeBytes / 1048576).toFixed(1)} MB</span>
-          <button type="button" className="link" onClick={(e) => { e.stopPropagation(); void api.del(`/api/projects/${encodeURIComponent(project.id)}/models/${m.id}`).then(loadModels); }}>elimina</button>
+          <Icon name="model3d" size={15} /><span>{m.name}{m.audit ? <small className="muted"> · {m.audit.triangles.toLocaleString('it-IT')} triangoli · {m.audit.materialCount} materiali{m.audit.warnings.length ? ` · ${m.audit.warnings.join(' · ')}` : ''}</small> : null}</span><span className="hint">{(m.dims.w * m.scale).toFixed(1)}×{(m.dims.d * m.scale).toFixed(1)} m · {(m.sizeBytes / 1048576).toFixed(1)} MB</span>
+          <button type="button" className="link" onClick={(e) => { e.stopPropagation(); void api.del(`/api/projects/${encodeURIComponent(project.id)}/models/${m.id}`).then(loadModels).catch((error: unknown) => toast.error('Modello 3D', String(error))); }}>elimina</button>
         </div>
       ))}
       <Toggle label="Libera l'area: demolisci gli edifici e rimuovi gli arredi sotto il modello" checked={modelClear} onChange={(v) => useTool.setState({ modelClear: v })} />
@@ -186,6 +197,7 @@ export function ToolSettings() {
     case 'furniture': return (
       <>
         <Section title="Posizionamento"><Field label="Rotazione aggiuntiva"><NumberField value={t.rotationDeg} unit="°" step={15} decimals={0} ariaLabel="Rotazione" onCommit={(v) => useTool.setState({ rotationDeg: v })} /></Field></Section>
+<Button icon="model3d" onClick={()=>openDock('assetLibrary')}>Asset manager</Button>
         <ModelLibrary />
         <FurnitureLibrary target="furnitureId" />
       </>

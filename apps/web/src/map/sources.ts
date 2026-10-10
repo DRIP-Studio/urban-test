@@ -1,4 +1,4 @@
-import { LocalFrame, geom, layoutSection, localDayMinutes, restrictionsOf, zoneActiveAt, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, SIM_STRIDE } from '@drip-urban/core';
+import { solidWorldPolygons, LocalFrame, geom, layoutSection, restrictionsOf, zoneActiveAt, type BuildingStyle, type Asset, type CityBaseline, type LngLat, type Network, type SimFrame, SIM_STRIDE, VEHICLE_SPECS } from '@drip-urban/core';
 import type { FurnitureItem } from '../api/types';
 import { vmsMessage } from '../traffic/live';
 import { vmsPageAt } from './ledPanels';
@@ -10,7 +10,7 @@ import { fc, type Feature, type LineString, type Point, type Polygon } from '../
 
 /** Sign stacks: plan view in icon pixels (96 px plates), 3D in metres (lower edge 2.20 m, art. 81 Reg. CdS). */
 export const POLE_STEM_PX = 40, PLATE_STEP_PX = 50;
-export const SIGN_BOTTOM_M = 2.2, SIGN_STEP_M = 0.66, SIGN_PLATE_M = 0.6;
+export const SIGN_BOTTOM_M = 2.2, SIGN_STEP_M = 0.96, SIGN_PLATE_M = 0.6;
 
 /** Smallest icon-size that keeps the object at least MIN_PX on screen (sprites are PX_PER_M px/m at ratio 2). */
 const MIN_PX = 30;
@@ -21,9 +21,10 @@ function minSpriteScale(item: FurnitureItem): number {
 const close = (r: readonly LngLat[]) => [...r.map((p) => [p[0], p[1]]), [r[0]![0], r[0]![1]]];
 
 /** Baseline buildings; those demolished in the scenario stay as dashed ghosts (selectable, to restore them). */
-export function buildingsFC(b: CityBaseline, removed?: Readonly<Record<string, true>>) {
-  return fc(Object.values(b.buildings).map((x): Feature<Polygon> => {
-    const look = buildingLook(x.id, x.heightM);
+export function buildingsFC(b: CityBaseline, removed?: Readonly<Record<string, true>>, styles?: Readonly<Record<string, BuildingStyle>>) {
+  return fc(Object.values(b.buildings).map((building): Feature<Polygon> => {
+    const x = { ...building, ...styles?.[building.id] };
+    const look = buildingLook(x.id, x.heightM, x);
     return {
       type: 'Feature', id: x.id, geometry: { type: 'Polygon', coordinates: [close(x.footprint)] },
       properties: { id: x.id, h: x.heightM, minH: x.minHeightM, name: x.name ?? null, c: look.facade, r: look.roof, rh: x.heightM + look.roofH, removed: !!removed?.[x.id] },
@@ -56,9 +57,9 @@ export function axesFC(net: Network, props: (roadId: string) => Record<string, u
 }
 
 export const ZONE_COLOR: Record<string, string> = { ztl: '#8b0209', pedestrian: '#2f7d5b', school: '#d9a441', zone30: '#5587a2', low_emission: '#6fae86', parking: '#7e8fa3', work: '#e8772e' };
-export function zonesFC(net: Network) {
+export function zonesFC(net: Network, at = { day: 1, minutes: 480, holiday: false }) {
   return fc(Object.values(net.zones).map((z): Feature<Polygon> => ({
-    type: 'Feature', id: z.id, geometry: { type: 'Polygon', coordinates: [close(z.polygon)] }, properties: { id: z.id, kind: z.kind, name: z.name, color: ZONE_COLOR[z.kind] ?? '#83b4d1' },
+    type: 'Feature', id: z.id, geometry: { type: 'Polygon', coordinates: [close(z.polygon)] }, properties: { id: z.id, kind: z.kind, name: z.name, active: zoneActiveAt(z, at.holiday ? 6 : at.day, at.minutes), color: ZONE_COLOR[z.kind] ?? '#83b4d1' },
   })));
 }
 
@@ -84,7 +85,7 @@ function disc(frame: LocalFrame, at: LngLat, r: number, n = 20): number[][] {
 }
 
 /** Furniture footprints at real size + point symbols for signs; signal heads separately. */
-export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<string, FurnitureItem>, signalStates?: ReadonlyMap<string, string>) {
+export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<string, FurnitureItem>, signalStates?: ReadonlyMap<string, string>, now = { day: 1, minutes: 480, holiday: false }) {
   const frame = new LocalFrame(origin);
   const fp: Feature<Polygon>[] = [];
   const pt: Feature<Point>[] = [];
@@ -93,7 +94,7 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
   // Signs on the same pole stack upwards in screen space; anchor stays the pole position.
   const poles = new Map<string, Asset[]>();
   for (const a of Object.values(net.assets)) {
-    if (!a.type.startsWith('it.sign.')) continue;
+    if (!a.type.startsWith('it.sign.') || a.state === 'removed') continue;
     const pole = (a.properties.poleId as string | undefined) ?? a.id;
     (poles.get(pole) ?? poles.set(pole, []).get(pole)!).push(a);
   }
@@ -113,28 +114,33 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
       const top = SIGN_BOTTOM_M + n * SIGN_STEP_M - 0.05;
       const c = frame.toMetric(foot.at);
       const ring = Array.from({ length: 10 }, (_, j) => { const t = (j / 10) * Math.PI * 2; const ll = frame.toLngLat([c[0] + 0.03 * Math.cos(t), c[1] + 0.03 * Math.sin(t)]); return [ll[0], ll[1]]; });
-      parts.push({ type: 'Feature', id: `pole:${poleId}`, geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]!]] }, properties: { id: `pole:${poleId}`, state: foot.state, material: 'steel', b: 0, h: top } });
+      parts.push({ type: 'Feature', id: `pole:${poleId}`, geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]!]] }, properties: { id: `pole:${poleId}`, state: foot.state, material: 'steel', b: foot.elevationM ?? 0, h: top + (foot.elevationM ?? 0) } });
     }
   }
   for (const a of Object.values(net.assets)) {
-    const base = { id: a.id, type: a.type, state: a.state, rot: a.rotationDeg };
+    const base = { id: a.id, type: a.type, state: a.state, rot: a.rotationDeg, scale: a.scale ?? 1 };
     if (a.type.startsWith('it.sign.')) {
       const { level, n } = levelOf.get(a.id) ?? { level: 0, n: 1 };
       pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, stack: n - level, off: [0, -(POLE_STEM_PX + level * PLATE_STEP_PX)] } });
-      if (a.state !== 'removed') signs3d.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { id: a.id, type: a.type, state: a.state, hm: SIGN_BOTTOM_M + level * SIGN_STEP_M } });
+      if (a.state !== 'removed') signs3d.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { id: a.id, type: a.type, state: a.state, hm: (a.elevationM ?? 0) + SIGN_BOTTOM_M + level * SIGN_STEP_M } });
       continue;
+    }
+    if(a.solid){
+      for(const [k,polygon] of solidWorldPolygons(a).entries()){
+        const feature:Feature<Polygon>={type:'Feature',id:`${a.id}::solid:${k}`,geometry:{type:'Polygon',coordinates:polygon.map(r=>[...r.map(p=>[p[0],p[1]]),[r[0]![0],r[0]![1]]])},properties:{...base,id:a.id,material:a.material??'concrete',b:a.elevationM??0,h:(a.elevationM??0)+a.solid.heightM*(a.scale??1),sprite:false}};
+        fp.push(feature);if(a.state!=='removed')parts.push(feature);
+      }continue;
     }
     const item = furniture.get(a.type);
     if (item?.led?.kind === 'vms') {
       // PMV: manual text or the live-traffic message (art. 78 Reg. CdS).
-      sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `vms:${String(a.properties.vmsPictogram ?? 'none')}:${encodeURIComponent(vmsPageAt(vmsMessage(a)))}` } });
+      sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `vms:${String(a.properties.vmsPictogram ?? 'none')}:${encodeURIComponent(vmsPageAt(vmsMessage(a), now.minutes * 60_000))}` } });
       continue;
     }
     if (item?.led) {
       // Variable-message panel of a ZTL gate: shows the zone state now (art. 7 CdS, varchi elettronici).
       const zone = net.zones[String(a.properties.zoneId ?? '')];
-      const now = localDayMinutes(new Date());
-      const on = zone ? zoneActiveAt(zone, now.day, now.minutes) : false;
+      const on = zone ? zoneActiveAt(zone, now.holiday ? 6 : now.day, now.minutes) : false;
       sig.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, icon: `led:${on ? 'on' : 'off'}` } });
       if (a.type === 'ztl.led_panel') continue;
     }
@@ -149,15 +155,16 @@ export function assetsFC(net: Network, origin: LngLat, furniture: ReadonlyMap<st
       continue;
     }
     const round = item.category === 'vegetation' || item.id === 'furniture.fountain' || item.id === 'furniture.bin' || item.id === 'furniture.bollard' || item.id === 'furniture.hydrant';
-    const ring = round ? disc(frame, a.at, Math.max(0.12, item.dims.w / 2)) : rect(frame, a.at, Math.max(0.15, item.dims.w), Math.max(0.15, item.dims.d), a.rotationDeg);
-    fp.push({ type: 'Feature', id: a.id, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { ...base, material: a.material ?? item.material, category: item.category, h: item.dims.h, sprite: true } });
+    const scale = a.scale ?? 1;
+    const ring = round ? disc(frame, a.at, Math.max(0.12, item.dims.w * scale / 2)) : rect(frame, a.at, Math.max(0.15, item.dims.w * scale), Math.max(0.15, item.dims.d * scale), a.rotationDeg);
+    fp.push({ type: 'Feature', id: a.id, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { ...base, material: a.material ?? item.material, category: item.category, h: item.dims.h * scale + (a.elevationM ?? 0), b: a.elevationM ?? 0, sprite: true } });
     if (a.state !== 'removed') {
       // One extrusion per part (pole, arm, lamp head…) for the tilted map: real base and top heights.
       const c = frame.toMetric(a.at), ang = (-a.rotationDeg * Math.PI) / 180, cs = Math.cos(ang), sn = Math.sin(ang);
       partPrints(item.model).forEach((pp, k) => {
-        const pts = pp.ring.map(([x, y]) => { const ll = frame.toLngLat([c[0] + x * cs - y * sn, c[1] + x * sn + y * cs]); return [ll[0], ll[1]]; });
+        const pts = pp.ring.map(([x, y]) => { const ll = frame.toLngLat([c[0] + scale * (x * cs - y * sn), c[1] + scale * (x * sn + y * cs)]); return [ll[0], ll[1]]; });
         const mat = pp.mat === 'foliage' && a.material ? a.material : pp.mat;
-        parts.push({ type: 'Feature', id: `${a.id}:${k}`, geometry: { type: 'Polygon', coordinates: [[...pts, pts[0]!]] }, properties: { id: `${a.id}:${k}`, assetId: a.id, state: a.state, material: mat, b: pp.base + (a.elevationM ?? 0), h: pp.top + (a.elevationM ?? 0) } });
+        parts.push({ type: 'Feature', id: `${a.id}:${k}`, geometry: { type: 'Polygon', coordinates: [[...pts, pts[0]!]] }, properties: { id: `${a.id}:${k}`, assetId: a.id, state: a.state, material: mat, b: pp.base * scale + (a.elevationM ?? 0), h: pp.top * scale + (a.elevationM ?? 0) } });
       });
     }
     pt.push({ type: 'Feature', id: a.id, geometry: { type: 'Point', coordinates: [a.at[0], a.at[1]] }, properties: { ...base, type: '', sprite: `furn:${item.id}${a.material && a.material !== item.material ? `:${a.material}` : ''}`, minK: minSpriteScale(item) } });
@@ -170,7 +177,7 @@ const CLS = VEHICLE_CLASSES;
  * Simulated vehicles as their real top view: one polygon per part (body, glass, roof, lights, wheels…)
  * with its colour and height range, so the tilted map extrudes them like small 3D models.
  */
-export function vehiclesFC(frame: SimFrame, origin: LngLat) {
+export function vehiclesFC(frame: SimFrame, origin: LngLat, detailBudget = 0) {
   const f = new LocalFrame(origin);
   const out: Feature<Polygon>[] = [];
   const d = frame.data;
@@ -180,10 +187,12 @@ export function vehiclesFC(frame: SimFrame, origin: LngLat) {
     const paint = paintsOf(cls)[paintIndex(cls, id)]!;
     const c = f.toMetric([d[i]!, d[i + 1]!]);
     const a = (-d[i + 2]! * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
-    vehiclePrints(cls).forEach((p, k) => {
+    const spec = VEHICLE_SPECS[cls];
+    const prints = n < detailBudget ? vehiclePrints(cls) : [{ ring: [[-spec.width / 2, -spec.length / 2], [spec.width / 2, -spec.length / 2], [spec.width / 2, spec.length / 2], [-spec.width / 2, spec.length / 2]] as [number, number][], mat: 'paint', base: 0.1, top: cls === 'bus' || cls === 'truck' ? 3.2 : cls === 'van' ? 2.3 : 1.4 }];
+    prints.forEach((p, k) => {
       const ring = p.ring.map(([x, y]) => { const ll = f.toLngLat([c[0] + x * ca - y * sa, c[1] + x * sa + y * ca]); return [ll[0], ll[1]]; });
       ring.push(ring[0]!);
-      out.push({ type: 'Feature', id: n * 64 + k, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { cls: d[i + 3]!, v: d[i + 4]!, c: colorOfPart(p.mat, paint), b: p.base, h: p.top } });
+      out.push({ type: 'Feature', id: `${id}:${k}`, geometry: { type: 'Polygon', coordinates: [ring] }, properties: { vehicleId: id, cls: d[i + 3]!, v: d[i + 4]!, c: colorOfPart(p.mat, paint), b: p.base, h: p.top } });
     });
   }
   return fc(out);
@@ -227,12 +236,12 @@ export function structuresFC(net: Network, origin: LngLat) {
   const out: Feature[] = [];
   for (const r of Object.values(net.roads)) {
     const st = r.structure;
-    if (!st || st.type === 'covered') continue;
+    if (!st) continue;
     const axis = r.axis.map((p) => f.toMetric(p));
     const w = Math.max(3, r.section.elements.reduce((a, e) => a + e.widthM, 0));
     const ring = geom.band(axis, w / 2 + 0.4, w / 2 + 0.4).map((p) => f.toLngLat(p));
     out.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [close(ring)] }, properties: { id: `st:${r.id}`, roadId: r.id, kind: st.type, h: st.heightM, layer: st.layer } });
-    if (st.type === 'tunnel') continue;
+    if (st.type === 'tunnel' || st.type === 'covered') continue;
     const len = geom.lengthOf(axis), step = st.piersEveryM ?? 25;
     for (let d = Math.min(step / 2, len / 2), k = 0; d < len; d += step, k++) {
       const { p, t } = geom.sampleAt(axis, d);

@@ -1,3 +1,4 @@
+import { getTwinCameraContext } from '../twin/cameraContext';
 /**
  * Elios tools: what the assistant can read and do in the workstation.
  *
@@ -5,7 +6,7 @@
  * undoable, autosaved — exactly like a click in the interface. Tools are declared with the OpenAPI
  * subset Gemini understands (type names in upper case).
  */
-import { LocalFrame, geom, type LngLat, type Road, type Zone } from '@drip-urban/core';
+import { LocalFrame, geom, type LngLat, type Road, type Zone, type Roundabout, type RoundaboutArmSpec, type JunctionControl } from '@drip-urban/core';
 import { api } from '../api/client';
 import { fitBounds, flyTo, getMap } from '../map/mapStore';
 import { plateOnPoleOps } from '../state/actions';
@@ -87,6 +88,7 @@ export function resolveRoads(args: Record<string, unknown>): Road[] {
 }
 
 function viewportBbox(): [number, number, number, number] | null {
+  if (useApp.getState().mode === 'twin') return getTwinCameraContext()?.viewport ?? null;
   const m = getMap();
   if (!m) return null;
   const b = m.getBounds();
@@ -129,17 +131,56 @@ const REGISTRY: EliosTool[] = [
     name: 'get_context', kind: 'read',
     description: 'Stato della postazione: progetto, scenario, modalità, selezione corrente con dettagli, area visibile, conteggi.',
     run() {
-      const { project, scenario, mode, selection, network, baseline } = state();
+      const { project, scenario, mode, selection, network, baseline, dock, failedOps } = state();
       const f = new LocalFrame(baseline.origin);
       const sel = selection ? {
         kind: selection.kind,
         items: selection.ids.slice(0, 20).map((id) => selection.kind === 'road' && network.roads[id] ? roadSummary(f, network.roads[id]!)
-          : selection.kind === 'asset' ? network.assets[id] : selection.kind === 'zone' ? network.zones[id] : selection.kind === 'node' ? { id, at: network.nodes[id]?.at, signal: Object.values(network.signalPlans).some((p) => p.nodeId === id) } : { id }),
+          : selection.kind === 'roundabout' ? network.roundabouts[id] : selection.kind === 'asset' ? network.assets[id] : selection.kind === 'zone' ? network.zones[id] : selection.kind === 'node' ? { id, at: network.nodes[id]?.at, signal: Object.values(network.signalPlans).some((p) => p.nodeId === id) } : { id }),
       } : null;
       return {
-        project: project.name, city: baseline.name, scenario: scenario?.name, scenarioIsBaseline: scenario?.isBaseline, mode, selection: sel, viewport: viewportBbox(),
+        project: project.name, city: baseline.name, scenario: scenario?.name, scenarioIsBaseline: scenario?.isBaseline, mode, selection: sel, viewport: viewportBbox(), twinCamera: mode === 'twin' ? getTwinCameraContext() : null,
+        openPanel: dock, failedOperations: failedOps.slice(0, 20), recentOperations: scenario?.operations.slice(-10).map((o) => ({ type: o.type, at: o.at })),
         counts: { roads: Object.keys(network.roads).length, assets: Object.keys(network.assets).length, zones: Object.keys(network.zones).length, signals: Object.keys(network.signalPlans).length, roundabouts: Object.keys(network.roundabouts).length },
       };
+    },
+  },
+  {
+    name: 'edit_roundabout', kind: 'write', label: 'Rotatoria modificata',
+    description: 'Modifica la rotatoria selezionata o indicata per id, compresi i parametri di un braccio. Ricalcola rete, geometria e segnaletica con una modifica validata annullabile. Non cambia il centro né elimina strade.',
+    parameters: OBJ({ roundaboutId: S('Id, oppure usa la rotatoria selezionata'), outerDiameterM: N('Diametro esterno in metri'), circulatoryWidthM: N('Larghezza anello, 6–12 m'), apronWidthM: N('Fascia sormontabile, 0–3 m'), lanes: N('1 o 2 corsie'), speedKmh: N('Velocità, 10–50 km/h'), armRoadId: S('Id della strada del braccio da modificare'), entryRadiusM: N('Raggio entrata, 4–40 m'), exitRadiusM: N('Raggio uscita, 4–40 m'), splitterLengthM: N('Lunghezza isola, 4–30 m'), splitterWidthM: N('Larghezza isola, 1,5–6 m'), splitter: { type: 'BOOLEAN' }, crossing: { type: 'BOOLEAN' } }),
+    run(a) {
+      const { network, selection } = state();
+      const id = String(a.roundaboutId || (selection?.kind === 'roundabout' ? selection.ids[0] : '') || '');
+      const rb = network.roundabouts[id];
+      if (!rb) throw new Error('Seleziona una rotatoria o indica un roundaboutId esistente');
+      const patch: Record<string, unknown> = {};
+      for (const k of ['outerDiameterM', 'circulatoryWidthM', 'apronWidthM', 'lanes', 'speedKmh']) if (a[k] !== undefined) patch[k] = a[k];
+      const armPatch: Record<string, unknown> = {};
+      for (const k of ['entryRadiusM', 'exitRadiusM', 'splitterLengthM', 'splitterWidthM', 'splitter', 'crossing']) if (a[k] !== undefined) armPatch[k] = a[k];
+      if (Object.keys(armPatch).length) {
+        if (!rb.arms.some((arm) => arm.roadId === a.armRoadId)) throw new Error('Indica armRoadId di un braccio della rotatoria');
+        patch.arms = rb.arms.map((arm) => arm.roadId === a.armRoadId ? { ...arm, ...armPatch } as RoundaboutArmSpec : arm);
+      }
+      if (!Object.keys(patch).length) throw new Error('Indica almeno un parametro da modificare');
+      must(commit('roundabout.update', { roundabout: { ...rb, ...patch } as Roundabout }));
+      return { roundaboutId: id, changed: Object.keys(patch), undoAvailable: true };
+    },
+  },
+  {
+    name: 'set_junction_control', kind: 'write', label: 'Regolazione incrocio modificata',
+    description: 'Sostituisce il controllo dell’incrocio con precedenza, STOP o non regolato. Elimina il piano semaforico precedente e aggiorna stop line, routing e DRIP Flow nello stesso commit annullabile.',
+    parameters: OBJ({ nodeId: S('Id incrocio, oppure nodo selezionato'), control: S('Nuova regolazione', { enum: ['priority', 'stop', 'uncontrolled'] }), minorRoadIds: ARR(S('Id strada che dà precedenza o si arresta'), 'Bracci secondari, obbligatori per precedenza/STOP') }, ['control']),
+    run(a) {
+      const { network, selection } = state();
+      const nodeId = String(a.nodeId || (selection?.kind === 'node' ? selection.ids[0] : '') || '');
+      if (!network.nodes[nodeId]) throw new Error('Seleziona un incrocio o indica nodeId esistente');
+      if (!['priority', 'stop', 'uncontrolled'].includes(String(a.control))) throw new Error('Controllo ammesso: priority, stop, uncontrolled');
+      const minorRoadIds = a.minorRoadIds ?? [];
+      if (!Array.isArray(minorRoadIds) || (a.control !== 'uncontrolled' && !minorRoadIds.length)) throw new Error('Indica minorRoadIds per i bracci che danno precedenza o si arrestano');
+      const prev = network.junctions[nodeId];
+      must(commit('junction.set', { spec: { ...prev, nodeId, control: a.control as JunctionControl, cornerRadiusM: prev?.cornerRadiusM ?? 4, crossingRoadIds: prev?.crossingRoadIds ?? [], minorRoadIds: a.control === 'uncontrolled' ? [] : minorRoadIds } }));
+      return { nodeId, control: a.control, signalControlRemoved: true, undoAvailable: true };
     },
   },
   {

@@ -122,15 +122,29 @@ def realtime_vehicles(url: str) -> dict:
     from google.transit import gtfs_realtime_pb2
 
     with httpx.Client(timeout=20, follow_redirects=True, headers={"User-Agent": SETTINGS.user_agent}) as c:
-        r = c.get(url)
-        r.raise_for_status()
+        with c.stream("GET", url) as response:
+            response.raise_for_status()
+            data = bytearray()
+            for chunk in response.iter_bytes():
+                data.extend(chunk)
+                if len(data) > 16 * 1024 * 1024:
+                    raise ValueError("Feed GTFS-RT oltre 16 MB")
     feed = gtfs_realtime_pb2.FeedMessage()
-    feed.ParseFromString(r.content)
+    feed.ParseFromString(bytes(data))
+    if not feed.IsInitialized():
+        raise ValueError("Feed GTFS-RT incompleto")
     vehicles = []
     for e in feed.entity:
         if e.HasField("vehicle") and e.vehicle.HasField("position"):
             v = e.vehicle
+            import math
+            if not math.isfinite(v.position.longitude) or not math.isfinite(v.position.latitude) or not -180 <= v.position.longitude <= 180 or not -90 <= v.position.latitude <= 90:
+                continue
             vehicles.append({"id": e.id, "routeId": v.trip.route_id, "tripId": v.trip.trip_id, "label": v.vehicle.label,
                              "at": [v.position.longitude, v.position.latitude], "bearing": v.position.bearing, "speedMps": v.position.speed,
                              "timestamp": v.timestamp})
-    return {"status": "ok", "provenance": "live", "source": url, "feedTimestamp": feed.header.timestamp, "vehicles": vehicles}
+    from datetime import datetime, timezone
+    retrieved = datetime.now(timezone.utc)
+    timestamp = feed.header.timestamp if feed.header.HasField("timestamp") else None
+    age = max(0, retrieved.timestamp() - timestamp) if timestamp is not None else None
+    return {"status": "ok", "provenance": "live", "source": url, "feedTimestamp": timestamp, "retrievedAt": retrieved.isoformat(), "ageS": age, "freshness": "unknown" if age is None else "stale" if age > 300 else "recent", "vehicles": vehicles}

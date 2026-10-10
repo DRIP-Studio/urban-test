@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.0.0 — simulazione municipale verificata, continuazione 2026-10-08
+
+- Solver dedicato, modalità microscopica/ibrida e rete completa indipendente dalla zona di lavoro.
+- Ambiti incrocio/corridoio/quartiere/distretto/poligono; LOD mappa, cache e id stabili; qualità Twin adattiva con diagnostica.
+- Backpressure annullabile allo smontaggio, conferme numerate; replay incrementale compatibile con structured clone.
+- Stress instradato fino a 50k, 120 s per modo, quattro transizioni; heap pagina/worker separati. Percorso storico a parti complete riproduce un blocco controllato, non l’evento esatto di crash.
+- [Misure e limiti](docs/performance/SIMULATION-2026-10-08.json). Il programma master prosegue nelle fasi successive.
+
+## 2.0.0 — scalabilità Flow del 2026-10-08
+
+- Budget e viewport del renderer separati da agenti e metriche della simulazione, snapshot transferable con backpressure.
+- Leader, adiacenze, piani e geometrie corsie indicizzati; cache routing bounded. Playback 1× corretto.
+- Twin: modelli dettagliati vicini limitati e punti GPU riusabili per i veicoli lontani.
+- Flow continua passando tra mappa e Twin; avvio durante reload/build accodato; qualità e giorno selezionabili.
+- Stress sintetico e regressioni: [handoff e limiti](docs/HANDOFF-SIMULATION-2026-10-08.md). Crash originale e simulazione completa di grandi comuni restano da certificare.
+
+## 2.0.0 — passata di affidabilità del 2026-10-08
+
+- Rotatorie: raggio d’uscita applicato al modello fisico; controlli di corsie, diametro isola, materiale, ellisse e larghezza spartitraffico. Valori non validi rifiutati con feedback, senza fingere che il modello sia cambiato.
+- Snap globale persistito con F9; preferenze per tipo conservate. OFF vale anche per arredo, rotatorie, marking e raccordi a nodi vicini. Comandi separati per nodi/estremi e assi.
+- Modifiche suggerite attraverso una pipeline unica: scheda mantenuta e nessun successo su commit rifiutato; tutti i commit mantengono undo/autosave.
+- Cambio regolazione incrocio e rimozione piano eliminano il vecchio controllo; Signal Studio distingue esplicitamente la lanterna nascosta dal controllo rimosso.
+- Flow attivo ricostruito dopo modifica rete mantenendo opzioni e pausa; tempo/metriche azzerati con notifica. Cambio progetto ferma il run precedente; cache delle stime invalidata.
+- Ricerca estesa a oggetti, segnali, superfici, zone, rotatorie e scenari; risposte geocoder obsolete ignorate.
+- Licenze: revoca/sospensione non diventano grace offline; feature vuote conservate; date malformate trattate come entitlement non valido. Ring avatar solo per entitlement qualificante; launcher mostra disponibilità reale o sconosciuta.
+- Elios: `edit_roundabout` e `set_junction_control`, con operazioni validate/annullabili e contesto di pannello, operazioni recenti e fallimenti.
+- Perimetro realizzato e richieste ancora aperte: [audit](docs/AUDIT-2026-10-08.md). Questo aggiornamento non dichiara completato l’intero ampliamento richiesto.
+
 ## 2.0.0 — aggiornamento del 2026-10-05
 
 ### Novità già nel branch, ora documentate
@@ -183,3 +211,8 @@ Ricostruzione da zero di DRIP Urban Planning Studio 53.0. Numerazione nuova; la 
 ### Distribuzione e test
 - `Avvia DRIP Urban.bat`: ambiente Python locale, server unico su 127.0.0.1:8765, apertura del browser.
 - Test: core 23, web 8, API 9, end-to-end 9 (con baseline visive).
+
+
+### Upgrade master — verifiche finali2026-10-09
+
+LOD spaziale edifici/strade, separazione batch opachi/trasparenti e riuso GLTF invariati; routing TPL temporale direzionale; AI GIS/scenari/semafori e sottopassi nativi; import LAZ reale e freschezza GTFS; export HTML/WebM affidabile e camera cinematografica corretta. Suite browser43+4 opt-in separati passata; stress50k software e RTX5070 per5 min per modo passati. Rapporto RELEASE-READINESS-2026-10-09.md con limiti e blocchi esterni.

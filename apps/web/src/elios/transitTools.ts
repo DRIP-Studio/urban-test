@@ -1,12 +1,15 @@
+import {captureEliosScope} from './scope';
+import {engine} from '../engine/engine';
+import {getProjectTime} from '../state/projectTime';
+import type {Route} from '@drip-urban/core';
 import { LocalFrame, geom } from '@drip-urban/core';
 import { usePicks } from '../tools/picks';
-import { MODES, lineMetrics, proposeBikeStations, type TransitMode } from '../transit/model';
+import { defaultLine, MODES, lineMetrics, proposeBikeStations, type TransitMode } from '../transit/model';
 import { newId, setMode, useApp } from '../state/store';
 import { registerEliosTools } from './tools';
 
 const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'OBJECT', properties, required });
 const sid = () => useApp.getState().scenario?.id ?? 'baseline';
-const waitFor = async (pred: () => boolean, ms = 8000) => { const t0 = Date.now(); while (!pred() && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 150)); };
 
 registerEliosTools([
   {
@@ -18,29 +21,19 @@ registerEliosTools([
       peakHeadwayMin: { type: 'NUMBER', description: 'Minuti tra le corse in punta' }, autoStops: { type: 'BOOLEAN', description: 'Fermate automatiche alla distanza tipica del modo' },
     }, ['mode', 'points']),
     async run(a) {
-      const pts = (a.points as [number, number][]).map((p) => [Number(p[0]), Number(p[1])] as [number, number]);
-      if (pts.length < 2) throw new Error('Servono almeno due punti');
-      const before = new Set((usePicks.getState().transit.design?.[sid()] ?? []).map((r) => r.id));
-      usePicks.setState({ newLineMode: a.mode as TransitMode });
-      setMode('transit');
-      usePicks.getState().addTransitRoute(pts);
-      await waitFor(() => (usePicks.getState().transit.design?.[sid()] ?? []).some((r) => !before.has(r.id)));
-      const st = usePicks.getState();
-      const list = st.transit.design?.[sid()] ?? [];
-      const line = list.find((r) => !before.has(r.id));
-      if (!line) throw new Error('Linea non creata');
-      const b = useApp.getState().baseline!;
-      const f = new LocalFrame(b.origin);
-      let next = { ...line, ...(a.name ? { name: String(a.name) } : {}) };
-      if (a.peakHeadwayMin) next = { ...next, headways: { ...next.headways, peak: Number(a.peakHeadwayMin) } };
-      if (a.autoStops) {
-        const axis = next.line.map((p) => f.toMetric(p) as geom.V);
-        const L = geom.lengthOf(axis), n = Math.max(1, Math.round(L / MODES[next.mode].stopSpacingM));
-        next = { ...next, stops: Array.from({ length: n + 1 }, (_, i) => ({ id: newId('st'), name: `Fermata ${i + 1}`, at: f.toLngLat(geom.sampleAt(axis, (L * i) / n).p) })) };
-      }
-      await st.saveTransit({ ...st.transit, design: { ...(st.transit.design ?? {}), [sid()]: list.map((r) => (r.id === line.id ? next : r)) } });
-      const m = lineMetrics(next, b);
-      return { lineId: next.id, lengthKm: Math.round(m.lengthKm * 100) / 100, stops: next.stops.length, fleet: m.fleet, boardingsDayEstimate: m.boardingsDay, costYearEur: m.costYear };
+      const guard=captureEliosScope(),initial=useApp.getState(),mode=a.mode as TransitMode;
+      if(!initial.baseline||!initial.network||!MODES[mode])throw Error('Progetto o modo non disponibile');
+      if(!Array.isArray(a.points)||a.points.length<2||a.points.some(p=>!Array.isArray(p)||p.length!==2||p.some(v=>typeof v!=='number'||!Number.isFinite(v))||Math.abs(p[0])>180||Math.abs(p[1])>90))throw Error('Servono almeno due punti WGS84 validi');
+      let pts=(a.points as [number,number][]).map(p=>[...p] as [number,number]);
+      if(MODES[mode].onRoad){const departure=getProjectTime();const result=await engine.job<{project:Route}>('compareRoute',{from:pts[0],to:pts.at(-1),via:pts.slice(1,-1),ctx:{mode:mode==='tram'?'tram':'bus',...departure}});guard.assert();if(!result.project.found||result.project.line.length<2)throw Error('Percorso TPL stradale non connesso: modifica gli estremi o la rete');pts=result.project.line.map(p=>[...p]);}
+      const b=initial.baseline,f=new LocalFrame(b.origin),list=initial.network.transit??[];
+      let next=defaultLine(newId('tl'),mode,pts,list.filter(r=>r.mode===mode).length);
+      if(a.name)next={...next,name:String(a.name)};
+      if(a.peakHeadwayMin!==undefined)next={...next,headways:{...next.headways,peak:Number(a.peakHeadwayMin)}};
+      if(a.autoStops){const axis=next.line.map(p=>f.toMetric(p) as geom.V),length=geom.lengthOf(axis),count=Math.max(1,Math.round(length/MODES[mode].stopSpacingM));next={...next,stops:Array.from({length:count+1},(_,i)=>({id:newId('st'),name:`Fermata ${i+1}`,at:f.toLngLat(geom.sampleAt(axis,length*i/count).p)}))};}
+      const result=guard.commit('transit.set',{lines:[...list,next]});if(!result.ok)throw Error(result.issues.map(i=>i.message).join(' · '));
+      usePicks.setState({selectedRouteId:next.id});setMode('transit');const metrics=lineMetrics(next,b);
+      return{lineId:next.id,lengthKm:metrics.lengthKm,stops:next.stops.length,fleet:metrics.fleet,boardingsDayEstimate:metrics.boardingsDay,costYearEur:metrics.costYear,method:'Linea su grafo accessibile o sede propria; domanda stimata di pianificazione, non passeggeri misurati. Operazione unica annullabile.'};
     },
   },
   {

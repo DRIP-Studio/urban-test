@@ -4,6 +4,19 @@ import type { Lane, LngLat, Network, SignalPhase, SignalPlan, TurnKind } from '.
 import { armKey, buildJunction } from '../physical/junction';
 import { layoutSection } from '../physical/section';
 import { MetricCache, vehicularArms, type Arm } from '../physical/topology';
+import { windowActive } from './restrictions';
+
+const activeProgrammeCache = new WeakMap<SignalPlan, { key: string; result: SignalPlan }>();
+export function activeSignalPlan(plan: SignalPlan, at?: { day: number; minutes: number; holiday?: boolean }): SignalPlan {
+  if (!at || !plan.programmes?.length) return plan;
+  const key = `${at.holiday ? 6 : at.day}:${Math.floor(at.minutes)}`;
+  const cached = activeProgrammeCache.get(plan);
+  if (cached?.key === key) return cached.result;
+  const programme = plan.programmes.find((p) => windowActive(p.schedule, at.holiday ? 6 : at.day, at.minutes));
+  const result = programme ? { ...plan, cycleS: programme.cycleS, offsetS: programme.offsetS, phases: programme.phases } : plan;
+  activeProgrammeCache.set(plan, { key, result });
+  return result;
+}
 
 export interface Movement {
   readonly id: string;
@@ -400,7 +413,8 @@ export function groupDemand(a: JunctionAnalysis, flows: readonly { roadId: strin
 }
 
 /** Signal state of a group (optionally of one turn of it) at time t (s) — simulation, map, Twin. */
-export function signalState(plan: SignalPlan, groupId: string, t: number, turn?: TurnKind): 'green' | 'yellow' | 'red' {
+export function signalState(plan: SignalPlan, groupId: string, t: number, turn?: TurnKind, at?: { day: number; minutes: number; holiday?: boolean }): 'green' | 'yellow' | 'red' {
+  plan = activeSignalPlan(plan, at);
   let s = (((t - plan.offsetS) % plan.cycleS) + plan.cycleS) % plan.cycleS;
   const on = (ph: SignalPhase) => ph.greenGroups.includes(groupId) && (!turn || !ph.greenMovements?.[groupId] || ph.greenMovements[groupId]!.includes(turn));
   for (const ph of plan.phases) {
@@ -414,7 +428,8 @@ export function signalState(plan: SignalPlan, groupId: string, t: number, turn?:
 }
 
 /** Pedestrian signal (Italian 3-aspect: red / yellow / green). */
-export function pedestrianState(plan: SignalPlan, roadId: string, t: number): 'green' | 'yellow' | 'red' {
+export function pedestrianState(plan: SignalPlan, roadId: string, t: number, at?: { day: number; minutes: number; holiday?: boolean }): 'green' | 'yellow' | 'red' {
+  plan = activeSignalPlan(plan, at);
   let s = (((t - plan.offsetS) % plan.cycleS) + plan.cycleS) % plan.cycleS;
   for (const ph of plan.phases) {
     const on = ph.pedestrianRoadIds.includes(roadId);

@@ -62,12 +62,17 @@ export const featureRemove = defineOperation<{ readonly featureIds: readonly str
 export const markingSet = defineOperation<{ readonly marking: Marking }>({
   type: 'marking.set',
   label: (p) => `Segnaletica orizzontale: ${p.marking.kind}`,
-  validate(_net, p) {
+  validate(net, p) {
     const m = p.marking;
     const min = m.kind === 'hatch' || m.kind === 'box_junction' ? 3 : 2;
     if (m.geometry.length < min || !m.geometry.every(okLL)) return [err('marking.geometry', `Geometria non valida (minimo ${min} punti)`)];
     if (m.kind === 'text' && !(m.text && m.text.trim().length >= 1 && m.text.length <= 12)) return [err('marking.text', 'Scritta di 1–12 caratteri')];
     if (m.widthM !== undefined && !(m.widthM > 0.05 && m.widthM <= 1)) return [err('marking.width', 'Larghezza striscia 5–100 cm')];
+    const ranges = {dashM:[.1,30],gapM:[.05,30],doubleSpacingM:[.05,3],offsetM:[-50,50],scale:[.1,20],repeatM:[1,500]};
+    for(const [key,[low,high]] of Object.entries(ranges)) { const v=m[key as keyof typeof ranges];if(v!==undefined&&(!Number.isFinite(v)||v<low!||v>high!))return[err('marking.parameter',`${key} fuori intervallo`)]; }
+    if(m.hatch && (!Object.values(m.hatch).every(Number.isFinite) || m.hatch.stripeWidthM<.05 || m.hatch.stripeWidthM>2 || m.hatch.spacingM<m.hatch.stripeWidthM || m.hatch.spacingM>20 || m.hatch.borderM<0 || m.hatch.borderM>1))return[err('marking.hatch','Parametri zebratura non validi')];
+    if(m.binding) { const r=net.roads[m.binding.roadId];if(!r || m.binding.laneId && !r.lanes.some((l)=>l.id===m.binding!.laneId) || !Number.isFinite(m.binding.fromS)||!Number.isFinite(m.binding.toS)||m.binding.fromS<0||m.binding.toS<=m.binding.fromS)return[err('marking.binding','Collegamento corsia o progressive non validi')]; }
+
     return [];
   },
   apply: (net, p) => ({ ...net, markings: { ...(net.markings ?? {}), [p.marking.id]: p.marking } }),
@@ -91,6 +96,7 @@ export const roadSetStructure = defineOperation<{ readonly roadIds: readonly str
   validate(net, p) {
     if (!p.roadIds.length || p.roadIds.some((id) => !net.roads[id])) return [err('road.missing', 'Strada inesistente')];
     const s = p.structure;
+    if (s && !['bridge','viaduct','tunnel','covered'].includes(s.type))return [err('structure.type','Tipo struttura non valido')];
     if (s && !(s.heightM >= 0 && s.heightM <= 80 && Number.isInteger(s.layer) && Math.abs(s.layer) <= 5)) return [err('structure.values', 'Altezza 0–80 m, livello intero −5…5')];
     if (s && (s.type === 'bridge' || s.type === 'viaduct') && s.heightM < 5.0) return [warn('structure.clearance', `Franco ${s.heightM.toFixed(1)} m: per strade sottostanti servono di norma ≥ 5,00 m (DM 5/11/2001)`)];
     return [];
@@ -99,8 +105,10 @@ export const roadSetStructure = defineOperation<{ readonly roadIds: readonly str
     const roads = { ...net.roads };
     for (const id of p.roadIds) {
       const r = roads[id]!;
-      const { structure: _s, ...rest } = r;
-      roads[id] = { ...(p.structure ? { ...rest, structure: p.structure } : rest), provenance: { ...r.provenance, structure: { kind: 'project', source: 'DRIP Urban scenario' } } } as Road;
+      const { structure: _s, ...source } = r;
+      const passage=_s?.underpass;
+      const rest=passage?{...source,...passage.previousTraffic,...(passage.previousVertical!==undefined?{vertical:passage.previousVertical??undefined}:{})}:source;
+      roads[id] = { ...(p.structure ? { ...rest, structure: p.structure } : rest), provenance: { ...rest.provenance, structure: { kind: 'project', source: 'DRIP Urban scenario' } } } as Road;
     }
     return { ...net, roads };
   },

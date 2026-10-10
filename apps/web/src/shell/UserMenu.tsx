@@ -23,7 +23,7 @@ const SUBSCRIBED = new Set(['active', 'offline_grace']);
 export function Avatar({ name, picture, size = 'md' }: { name: string; picture?: string | null; size?: 'md' | 'lg' }) {
   const license = useSession((s) => s.license);
   const [broken, setBroken] = useState<string | null>(null);
-  const ring = license && SUBSCRIBED.has(license.status) ? 'is-subscribed' : license?.status === 'trialing' ? 'is-trial' : '';
+  const ring = license && license.source !== 'trial' && license.plan !== 'trial' && license.features.length > 0 && SUBSCRIBED.has(license.status) ? 'is-subscribed' : license?.status === 'trialing' ? 'is-trial' : '';
   return (
     <span className={`avatar avatar-${size} ${ring}`}>
       {picture && broken !== picture ? <img src={picture} alt="" referrerPolicy="no-referrer" onError={() => setBroken(picture)} /> : initials(name)}
@@ -51,6 +51,7 @@ export function UserMenu() {
             <Avatar name={user.name} picture={user.picture} size="lg" />
             <div><strong>{user.name}</strong><span>{ROLE_IT[user.role] ?? user.role} · {user.provider === 'open' ? 'postazione singola' : user.providerLabel ?? (user.provider === 'local' ? 'accesso locale' : user.provider)}</span></div>
           </div>
+          {user.email ? <p className="um-note">{user.email}</p> : null}
           {license ? <div className="um-head"><span className="plan-chip">{license.planLabel}</span><span>{license.status === 'trialing' ? `${license.daysLeft ?? 0} giorni di prova` : license.validUntil ? `fino al ${new Date(license.validUntil).toLocaleDateString('it-IT')}` : ''}</span></div> : null}
           {user.provider === 'local' ? <PhotoControls hasPhoto={!!user.picture} /> : user.provider !== 'open' ? <p className="um-note">La foto si cambia dal profilo DRIP ID.</p> : null}
           <div className="menu-sep" />

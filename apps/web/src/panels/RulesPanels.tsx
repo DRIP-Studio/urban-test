@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
+import { useProjectClock } from '../state/projectTime';
 import {
-  LocalFrame, localDayMinutes, osmRestrictions, restrictionSign, restrictionsOf, zoneActiveAt, zoneGates,
+  LocalFrame, osmRestrictions, restrictionSign, restrictionsOf, zoneActiveAt, zoneGates,
   type Asset, type Lane, type Road, type RoadRestrictions, type Zone, type ZoneKind,
 } from '@drip-urban/core';
 import { deleteSelection } from '../state/actions';
@@ -18,7 +19,7 @@ const ZONE_KINDS: { value: ZoneKind; label: string }[] = [
   { value: 'ztl', label: 'ZTL' }, { value: 'pedestrian', label: 'Area pedonale' }, { value: 'school', label: 'Strada scolastica' }, { value: 'zone30', label: 'Zona 30' },
   { value: 'low_emission', label: 'Basse emissioni' }, { value: 'parking', label: 'Zona sosta' }, { value: 'work', label: 'Cantiere / chiusura' },
 ];
-const MODE_LABEL: Record<string, string> = { car: 'Auto', truck: 'Mezzi pesanti', bus: 'Bus', tram: 'Tram', bike: 'Bici', walk: 'Pedoni', emergency: 'Emergenza' };
+const MODE_LABEL: Record<string, string> = { motorcycle: 'Moto', car: 'Auto', truck: 'Mezzi pesanti', bus: 'Bus', tram: 'Tram', bike: 'Bici', walk: 'Pedoni', emergency: 'Emergenza' };
 const PERMITS = ['Residenti', 'Disabili (CUDE)', 'Taxi', 'NCC', 'Veicoli elettrici', 'Car sharing', 'Carico/scarico', 'Medici in visita', 'Forze dell\'ordine', 'Ospiti strutture ricettive'];
 
 /** ZTL / zone: weekly schedule with several windows, permits, delivery windows, gates with LED panels. */
@@ -26,8 +27,8 @@ export function ZoneInspector({ zone }: { zone: Zone }) {
   const net = useApp((s) => s.network)!;
   const baseline = useApp((s) => s.baseline)!;
   const set = (changes: Partial<Zone>) => commit('zone.set', { zone: { ...zone, ...changes } });
-  const now = localDayMinutes(new Date());
-  const active = zoneActiveAt(zone, now.day, now.minutes);
+  const { time: now } = useProjectClock();
+  const active = zoneActiveAt(zone, now.holiday ? 6 : now.day, now.minutes);
   const gates = Object.values(net.assets).filter((a) => a.properties.zoneId === zone.id && a.state !== 'removed');
   const timed = zone.kind === 'ztl' || zone.kind === 'school' || zone.kind === 'pedestrian' || zone.kind === 'work' || zone.kind === 'low_emission';
   const generateGates = () => generateZoneGates(zone);

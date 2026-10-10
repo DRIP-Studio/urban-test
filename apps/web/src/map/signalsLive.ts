@@ -1,4 +1,5 @@
-import { pedestrianState, signalState, type SignalHead, type SignalPlan } from '@drip-urban/core';
+import { getProjectTime, useProjectTime } from '../state/projectTime';
+import { pedestrianState, signalState, type SignalHead, type SignalPlan, type TurnKind } from '@drip-urban/core';
 import { engine } from '../engine/engine';
 import { fc, type Feature } from '../engine/geojson';
 import { useApp } from '../state/store';
@@ -10,14 +11,19 @@ import { setSource } from './mapStore';
  * preview, otherwise they are drawn switched off (equipment only).
  */
 let heads: readonly SignalHead[] = [];
-let simT: number | null = null;
+
 let preview: { plan: SignalPlan; t: number } | null = null;
 
+export function liveSignalAspect(plan:SignalPlan,groupId:string,turn?:TurnKind):string|null{
+ const signal=engine.lastSim?.signals.find(s=>s.planId===plan.id&&s.groupId===groupId);
+ return signal?(turn?signal.turns?.[turn]??signal.state:signal.state):null;
+}
 function stateOf(h: SignalHead, plans: Readonly<Record<string, SignalPlan>>): string {
   const plan = preview && preview.plan.nodeId === h.nodeId ? preview.plan : plans[h.planId];
-  const t = preview && preview.plan.nodeId === h.nodeId ? preview.t : simT;
+  const t = preview && preview.plan.nodeId === h.nodeId ? preview.t : getProjectTime().seconds;
   if (!plan || t === null) return 'off';
-  return h.groupId.startsWith('ped:') ? pedestrianState(plan, h.groupId.slice(4), t) : signalState(plan, h.groupId, t, h.turn);
+  const live=preview&&preview.plan.nodeId===h.nodeId?null:liveSignalAspect(plan,h.groupId,h.turn);if(live)return live;
+  return h.groupId.startsWith('ped:') ? pedestrianState(plan, h.groupId.slice(4), t, getProjectTime()) : signalState(plan, h.groupId, t, h.turn, getProjectTime());
 }
 
 export function renderSignalHeads(): void {
@@ -34,4 +40,8 @@ export function setSignalPreview(p: { plan: SignalPlan; t: number } | null): voi
 }
 
 engine.onPhysical((m) => { heads = m.diff.heads; renderSignalHeads(); });
-engine.onSim((f) => { simT = f ? f.metrics.t : null; renderSignalHeads(); });
+useProjectTime.subscribe((s, previous) => { if (Math.floor(s.elapsedS) !== Math.floor(previous.elapsedS)) renderSignalHeads(); });
+
+useApp.subscribe((s, previous) => { if (s.network?.clock !== previous.network?.clock) renderSignalHeads(); });
+
+engine.onSim(()=>renderSignalHeads());

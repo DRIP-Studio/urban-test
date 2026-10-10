@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  OperationRejected, ScenarioHistory, ScenarioReadOnly,
+  networkAtWorksDate, OperationRejected, ScenarioHistory, ScenarioReadOnly,
   type CityBaseline, type Issue, type Network, type Operation,
 } from '@drip-urban/core';
 import { api, ApiError } from '../api/client';
@@ -113,9 +113,10 @@ async function loadCatalogs(): Promise<void> {
 const pendingKey = (pid: string, sid: string) => `drip-urban:pending:${pid}:${sid}`;
 
 let opening: string | null = null;
-export async function openProject(pid: string): Promise<void> {
+export async function openProject(pid: string, preserveSimulation = false): Promise<void> {
   if (opening === pid) return;
   opening = pid;
+  if (!preserveSimulation) engine.simStop();
   set({ loading: 'Apertura progetto', loadError: null });
   try {
     const project = await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(pid)}`);
@@ -125,7 +126,7 @@ export async function openProject(pid: string): Promise<void> {
     if (project.large) set({ loading: 'Caricamento della zona di lavoro' });
     const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(pid)}/baseline?rev=${project.baselineRevision ?? 0}${area}`);
     set({ loading: 'Costruzione del modello fisico' });
-    await engine.init(baseline);
+    await engine.init(baseline, preserveSimulation);
     set({ project, baseline, loading: null, mode: 'design', tool: 'select', selection: null, dock: null });
     await selectScenario(project.activeScenarioId || project.scenarios.find((s) => !s.isBaseline)?.id || 'baseline');
     void import('./sidewalks').then((m) => m.initSidewalks());
@@ -161,13 +162,15 @@ export async function reloadBaseline(): Promise<void> {
 }
 
 export function closeProject(): void {
+  engine.simStop();
   set({ project: null, baseline: null, scenario: null, history: null, network: null, selection: null, physStats: null, failedOps: [] });
 }
 
 export async function refreshProject(): Promise<void> {
   const p = get().project;
   if (!p) return;
-  set({ project: await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(p.id)}`) });
+  const project=await api.get<ProjectDetail>(`/api/projects/${encodeURIComponent(p.id)}`);
+  if(get().project?.id===p.id)set({project});
 }
 
 export async function selectScenario(sid: string): Promise<void> {
@@ -197,16 +200,23 @@ export async function selectScenario(sid: string): Promise<void> {
   if (project.activeScenarioId !== sid) void api.patch(`/api/projects/${encodeURIComponent(project.id)}`, { activeScenarioId: sid }).catch(() => undefined);
 }
 
+let worksDateResolver:()=>string|undefined=()=>undefined;
+export function setWorksDateResolver(resolve:()=>string|undefined){worksDateResolver=resolve;}
 function syncFromHistory(): void {
   const h = get().history;
   if (!h) return;
+  const previous=get().network?.clock,next=h.network.clock;
+  const sameClock=previous?.anchor===next?.anchor&&previous?.timeZone===next?.timeZone&&previous?.holiday===next?.holiday;
+  const date=sameClock?worksDateResolver():undefined;
   set((s) => ({
-    network: h.network, netVersion: s.netVersion + 1, canUndo: h.canUndo, canRedo: h.canRedo,
+    network: networkAtWorksDate(h.network,date), netVersion: s.netVersion + 1, canUndo: h.canUndo, canRedo: h.canRedo,
     undoLabel: h.undoEntry?.label ?? null, redoLabel: h.redoEntry?.label ?? null,
     scenario: s.scenario ? { ...s.scenario, operations: h.scenario.operations } : s.scenario,
   }));
-  engine.build(h.scenario.operations);
+  engine.build(h.scenario.operations,date);
 }
+
+export function refreshWorksDate(date:string){const h=get().history;if(!h?.network.works?.length)return;set(s=>({network:networkAtWorksDate(h.network,date),netVersion:s.netVersion+1}));engine.build(h.scenario.operations,date);}
 
 engine.onPhysical((m) => set({ physStats: m.stats, failedOps: m.failed }));
 
@@ -222,7 +232,11 @@ export function onCommit(l: CommitListener): () => void { commitListeners.add(l)
 
 export function commit<P>(type: string, payload: P, opts: { silent?: boolean } = {}): CommitResult {
   const h = get().history;
-  if (!h) return { ok: false, issues: [] };
+  if (!h) {
+    const message = 'Apri un progetto e uno scenario modificabile prima di applicare questa azione.';
+    if (!opts.silent) toast.warn('Nessuno scenario attivo', message);
+    return { ok: false, issues: [{ code: 'scenario.missing', severity: 'error', message }] };
+  }
   try {
     const before = h.network;
     const { warnings } = h.commit({ type, payload });
@@ -386,5 +400,13 @@ export async function moveWorkArea(bbox: readonly [number, number, number, numbe
   await flushSave();
   await api.patch(`/api/projects/${encodeURIComponent(project.id)}`, { workArea: bbox });
   set({ project: null });
-  await openProject(project.id);
+  await openProject(project.id, true);
 }
+
+// The catalogue is a read projection; authored materials live only in the scenario network.
+useApp.subscribe((state, previous) => {
+  if (state.catalogs && state.network?.materials !== previous.network?.materials) {
+    const stock = state.catalogs.materials.items.filter((item) => !item.id.startsWith('custom.'));
+    useApp.setState({ catalogs: { ...state.catalogs, materials: { ...state.catalogs.materials, items: [...stock, ...Object.values(state.network?.materials ?? {})] } } });
+  }
+});

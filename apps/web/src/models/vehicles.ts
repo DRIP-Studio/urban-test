@@ -7,8 +7,9 @@ import { partFaces, partPrints, type PartPrint } from './parts';
  * The 2D map draws their top view part by part (extruded when tilted); the Twin loads them as
  * glTF built in memory, one model per class and paint.
  */
-export type VehicleClass = 'car' | 'van' | 'truck' | 'bus' | 'emergency';
-export const VEHICLE_CLASSES: readonly VehicleClass[] = ['car', 'van', 'truck', 'bus', 'emergency'];
+import type { VehicleClass } from '@drip-urban/core';
+export type { VehicleClass } from '@drip-urban/core';
+export const VEHICLE_CLASSES: readonly VehicleClass[] = ['car', 'van', 'truck', 'bus', 'emergency','tram','train','ferry'];
 
 export const VEHICLE_COLORS: Record<string, string> = {
   glass: '#26323c', tyre: '#1a1a1b', rim: '#9da2a8', trim: '#2b2d31', chrome: '#b9bec4', headlight: '#f3f1e4', taillight: '#b3261e', indicator: '#f0a020',
@@ -119,7 +120,13 @@ function ambulance(): P[] {
   ];
 }
 
-export const VEHICLE_PARTS: Record<VehicleClass, P[]> = { car: car(), van: van(), truck: truck(), bus: bus(), emergency: ambulance() };
+function railVehicle(length:number,width:number):P[]{
+ const parts:P[]=[];const n=Math.ceil(length/15),module=length/n;
+ for(let k=0;k<n;k++){const y=-length/2+module*(k+.5);parts.push(box(0,y,.35,width,module-.35,2.7,'bus_body'),box(0,y,1.4,width+.02,module-1,1,'glass'),box(0,y,2.5,width+.03,module-.7,.25,'bus_body'),box(0,y,.8,width+.04,module-.6,.2,'bus_stripe'));for(const x of [-width/2,width/2]){for(let j=0;j<3;j++)parts.push(box(x,y-module/2+1+j*(module-2)/3,.7,.04,.85,1.9,'bus_body'));}parts.push(...pair(width/2-.25,x=>[...wheel(x,y-module/3,.35,.2),...wheel(x,y+module/3,.35,.2)]));}
+ return parts;
+}
+function ferry():P[]{return[box(0,0,0,5,16,1.1,'bus_skirt'),box(0,0,1.1,4.2,12,1.8,'bus_body'),box(0,3,1.5,4.25,3,1,'glass'),box(0,0,2.9,4.8,13,.2,'bus_body'),box(0,-3,3.1,1,1,1.5,'trim')];}
+export const VEHICLE_PARTS: Record<VehicleClass, P[]> = { car: car(), van: van(), truck: truck(), bus: bus(), emergency: ambulance(),tram:railVehicle(32,2.4),train:railVehicle(60,2.8),ferry:ferry() };
 
 export function paintsOf(cls: VehicleClass): readonly string[] {
   return cls === 'car' ? CAR_PAINTS : cls === 'van' ? VAN_PAINTS : cls === 'truck' ? TRUCK_PAINTS : ['#ffffff'];
@@ -133,8 +140,11 @@ export function colorOfPart(mat: string, paint: string): string {
 }
 
 /** Top view rings (vehicle-local metres) sorted bottom-up, for the 2D map. */
+const printCache = new Map<VehicleClass, PartPrint[]>();
 export function vehiclePrints(cls: VehicleClass): PartPrint[] {
-  return [...partPrints(VEHICLE_PARTS[cls])].sort((a, b) => a.top - b.top);
+  let prints = printCache.get(cls);
+  if (!prints) { prints = [...partPrints(VEHICLE_PARTS[cls])].sort((a, b) => a.top - b.top); printCache.set(cls, prints); }
+  return prints;
 }
 
 // ------------------------------------------------------------------ glTF (Twin)
@@ -168,8 +178,9 @@ function hexRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }) as [number, number, number];
 }
 
-function buildGlb(groups: { mat: string; color: string; pos: number[]; nor: number[] }[]): ArrayBuffer {
+export function buildGlb(groups: { mat: string; color: string; pos: number[]; nor: number[]; uv?: number[]; roughness?: number; metallic?: number; opacity?: number; emissive?: number; image?: string; normalImage?: string }[], namedNodes = false): ArrayBuffer {
   const chunks: Float32Array[] = [];
+  const images: object[] = [], textures: object[] = [];
   const accessors: object[] = [], bufferViews: object[] = [], materials: object[] = [], primitives: object[] = [];
   let offset = 0;
   for (const g of groups) {
@@ -185,16 +196,21 @@ function buildGlb(groups: { mat: string; color: string; pos: number[]; nor: numb
     const count = pos.length / 3;
     accessors.push({ bufferView: bufferViews.length - 2, componentType: 5126, count, type: 'VEC3', min, max });
     accessors.push({ bufferView: bufferViews.length - 1, componentType: 5126, count, type: 'VEC3' });
+    let uvAccessor: number | undefined;
+    if (g.uv) { const uv=new Float32Array(g.uv);bufferViews.push({buffer:0,byteOffset:offset,byteLength:uv.byteLength,target:34962});chunks.push(uv);offset+=uv.byteLength;uvAccessor=accessors.length;accessors.push({bufferView:bufferViews.length-1,componentType:5126,count,type:'VEC2'}); }
+    const texture = (url: string) => { images.push({uri:url});textures.push({source:images.length-1,sampler:0});return {index:textures.length-1}; };
     const glass = g.mat === 'glass', lamp = /light|led|lens|indicator/.test(g.mat), metal = g.mat === 'paint' || g.mat === 'chrome' || g.mat === 'rim';
     materials.push({
-      pbrMetallicRoughness: { baseColorFactor: [...hexRgb(g.color), glass ? 0.82 : 1], metallicFactor: metal ? 0.45 : 0.05, roughnessFactor: glass ? 0.08 : g.mat === 'tyre' ? 0.9 : metal ? 0.32 : 0.6 },
+      pbrMetallicRoughness: { baseColorFactor: [...hexRgb(g.color), g.opacity ?? (glass ? 0.82 : 1)], metallicFactor: g.metallic ?? (metal ? 0.45 : 0.05), roughnessFactor: g.roughness ?? (glass ? 0.08 : g.mat === 'tyre' ? 0.9 : metal ? 0.32 : 0.6), ...(g.image ? {baseColorTexture:texture(g.image)} : {}) },
       ...(lamp ? { emissiveFactor: hexRgb(g.color).map((c) => c * 0.6) } : {}),
-      ...(glass ? { alphaMode: 'BLEND' } : {}),
+      ...(g.normalImage ? {normalTexture:texture(g.normalImage)} : {}),
+      ...(g.emissive ? {emissiveFactor:hexRgb(g.color).map((c)=>c*g.emissive!)} : {}),
+      ...(glass || (g.opacity ?? 1) < 1 ? { alphaMode: 'BLEND' } : {}),
       doubleSided: true,
     });
-    primitives.push({ attributes: { POSITION: accessors.length - 2, NORMAL: accessors.length - 1 }, material: materials.length - 1, mode: 4 });
+    primitives.push({ attributes: { POSITION: accessors.length - (g.uv ? 3 : 2), NORMAL: accessors.length - (g.uv ? 2 : 1), ...(uvAccessor !== undefined ? {TEXCOORD_0:uvAccessor} : {}) }, material: materials.length - 1, mode: 4 });
   }
-  const json = { asset: { version: '2.0', generator: 'DRIP Urban vehicles' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }], meshes: [{ primitives }], materials, accessors, bufferViews, buffers: [{ byteLength: offset }] };
+  const json = { asset: { version: '2.0', generator: 'DRIP Urban vehicles' }, scene: 0, scenes: [{ nodes: namedNodes ? primitives.map((_, i) => i) : [0] }], nodes: namedNodes ? groups.filter(g => g.pos.length).map((g, i) => ({ mesh: i, name: g.mat })) : [{ mesh: 0 }], meshes: namedNodes ? primitives.map(primitive => ({ primitives: [primitive] })) : [{ primitives }], materials, images, textures, samplers: [{magFilter:9729,minFilter:9987,wrapS:10497,wrapT:10497}], accessors, bufferViews, buffers: [{ byteLength: offset }] };
   const enc = new TextEncoder().encode(JSON.stringify(json));
   const jsonLen = Math.ceil(enc.length / 4) * 4;
   const binLen = Math.ceil(offset / 4) * 4;

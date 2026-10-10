@@ -220,6 +220,10 @@ def convert_city(city: dict, baseline_id: str, name: str, bbox: list[float] | No
             "heightM": float(b.get("height_m") or 10.5), "minHeightM": float(b.get("min_height_m") or 0),
             **({"name": b["name"]} if b.get("name") else {}),
             "provenance": _provenance(b.get("provenance"), "osm"),
+            **({"levels": b["levels"]} if b.get("levels") else {}),
+            **({"roofShape": (b.get("tags") or {})["roof:shape"]} if (b.get("tags") or {}).get("roof:shape") in {"flat", "gabled", "hipped"} else {}),
+            **({"facadeColor": (b.get("tags") or {})["building:colour"]} if str((b.get("tags") or {}).get("building:colour", "")).startswith("#") else {}),
+            **({"use": "commercial"} if b.get("building_class") in {"commercial", "retail"} else {"use": "industrial"} if b.get("building_class") in {"industrial", "warehouse"} else {}),
         }
 
     features: dict[str, dict] = {}

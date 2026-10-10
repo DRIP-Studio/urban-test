@@ -23,7 +23,7 @@ describe('glTF size', () => {
     expect(d.w).toBeCloseTo(4); expect(d.h).toBeCloseTo(3); expect(d.d).toBeCloseTo(1);
   });
 
-  it('falls back to 2 m when the model has no positions', () => {
-    expect(gltfDims(glb({ asset: { version: '2.0' } }))).toEqual({ w: 2, d: 2, h: 2 });
+  it('rejects a model without usable geometry', () => {
+    expect(() => gltfDims(glb({ asset: { version: '2.0' } }))).toThrow('POSITION');
   });
 });

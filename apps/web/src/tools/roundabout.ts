@@ -75,8 +75,8 @@ export function createRoundabout(): void {
 }
 
 /** Junction centre within 14 px (≥ 3 vehicular roads), else the free point. */
-function anchorAt(idx: NetworkIndex | null, at: LngLat, mpp: number): { center: LngLat; nodeId: string | null } {
-  if (!idx) return { center: at, nodeId: null };
+function anchorAt(idx: NetworkIndex | null, at: LngLat, mpp: number, disabled = false): { center: LngLat; nodeId: string | null } {
+  if (!idx || disabled || !useMapUi.getState().snapEnabled || !useMapUi.getState().snap.node) return { center: at, nodeId: null };
   const n = idx.nearestNode(idx.frame.toMetric(at) as never, 14 * mpp);
   if (n) {
     const deg = Object.values(idx.net.roads).filter((r) => r.from === n.id || r.to === n.id).length;
@@ -91,14 +91,14 @@ export const roundaboutTool: ToolHandler = {
   move(e, ctx) {
     const cur = useTool.getState().rb;
     if (cur?.placed) return;
-    const a = anchorAt(ctx.index(), e.lngLat, useMapUi.getState().mpp);
+    const a = anchorAt(ctx.index(), e.lngLat, useMapUi.getState().mpp, e.alt);
     const next: Pending = { ...DEFAULT_RB, ...(cur ?? {}), ...a, placed: false };
     useTool.setState({ rb: next });
     drawPreview(next);
   },
   click(e, ctx) {
     const cur = useTool.getState().rb;
-    const a = anchorAt(ctx.index(), e.lngLat, useMapUi.getState().mpp);
+    const a = anchorAt(ctx.index(), e.lngLat, useMapUi.getState().mpp, e.alt);
     const next: Pending = { ...DEFAULT_RB, ...(cur ?? {}), ...a, placed: true };
     useTool.setState({ rb: next });
     drawPreview(next);

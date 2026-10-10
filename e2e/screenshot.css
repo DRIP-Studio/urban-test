@@ -1,2 +1,5 @@
 /* Values that change on every run (compute time, save clock) are hidden in visual baselines. */
 [title^="Modello fisico"], .topbar [role="status"] { visibility: hidden !important; }
+
+/* The project date defaults to today; retain the clock layout but mask this variable text. */
+.project-timeline input[type="date"], .project-timeline .timeline-day { color: transparent !important; }

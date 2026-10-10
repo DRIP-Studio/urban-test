@@ -33,6 +33,16 @@ function segX(a: V, b: V, c: V, d: V): number | null {
   return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
 }
 
+/** Includes crossing segments even if neither endpoint nor the road midpoint is inside the polygon. */
+export function axisTouchesZone(axis: readonly LngLat[], polygon: readonly LngLat[]): boolean {
+  const line = axis as readonly V[], ring = polygon as readonly V[];
+  if (line.some((p) => inside(p, ring))) return true;
+  for (let i = 1; i < line.length; i++) for (let k = 0; k < ring.length; k++) {
+    if (segX(line[i - 1]!, line[i]!, ring[k]!, ring[(k + 1) % ring.length]!) !== null) return true;
+  }
+  return false;
+}
+
 /**
  * Entry points of a zone (varchi ZTL): every vehicular road whose axis crosses the boundary.
  * The gate stands `setbackM` outside the boundary, facing traffic about to enter.

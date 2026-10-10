@@ -48,6 +48,10 @@ def test_large_project_loads_a_work_area_and_an_overview(client):
     assert 0 < len(sub["roads"]) < total / 5  # 3 × 3 km of 10 × 10 km (+150 m)
     assert all(n in sub["nodes"] for rd in sub["roads"].values() for n in (rd["from"], rd["to"]))
     assert sub["fullBbox"] == _city()["bbox"] and sub["buildings"]
+    municipal = client.get(f"/api/projects/{pid}/simulation-network").json()
+    assert len(municipal["roads"]) == total
+    assert municipal["buildings"] == {} and municipal["features"] == {}
+    assert all(n in municipal["nodes"] for rd in municipal["roads"].values() for n in (rd["from"], rd["to"]))
     ov = client.get(f"/api/projects/{pid}/overview").json()
     assert len(ov["features"]) == total
     # The work area is clamped to 36 km² and to the project.

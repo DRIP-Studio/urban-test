@@ -98,7 +98,7 @@ export const markingTool: ToolHandler = {
     // Centre on the clicked lane (object snap); otherwise exactly where clicked.
     const lane = objectSnap(e) ? layoutSection(road).elements.find((x) => x.el.kind === 'lane' && x.right <= off && off <= x.left) : undefined;
     const c = lane ? (lane.left + lane.right) / 2 : off;
-    const at: geom.V = [near.at[0] - tan[1] * c, near.at[1] + tan[0] * c];
+    const at: geom.V = objectSnap(e) ? [near.at[0] - tan[1] * c, near.at[1] + tan[0] * c] : p;
     saveMarking([{ at: idx.frame.toLngLat(at) }, { at: idx.frame.toLngLat([at[0] + tan[0] * sign, at[1] + tan[1] * sign]) }]);
   },
 };

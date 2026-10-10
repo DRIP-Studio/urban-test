@@ -99,20 +99,19 @@ export class NetworkIndex {
 
 /** Snap a pointer position. `from` enables angle snapping for drawing tools. */
 /** Objects (furniture, signs, point markings) align to the road unless Alt is held or object snap is off. */
-export const objectSnap = (e: { alt: boolean }): boolean => !e.alt && useMapUi.getState().snap.objects;
+export const objectSnap = (e: { alt: boolean }): boolean => !e.alt && useMapUi.getState().snapEnabled && useMapUi.getState().snap.objects;
 
-/** Every snap on or off at once (F9, as in CAD): if any is on, all go off. */
+/** Master switch (F9) suspends all snapping while retaining each snap type preference. */
 export function toggleAllSnaps(): boolean {
-  const s = useMapUi.getState().snap;
-  const on = !(s.node || s.edge || s.objects || s.grid || s.angle);
-  useMapUi.setState({ snap: { ...s, node: on, edge: on, objects: on, angle: on, grid: on ? s.grid : false } });
+  const on = !useMapUi.getState().snapEnabled;
+  useMapUi.setState({ snapEnabled: on });
   return on;
 }
 
 export function snap(map: MLMap, idx: NetworkIndex, lngLat: LngLat, opts: { from?: LngLat; disable?: boolean } = {}): SnapResult {
   const s = useMapUi.getState();
   const free: SnapResult = { at: lngLat, kind: 'free' };
-  if (opts.disable) return free;
+  if (opts.disable || !s.snapEnabled) return free;
   const mpp = s.mpp;
   const p = idx.frame.toMetric(lngLat) as geom.V;
   // Anywhere on a roundabout (ring or island): attach to the ring centre line at that bearing,
@@ -138,7 +137,7 @@ export function snap(map: MLMap, idx: NetworkIndex, lngLat: LngLat, opts: { from
     // Attaching a few metres from an existing junction would leave a road stub shorter than the
     // junction itself (the geometry folds): join the junction instead.
     const merge = Math.max(MERGE_M, 10 * mpp);
-    if (r && (r.along < merge || r.length - r.along < merge)) {
+    if (s.snap.node && r && (r.along < merge || r.length - r.along < merge)) {
       const road = idx.net.roads[r.id]!;
       const nid = r.along < merge ? road.from : road.to;
       return { at: idx.net.nodes[nid]!.at, kind: 'node', nodeId: nid };

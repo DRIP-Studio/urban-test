@@ -1,3 +1,4 @@
+import {designAlignment} from './civil';
 import { LocalFrame } from '../geo/projection';
 import { lengthOf, sampleAt, type V } from '../geo/polyline';
 import type { LngLat, Road } from '../model/types';
@@ -12,7 +13,7 @@ import { verticalRules } from './vertical';
  * report is a verification aid, not a design of the transition curves.
  */
 export interface AlignmentElement {
-  readonly kind: 'tangent' | 'curve';
+  readonly kind: 'tangent' | 'curve' | 'clothoid';
   readonly s0: number;
   readonly s1: number;
   readonly lengthM: number;
@@ -66,7 +67,7 @@ const fmt = (v: number, d = 0) => v.toFixed(d).replace('.', ',');
 export function horizontalAlignment(road: Road, origin: LngLat): HorizontalAlignment {
   const f = new LocalFrame(origin);
   const pts = road.axis.map((q) => f.toMetric(q) as V);
-  const L = lengthOf(pts);
+  const L = road.alignment?road.alignment.elements.reduce((sum,e)=>sum+e.lengthM,0):lengthOf(pts);
   const rules = verticalRules(road);
   const V = rules.designSpeedKmh;
   const qMax = URBAN(road) ? 0.05 : 0.07;
@@ -78,7 +79,7 @@ export function horizontalAlignment(road: Road, origin: LngLat): HorizontalAlign
   for (let i = 0; i <= n; i++) { const { t } = sampleAt(pts, (L * i) / n); head.push(Math.atan2(t[1], t[0])); }
   for (let i = 1; i < head.length; i++) { while (head[i]! - head[i - 1]! > Math.PI) head[i]! -= 2 * Math.PI; while (head[i]! - head[i - 1]! < -Math.PI) head[i]! += 2 * Math.PI; }
   const w = Math.max(1, Math.round(6 / step));
-  const curvature = head.map((_, i) => {
+  let curvature = head.map((_, i) => {
     const a = Math.max(0, i - w), b = Math.min(head.length - 1, i + w);
     const ds = ((b - a) * L) / n;
     return { s: (L * i) / n, k: ds > 0 ? (head[b]! - head[a]!) / ds : 0 };
@@ -113,10 +114,21 @@ export function horizontalAlignment(road: Road, origin: LngLat): HorizontalAlign
   }
   pushTangent(last, L);
 
+  if(road.alignment){
+    const analytical=designAlignment(road.axis[0]!,road.alignment);
+    curvature=[{s:0,k:0},...analytical.samples.map(p=>({s:p.station,k:-p.curvature}))];
+    elements.length=0;let station=0;
+    for(const e of road.alignment.elements){const k0=e.kind==='arc'?(e.turn==='left'?-1:1)/e.radiusM!:e.kind==='clothoid'?e.startCurvature!:0,k1=e.kind==='clothoid'?e.endCurvature!:k0,maxK=Math.max(Math.abs(k0),Math.abs(k1)),R=maxK?1/maxK:Infinity,D=rules.stoppingDistanceM;
+      curvature.push({s:station,k:-k0});curvature.push({s:station+e.lengthM,k:-k1});
+      const q=R<=rMin?qMax*100:Math.max(2.5,qMax*100-((qMax*100-2.5)*(R-rMin))/(1.5*rMin));
+      elements.push({kind:e.kind==='tangent'?'tangent':e.kind==='clothoid'?'clothoid':'curve',s0:station,s1:station+e.lengthM,lengthM:e.lengthM,...(maxK?{radiusM:R,direction:k0+k1<0?'left' as const:'right' as const,deflectionDeg:Math.abs((k0+k1)/2*e.lengthM)*180/Math.PI,superelevationPct:q,clearanceM:D<2*R?R*(1-Math.cos(D/(2*R))):D*D/(8*R)}:{})});station+=e.lengthM;
+    }
+    curvature.sort((a,b)=>a.s-b.s);
+  }
   const issues: AlignmentIssue[] = [];
   const halfW = (() => { const l = layoutSection(road); return (l.outerLeft - l.outerRight) / 2; })();
   elements.forEach((e, k) => {
-    if (e.kind === 'curve') {
+    if (e.kind !== 'tangent'&&e.radiusM) {
       const R = e.radiusM!;
       if (R < rMin * 0.98) issues.push({ severity: URBAN(road) ? 'warning' : 'error', station: (e.s0 + e.s1) / 2, message: `Curva R ≈ ${fmt(R)} m sotto il minimo ${fmt(rMin)} m per ${V} km/h (q ${fmt(qMax * 100)}%): ridurre la velocità o allargare la curva` });
       const minDev = (V / 3.6) * 2.5;
@@ -136,6 +148,6 @@ export function horizontalAlignment(road: Road, origin: LngLat): HorizontalAlign
   });
   return {
     lengthM: L, designSpeedKmh: V, category: rules.category, rMinM: rMin, qMaxPct: qMax * 100, stoppingDistanceM: rules.stoppingDistanceM, elements, curvature, issues,
-    method: 'Rettifili e curve circolari riconosciuti dalla variazione di direzione dell\'asse (finestra ±6 m); verifiche semplificate DM 5/11/2001 § 5.2 (raggio minimo, sviluppo, rettifili, successione dei raggi, visibilità in curva). Le clotoidi di transizione non sono ricostruite dal rilievo.',
+    method: road.alignment?'Tracciato analitico: curvature esatte di rettifili, archi e clotoidi; per le clotoidi raggio minimo all’estremo più curvo. Verifiche preliminari semplificate, senza ostacoli di rilievo.':'Rettifili e curve circolari riconosciuti dalla variazione di direzione dell\'asse (finestra ±6 m); verifiche semplificate DM 5/11/2001 § 5.2 (raggio minimo, sviluppo, rettifili, successione dei raggi, visibilità in curva). Le clotoidi di transizione non sono ricostruite dal rilievo.',
   };
 }

@@ -1,10 +1,11 @@
+import { useModalFocus } from '../ui/useModalFocus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LngLat } from '@drip-urban/core';
 import { api } from '../api/client';
 import { flyTo, getMap, useMapUi } from '../map/mapStore';
 import { deleteSelection, duplicateSelection, pasteAt } from '../state/actions';
-import { moveWorkArea, select, setDock, setMode, setTool, useApp, commit } from '../state/store';
-import { dismiss, useToasts } from '../state/toasts';
+import { navigate, moveWorkArea, select, selectScenario, setDock, setMode, setTool, useApp, commit } from '../state/store';
+import { dismiss, pauseToast, useToasts } from '../state/toasts';
 import { GROUP_LABEL, TOOLS } from '../tools/registry';
 import { setLive, useLive } from '../state/live';
 import { pickAt } from '../tools/select';
@@ -12,10 +13,14 @@ import { usePicks } from '../tools/picks';
 import { toggleElios, useElios } from '../elios/Elios';
 import { useTool } from '../tools/toolState';
 import { DEFAULT_RB } from '../tools/roundabout';
+import { toggleAllSnaps } from '../tools/snap';
 import { Icon } from '../ui/Icon';
 import { COMMANDS } from './commands';
 import { useContextMenu } from './contextMenu';
 import { usePalette } from './palette';
+import {useUtilityFocus} from '../state/utilityFocus';
+import type {ProjectSummary} from '../api/types';
+import { searchScore, searchProject } from './projectSearch';
 
 const RAIL_KEY = 'drip.rail.expanded';
 const readRail = () => { try { return localStorage.getItem(RAIL_KEY) === '1'; } catch { return false; } };
@@ -73,7 +78,7 @@ export function ToolHint() {
 const fmtCoord = (p: LngLat | null) => (p ? `${p[1].toFixed(6)}, ${p[0].toFixed(6)}` : '—');
 
 export function StatusBar() {
-  const { zoom, mpp, pointer, snap, gridM } = useMapUi();
+  const { zoom, mpp, pointer, snap, snapEnabled, gridM } = useMapUi();
   const stats = useApp((s) => s.physStats);
   const failed = useApp((s) => s.failedOps);
   const scenario = useApp((s) => s.scenario);
@@ -84,8 +89,8 @@ export function StatusBar() {
       <span className="sb-item">{project?.city ?? ''}</span>
       <span className="sb-item mono">{fmtCoord(pointer)}</span>
       <span className="sb-item mono">z {zoom.toFixed(1)} · 1:{scale.toLocaleString('it-IT')}</span>
-      <button type="button" className={`sb-item sb-toggle ${snap.node || snap.edge ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, node: !s.snap.node, edge: !s.snap.node } }))}>
-        Snap {snap.node || snap.edge ? 'on' : 'off'}
+      <button type="button" className={`sb-item sb-toggle ${snapEnabled ? 'is-on' : ''}`} aria-pressed={snapEnabled} aria-keyshortcuts="F9" title="Tutti gli agganci · F9 · Alt sospende durante il disegno" onClick={toggleAllSnaps}>
+        Snap {snapEnabled ? 'on' : 'off'} · F9
       </button>
       <button type="button" className={`sb-item sb-toggle ${snap.grid ? 'is-on' : ''}`} onClick={() => useMapUi.setState((s) => ({ snap: { ...s.snap, grid: !s.snap.grid } }))}>
         Griglia {gridM.toString().replace('.', ',')} m
@@ -111,10 +116,10 @@ export function Toasts() {
   return (
     <div className="toasts" aria-live="polite">
       {items.map((t) => (
-        <div key={t.id} className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
+        <div key={t.id} className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'} onMouseEnter={() => pauseToast(t.id, 'hover', true)} onMouseLeave={() => pauseToast(t.id, 'hover', false)} onFocusCapture={() => pauseToast(t.id, 'focus', true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) pauseToast(t.id, 'focus', false); }}>
           <Icon name={t.kind === 'error' ? 'warning' : t.kind === 'warn' ? 'warning' : t.kind === 'success' ? 'check' : 'info'} size={16} />
           <div className="toast-text"><strong>{t.title}</strong>{t.body ? <span>{t.body}</span> : null}
-            {t.progress !== undefined ? <span className="progress"><span style={{ width: `${Math.round(t.progress * 100)}%` }} /></span> : null}
+            {t.progress !== undefined ? <span className="progress"><span style={{ width: '100%', transformOrigin: 'left', transform: `scaleX(${Math.max(0, Math.min(1, t.progress))})` }} /></span> : null}
           </div>
           {t.action ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => { t.action!.run(); dismiss(t.id); }}>{t.action.label}</button> : null}
           <button type="button" className="toast-close" aria-label="Chiudi" onClick={() => dismiss(t.id)}><Icon name="close" size={14} /></button>
@@ -185,46 +190,46 @@ export function CommandPalette() {
   const [hi, setHi] = useState(0);
   const [places, setPlaces] = useState<PaletteItem[]>([]);
   const input = useRef<HTMLInputElement>(null);
+  const modal = useRef<HTMLDivElement>(null);
+  useModalFocus(open, modal);
   const network = useApp((s) => s.network);
+  const baseline = useApp((s) => s.baseline);
+  const [projects,setProjects]=useState<ProjectSummary[]>([]);
+  useEffect(()=>{if(!open)return;let alive=true;api.get<ProjectSummary[]>('/api/projects').then(rows=>{if(alive)setProjects(rows);}).catch(()=>undefined);return()=>{alive=false;};},[open]);
   const project = useApp((s) => s.project);
-  useEffect(() => { if (open) { setQ(''); setHi(0); setPlaces([]); setTimeout(() => input.current?.focus(), 0); } }, [open]);
+  const catalogs = useApp((s) => s.catalogs);
+  useEffect(() => { if (open) { setQ(''); setHi(0); setPlaces([]); } }, [open]);
   const items = useMemo(() => {
     const ql = q.trim().toLowerCase();
     const cmds: PaletteItem[] = COMMANDS.filter((c) => !c.when || c.when()).map((c) => ({ id: c.id, label: c.label, group: c.group, hint: c.shortcut, run: c.run }));
-    const roads: PaletteItem[] = [];
-    if (network && ql.length >= 2) {
-      const seen = new Set<string>();
-      for (const r of Object.values(network.roads)) {
-        if (!r.name || seen.has(r.name) || !r.name.toLowerCase().includes(ql)) continue;
-        seen.add(r.name);
-        const mid = r.axis[Math.floor(r.axis.length / 2)]!;
-        roads.push({ id: `road:${r.id}`, label: r.name, group: 'Strade del progetto', run: () => { flyTo([mid[0], mid[1]], 18); select({ kind: 'road', ids: [r.id] }); } });
-        if (roads.length >= 8) break;
-      }
-    }
-    return [...cmds.filter((c) => !ql || c.label.toLowerCase().includes(ql) || c.group.toLowerCase().includes(ql)).slice(0, 14), ...roads, ...places];
-  }, [q, network, places]);
+    const objects: PaletteItem[] = network ? searchProject(network, q, catalogs,20,baseline).map((r) => ({ id: `${r.kind}:${r.id}`, label: r.label, group: r.group, hint: r.id, run: () => { flyTo([r.at[0], r.at[1]],18);if(r.kind==='transit'){setMode('transit');usePicks.setState({selectedRouteId:r.parentId??r.id});}else if(r.kind==='utilityNode'||r.kind==='utilityLink'){useUtilityFocus.setState({kind:r.kind==='utilityNode'?'node':'link',id:r.id});setMode('design');setDock('utilities');}else{setMode('design');select({kind:r.kind,ids:[r.id]});} } })) : [];
+    const scenarios: PaletteItem[] = ql.length >= 2 ? (project?.scenarios ?? []).filter((s) => !s.archived && s.name.toLowerCase().includes(ql)).map((s) => ({ id: `scenario:${s.id}`, label: s.name, group: 'Scenari', run: () => { void selectScenario(s.id); } })) : [];
+    const projectItems:PaletteItem[]=ql.length>=2?projects.filter(p=>p.id!==project?.id&&Number.isFinite(searchScore(p.name,ql))).slice(0,8).map(p=>({id:`project:${p.id}`,label:p.name,group:'Progetti',run:()=>navigate({view:'workspace',projectId:p.id})})):[];
+    return [...cmds.filter(c=>!ql||Number.isFinite(searchScore(c.label+' '+c.group,ql))).sort((a,b)=>searchScore(a.label,ql)-searchScore(b.label,ql)).slice(0,14), ...objects,...scenarios,...projectItems,...places];
+  }, [q, network, catalogs, project, places,baseline,projects]);
   useEffect(() => {
+    setPlaces([]);
     if (!open || q.trim().length < 3 || !project) return;
+    let cancelled = false;
     const t = setTimeout(() => {
       api.get<{ name: string; at: [number, number] }[]>(`/api/geocode?q=${encodeURIComponent(q)}&bbox=${project.bbox.join(',')}`)
-        .then((rows) => setPlaces(rows.slice(0, 6).map((r, i) => ({ id: `geo:${i}`, label: r.name, group: 'Luoghi (OpenStreetMap Nominatim)', run: () => flyTo(r.at, 18) }))))
-        .catch(() => setPlaces([]));
+        .then((rows) => { if (!cancelled) setPlaces(rows.slice(0, 6).map((r, i) => ({ id: `geo:${i}`, label: r.name, group: 'Luoghi (OpenStreetMap Nominatim)', run: () => flyTo(r.at, 18) }))); })
+        .catch(() => { if (!cancelled) setPlaces([]); });
     }, 450);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [q, open, project]);
   if (!open) return null;
   const runAt = (i: number) => { const it = items[i]; if (it) { close(); it.run(); } };
   let lastGroup = '';
   return (
     <div className="modal-backdrop palette-backdrop" onMouseDown={close}>
-      <div className="palette" role="dialog" aria-label="Comandi" onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={modal} className="palette" role="dialog" aria-modal="true" aria-label="Comandi" onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') close(); }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="palette-input">
           <Icon name="search" size={16} />
-          <input ref={input} value={q} placeholder="Comandi, strumenti, strade, luoghi…" aria-label="Cerca" onChange={(e) => { setQ(e.target.value); setHi(0); }}
+          <input ref={input} value={q} placeholder="Comandi, strade, oggetti, segnali, scenari, luoghi…" aria-label="Cerca" onChange={(e) => { setQ(e.target.value); setHi(0); }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') close();
-              if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(items.length - 1, h + 1)); }
+              if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.max(0, Math.min(items.length - 1, h + 1))); }
               if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
               if (e.key === 'Enter') runAt(hi);
             }} />

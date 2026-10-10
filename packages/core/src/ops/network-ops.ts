@@ -1,4 +1,8 @@
+import {sliceVerticalProfile} from '../analysis/vertical';
+import {corridorCrossfall} from '../analysis/crossfall';
+import {roadWithAxis} from '../analysis/road-axis';
 import { LocalFrame } from '../geo/projection';
+import {gradingErrors} from '../analysis/grading';
 import { add, dist, lengthOf, mul, project, slice, sub, type V } from '../geo/polyline';
 import type {
   ApproachControl, Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, TurnKind, Zone,
@@ -39,7 +43,7 @@ function dropOrphanNodes(net: Network, candidates: Iterable<string>): Network {
 function markProject(road: Road, ...keys: string[]): Road {
   const provenance = { ...road.provenance };
   for (const k of keys) provenance[k] = PROJECT;
-  return { ...road, provenance };
+  return { ...road, provenance, ...(keys.includes('geometry') ? {alignment:undefined}: {}) };
 }
 
 // ---------------------------------------------------------------- roads
@@ -109,6 +113,7 @@ export const roadSetAxis = defineOperation<RoadSetAxisPayload>({
     if (!near(p.axis[0]!, net.nodes[r.from]!.at) || !near(p.axis[p.axis.length - 1]!, net.nodes[r.to]!.at)) {
       return [err('road.endpoint', 'Gli estremi si spostano con lo strumento Nodi', [p.roadId])];
     }
+    try{roadWithAxis(r,p.axis);}catch(e){return [err('road.profile',String(e),[r.id])];}
     return [];
   },
   apply(net, p) {
@@ -116,7 +121,7 @@ export const roadSetAxis = defineOperation<RoadSetAxisPayload>({
     const axis = [...p.axis];
     axis[0] = net.nodes[r.from]!.at;
     axis[axis.length - 1] = net.nodes[r.to]!.at;
-    return { ...net, roads: { ...net.roads, [r.id]: markProject({ ...r, axis }, 'geometry') } };
+    return { ...net, roads: { ...net.roads, [r.id]: markProject(roadWithAxis(r,axis), 'geometry') } };
   },
 });
 
@@ -155,6 +160,7 @@ export const roadSplit = defineOperation<RoadSplitPayload>({
   validate(net, p) {
     const r = net.roads[p.roadId];
     if (!r) return [err('road.missing', `Strada ${p.roadId} inesistente`, [p.roadId])];
+    if(r.structure?.underpass)return[err('road.split.underpass','Il sottopasso con rampe è una struttura unitaria: ripristina prima la strada a raso oppure modifica il tracciato completo',[r.id])];
     if (net.nodes[p.nodeId]) return [err('node.duplicateId', `Nodo già esistente ${p.nodeId}`)];
     if (p.newRoadIds.some((id) => net.roads[id])) return [err('road.duplicateId', 'Id strade già in uso')];
     const f = frameFor(net);
@@ -182,8 +188,9 @@ export const roadSplit = defineOperation<RoadSplitPayload>({
     const [idA, idB] = p.newRoadIds;
     const roads = { ...net.roads };
     delete roads[r.id];
-    roads[idA] = markProject(relane({ ...r, to: p.nodeId, axis: a1 }, idA), 'geometry');
-    roads[idB] = markProject(relane({ ...r, from: p.nodeId, axis: a2 }, idB), 'geometry');
+    const interval=(start:number,end:number)=>({...r,...(r.vertical?{vertical:sliceVerticalProfile(r.vertical,start,end)}:{}),...(r.corridor?{corridor:{...r.corridor,crossfall:[{station:0,leftPct:corridorCrossfall(r.corridor,start,1)*100,rightPct:corridorCrossfall(r.corridor,start,-1)*100},...r.corridor.crossfall.filter(p=>p.station>start&&p.station<end).map(p=>({...p,station:p.station-start})),{station:end-start,leftPct:corridorCrossfall(r.corridor,end,1)*100,rightPct:corridorCrossfall(r.corridor,end,-1)*100}]}}:{})});
+    roads[idA] = markProject(relane({ ...interval(0,pr.along), to: p.nodeId, axis: a1 }, idA), 'geometry');
+    roads[idB] = markProject(relane({ ...interval(pr.along,L), from: p.nodeId, axis: a2 }, idB), 'geometry');
     return { ...net, roads, nodes: { ...net.nodes, [p.nodeId]: { id: p.nodeId, at: cut } } };
   },
 });
@@ -196,6 +203,7 @@ export const nodeMove = defineOperation<NodeMovePayload>({
   validate(net, p) {
     if (!net.nodes[p.nodeId]) return [err('node.missing', `Nodo ${p.nodeId} inesistente`, [p.nodeId])];
     if (!okLL(p.to)) return [err('node.target', 'Destinazione non valida')];
+    try{nodeMove.apply(net,p);}catch(e){return [err('node.profile',String(e),[p.nodeId])];}
     return [];
   },
   apply(net, p) {
@@ -221,7 +229,7 @@ export const nodeMove = defineOperation<NodeMovePayload>({
       const ll = axis.map((q) => f.toLngLat(q));
       if (r.from === p.nodeId) ll[0] = p.to;
       if (r.to === p.nodeId) ll[ll.length - 1] = p.to;
-      roads[r.id] = markProject({ ...r, axis: ll }, 'geometry');
+      roads[r.id] = markProject(roadWithAxis(r,ll), 'geometry');
     }
     return { ...net, roads, nodes: { ...net.nodes, [p.nodeId]: { id: p.nodeId, at: p.to } } };
   },
@@ -247,6 +255,7 @@ export const nodeMerge = defineOperation<NodeMergePayload>({
     if (Object.values(net.roundabouts).some((rb) => Object.values(net.roads).some((r) => r.tags?.roundabout === rb.id && (r.from === p.sourceId || r.to === p.sourceId)))) {
       return [err('node.ring', 'I nodi dell\'anello si modificano dalla rotatoria')];
     }
+    try{nodeMerge.apply(net,p);}catch(e){return [err('node.profile',String(e))];}
     return [];
   },
   apply(net, p) {
@@ -259,7 +268,7 @@ export const nodeMerge = defineOperation<NodeMergePayload>({
       if (r.from === p.sourceId) { from = p.targetId; axis[0] = target.at; }
       if (r.to === p.sourceId) { to = p.targetId; axis[axis.length - 1] = target.at; }
       if (from === to) { delete roads[r.id]; continue; }
-      roads[r.id] = markProject({ ...r, from, to, axis }, 'geometry');
+      roads[r.id] = markProject({...roadWithAxis(r,axis),from,to}, 'geometry');
     }
     const nodes = { ...net.nodes };
     delete nodes[p.sourceId];
@@ -376,7 +385,12 @@ export const junctionSet = defineOperation<{ readonly spec: JunctionSpec }>({
     const bad = [...p.spec.minorRoadIds, ...p.spec.crossingRoadIds].filter((id) => { const r = net.roads[id]; return !r || (r.from !== p.spec.nodeId && r.to !== p.spec.nodeId); });
     return bad.length ? [err('junction.arm', `Strade non afferenti all'incrocio: ${bad.join(', ')}`)] : [];
   },
-  apply: (net, p) => ({ ...net, junctions: { ...net.junctions, [p.spec.nodeId]: p.spec } }),
+  apply(net, p) {
+    // Changing the regulation changes traffic logic as well as the physical stop lines.
+    const signalPlans = p.spec.control === 'signal' ? net.signalPlans
+      : Object.fromEntries(Object.entries(net.signalPlans).filter(([, plan]) => plan.nodeId !== p.spec.nodeId));
+    return { ...net, signalPlans, junctions: { ...net.junctions, [p.spec.nodeId]: p.spec } };
+  },
 });
 
 export interface SignalPlanSetPayload {
@@ -395,12 +409,22 @@ export const signalPlanSet = defineOperation<SignalPlanSetPayload>({
   label: (p) => `Piano semaforico ${p.plan.name}`,
   validate(net, p) {
     const issues: Issue[] = [];
+    if (p.plan.programmes?.length) {
+      if (new Set(p.plan.programmes.map((v) => v.id)).size !== p.plan.programmes.length) issues.push(err('signal.programme.id', 'Identificativi programmi duplicati'));
+      for (const programme of p.plan.programmes) {
+        if (!programme.name.trim() || !programme.schedule.length || programme.schedule.some((w) => !w.days.length || w.days.some((d) => !Number.isInteger(d) || d < 0 || d > 6) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(w.from) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(w.to))) issues.push(err('signal.programme.schedule', 'Orario del programma non valido'));
+        if (!Number.isFinite(programme.offsetS) || programme.offsetS < 0 || programme.offsetS >= programme.cycleS) issues.push(err('signal.programme.offset', 'Offset del programma non valido'));
+        if ((p.plan.coordination || p.plan.plant) && programme.cycleS !== p.plan.cycleS) issues.push(err('signal.programme.coordination', 'Un programma coordinato deve conservare il ciclo comune'));
+        issues.push(...signalPlanSet.validate(net, { ...p, plan: { ...p.plan, programmes: undefined, cycleS: programme.cycleS, offsetS: programme.offsetS, phases: programme.phases } }));
+      }
+    }
     const total = p.plan.phases.reduce((s, ph) => s + ph.greenS + ph.yellowS + ph.allRedS, 0);
     if (!net.nodes[p.plan.nodeId]) issues.push(err('signal.node', 'Incrocio inesistente'));
     if (!p.plan.phases.length) issues.push(err('signal.phases', 'Il piano deve avere almeno una fase'));
     if (!(p.plan.cycleS >= 20 && p.plan.cycleS <= 240)) issues.push(err('signal.cycle', 'Ciclo fuori intervallo 20–240 s'));
     if (Math.abs(total - p.plan.cycleS) > 0.5) issues.push(err('signal.cycle', `La somma delle fasi (${total.toFixed(0)} s) deve essere uguale al ciclo (${p.plan.cycleS} s)`));
     for (const ph of p.plan.phases) {
+      if (![ph.greenS, ph.yellowS, ph.allRedS].every(Number.isFinite) || ph.allRedS < 0) issues.push(err('signal.time', 'Tempi di fase non validi'));
       if (ph.yellowS < 3) issues.push(err('signal.yellow', `Fase ${ph.name}: giallo minimo 3 s`));
       if (ph.greenS < 5) issues.push(err('signal.green', `Fase ${ph.name}: verde minimo 5 s`));
     }
@@ -650,8 +674,13 @@ export const signalPlanRemove = defineOperation<{ readonly planId: string }>({
   validate: (net, p) => (net.signalPlans[p.planId] ? [] : [err('signal.missing', 'Piano inesistente')]),
   apply(net, p) {
     const signalPlans = { ...net.signalPlans };
+    const nodeId = signalPlans[p.planId]!.nodeId;
     delete signalPlans[p.planId];
-    return { ...net, signalPlans };
+    const junctions = { ...net.junctions };
+    if (junctions[nodeId]?.control === 'signal' && !Object.values(signalPlans).some((plan) => plan.nodeId === nodeId)) {
+      junctions[nodeId] = { ...junctions[nodeId]!, control: 'uncontrolled', minorRoadIds: [] };
+    }
+    return { ...net, signalPlans, junctions };
   },
 });
 
@@ -678,6 +707,27 @@ export const zoneRemove = defineOperation<{ readonly zoneId: string }>({
 /** Ring centre-line radius in direction `angle` (ellipse aware). */
 function validateRoundabout(net: Network, rb: Roundabout, replacing = false): Issue[] {
   const issues: Issue[] = [];
+  if (!rb || !okLL(rb.center) || !['mini', 'compact', 'standard', 'elliptical', 'turbo'].includes(rb.type)
+    || !Array.isArray(rb.arms) || ![rb.outerDiameterM, rb.circulatoryWidthM, rb.apronWidthM, rb.aspect, rb.orientationDeg, rb.speedKmh].every(Number.isFinite)) {
+    return [err('rb.shape', 'Rotatoria incompleta o valori numerici non validi')];
+  }
+  if (rb.lanes !== 1 && rb.lanes !== 2) issues.push(err('rb.lanes', 'Numero di corsie anello: 1 o 2'));
+  if (rb.apronWidthM < 0 || rb.apronWidthM > 3) issues.push(err('rb.apron', 'Fascia sormontabile 0–3 m'));
+  if (rb.aspect < 0.5 || rb.aspect > 1) issues.push(err('rb.aspect', 'Rapporto assi 0,5–1'));
+  if (rb.speedKmh < 10 || rb.speedKmh > 50) issues.push(err('rb.speed', 'Velocità anello 10–50 km/h'));
+  if (!['yield', 'signalized', 'metered', 'part_time'].includes(rb.control)) issues.push(err('rb.control', 'Regolazione rotatoria non valida'));
+  if (rb.control !== 'yield' && !Object.values(net.signalPlans).some((p) => p.nodeId.startsWith(`${rb.id}:n`))) {
+    issues.push(warn('rb.controlPlan', 'La regolazione richiesta necessita di piani semaforici sugli accessi. Senza piani, traffico e segnaletica mantengono la precedenza all’anello.'));
+  }
+  if (new Set(rb.arms.map((a) => a.roadId)).size !== rb.arms.length) issues.push(err('rb.arms', 'Bracci duplicati'));
+  for (const a of rb.arms) {
+    if (![a.entryRadiusM, a.exitRadiusM, a.splitterLengthM, a.splitterWidthM].every(Number.isFinite)
+      || a.entryRadiusM < 4 || a.entryRadiusM > 40 || a.exitRadiusM < 4 || a.exitRadiusM > 40
+      || a.splitterLengthM < 4 || a.splitterLengthM > 30 || a.splitterWidthM < 1.5 || a.splitterWidthM > 6
+      || typeof a.splitter !== 'boolean' || typeof a.crossing !== 'boolean') {
+      issues.push(err('rb.armGeometry', `Geometria del braccio ${a.roadId} non valida: raggi 4–40 m, isola lunga 4–30 m e larga 1,5–6 m; splitter/crossing booleani`));
+    }
+  }
   if (!replacing && net.roundabouts[rb.id]) issues.push(err('rb.duplicateId', `Id già in uso: ${rb.id}`));
   if (!replacing && rb.replacedNodeId && !net.nodes[rb.replacedNodeId]) issues.push(err('rb.node', 'Incrocio inesistente'));
   const D = rb.outerDiameterM;
@@ -707,7 +757,7 @@ export const roundaboutUpdate = defineOperation<{ readonly roundabout: Roundabou
   type: 'roundabout.update',
   label: (p) => `Modifica rotatoria ${p.roundabout.name}`,
   validate(net, p) {
-    if (!net.roundabouts[p.roundabout.id]) return [err('rb.missing', 'Rotatoria inesistente')];
+    if (!p.roundabout || !net.roundabouts[p.roundabout.id]) return [err('rb.missing', 'Rotatoria inesistente')];
     return validateRoundabout(net, p.roundabout, true);
   },
   apply: (net, p) => insertRoundabout(extractRoundabout(net, p.roundabout.id), p.roundabout),
@@ -730,6 +780,7 @@ export const areaSet = defineOperation<{ readonly area: Area }>({
     const min = p.area.kind === 'crossing' ? 2 : 3;
     if (p.area.polygon.length < min || !p.area.polygon.every(okLL)) return [err('area.polygon', `Geometria non valida (minimo ${min} vertici)`)];
     if (p.area.kind === 'crossing' && !(p.area.depthM && p.area.depthM >= 2 && p.area.depthM <= 8)) return [err('area.depth', 'Profondità attraversamento 2–8 m')];
+    if(p.area.grading)return gradingErrors(p.area).map(message=>err('area.grading',message));
     return [];
   },
   apply: (net, p) => ({ ...net, areas: { ...net.areas, [p.area.id]: p.area } }),

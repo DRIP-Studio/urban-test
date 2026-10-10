@@ -1,0 +1,30 @@
+{
+  "fixture": "Explicit synthetic urban load, SwiftShader, not measured transit demand",
+  "buildings": 4053,
+  "roads": 2922,
+  "furniture": 1000,
+  "transitLines": 100,
+  "frameTimeMedianMs": 16.69999999999891,
+  "frameTimeP95Ms": 233.39999999999964,
+  "uiRafFps": 21.43304646022888,
+  "simulated": 993,
+  "transit": 100,
+  "heapBytes": 662000000,
+  "mainHeapBeforeControls": 166721728,
+  "mainHeapAfterControls": 167411540,
+  "inputPaintP95Ms": 756,
+  "inputSamples": [
+    197.5,
+    199.90000000596046,
+    291.90000000596046,
+    295.40000000596046,
+    369.59999999403954,
+    472,
+    488.70000000298023,
+    490.09999999403954,
+    551.5,
+    555.2000000029802,
+    564.0999999940395,
+    756
+  ]
+}

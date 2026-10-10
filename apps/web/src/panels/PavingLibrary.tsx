@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import type { MaterialItem } from '../api/types';
 import { patternImage } from '../map/patterns';
-import { useApp } from '../state/store';
+import { openDock, useApp } from '../state/store';
 import { useTool } from '../tools/toolState';
-import { Section } from '../ui/controls';
+import { Button, Section } from '../ui/controls';
 
 const SWATCH = new Map<string, string>();
 /** Real texture preview at street zoom (cached data URL). */
@@ -30,6 +30,7 @@ export function PavingLibrary() {
   const groups = useMemo(() => GROUPS.map(([cat, label]) => [label, items.filter((m) => m.category === cat && !m.id.startsWith('foliage') && m.id !== 'bark' && m.id !== 'water')] as const), [items]);
   return (
     <>
+      <Button icon="edit" onClick={() => openDock('materials')}>Editor materiali e texture</Button>
       {groups.map(([label, list]) => (
         <Section key={label} title={label} count={list.length}>
           <div className="paving-grid">

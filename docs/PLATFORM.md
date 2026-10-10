@@ -13,6 +13,19 @@ Se la piattaforma non risponde, il programma continua a funzionare:
 
 Configurazione: **Impostazioni → Account, licenza e integrazioni**, salvata in `settings/platform.json` nella cartella dati.
 
+### Launcher e stato degli entitlement (8 ottobre 2026)
+
+`GET /api/platform/services` richiede una sessione autenticata e restituisce i servizi configurati con `id`, `label`, `description`, `url`, `current` ed `entitlement`:
+
+- `active`: feature richiesta presente nella licenza attiva o offline_grace;
+- `trial`: feature disponibile durante la prova;
+- `unavailable`: feature richiesta non concessa o licenza inattiva;
+- `unknown`: entitlement del prodotto non definito dal contratto disponibile. Un URL configurato è un indirizzo di lancio, non una prova di abbonamento.
+
+La configurazione di un servizio può specificare `requiredFeature`, una feature del contratto DRIP Urban (`design`, `traffic`, `api`, `elios`, ecc.). Per Urban la feature predefinita è `design`. Non si deducono abbonamenti FiscoFlow/Mail/Voice dalla licenza Urban. URL e proprietà esistenti restano compatibili; gli id devono essere univoci.
+
+Il ring dell’avatar usa lo stato della licenza restituito dal server: abbonamento attivo/grace, origine non trial e almeno una feature concessa. La prova usa il ring tratteggiato già esistente. Gli stati revocati/sospesi non acquisiscono tolleranza offline; `features: []` resta vuoto, senza ampliare implicitamente i diritti al piano completo.
+
 | Variabile d'ambiente | Effetto |
 |---|---|
 | `DRIP_PLATFORM_URL` | indirizzo della piattaforma; predefinito `https://api.studiodrip.it` |

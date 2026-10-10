@@ -7,8 +7,8 @@ import { useWms, wmsLayerDefs } from './wms';
 /** Every GeoJSON source of the workstation. One owner each (see sources.ts). */
 export const SOURCES = [
   'buildings', 'context', 'surfaces', 'markings', 'lines', 'labels', 'zones', 'asset-fp', 'asset-pt', 'asset-parts', 'sign-poles', 'signs3d', 'signals',
-  'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
-  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures', 'plan-zones', 'plan-constraints', 'func-class', 'islands', 'drain-pipes', 'drain-nodes', 'overview', 'work-area', 'water-pipes', 'water-nodes',
+  'pedestrians', 'traffic', 'route', 'iso', 'heat', 'moves', 'conflicts', 'transit-lines', 'transit-stops', 'vehicles', 'crashes',
+  'selection', 'handles', 'draft', 'compare', 'plan-signals', 'rt-vehicles', 'civic', 'restrictions', 'lanes-pref', 'sidewalks-est', 'bike-stations', 'incidents', 'norms', 'structures', 'plan-zones', 'plan-constraints', 'func-class', 'islands', 'drain-pipes', 'drain-nodes', 'overview', 'work-area', 'water-pipes', 'water-nodes', 'utilities', 'works',
 ] as const;
 export type SourceId = (typeof SOURCES)[number];
 
@@ -49,10 +49,11 @@ export const LAYERS: readonly LayerDef[] = [
     legend: [{ color: '#b9312a', label: 'Divieto mezzi pesanti / transito' }, { color: '#d9a441', label: 'Solo destinazione o carico/scarico' }, { color: '#7e57c2', label: 'Limite di massa o dimensioni' }] },
   { id: 'lanesPref', label: 'Corsie preferenziali', category: 'mobility', mapLayers: ['lanes-pref-line'], defaultVisible: true, source: 'Scenario attivo', legend: [{ color: '#c0392b', label: 'Bus / taxi' }, { color: '#2f7d5b', label: 'Ciclabile' }] },
   { id: 'zones', label: 'Zone (ZTL, 30, pedonali…)', category: 'mobility', mapLayers: ['zones-fill', 'zones-line'], defaultVisible: true, source: 'Scenario attivo' },
-  { id: 'traffic', label: 'Traffico', category: 'traffic', mapLayers: ['traffic-line'], defaultVisible: true, source: 'Live (HERE) o stima DRIP — vedi Traffic Studio',
+  { id: 'traffic', label: 'Traffico', category: 'traffic', mapLayers: ['traffic-line', 'traffic-estimated-line'], defaultVisible: true, source: 'Live (HERE) o stima DRIP — vedi Traffic Studio',
     legend: [{ color: '#3fae6b', label: 'Scorrevole' }, { color: '#e2b13c', label: 'Rallentato' }, { color: '#e1703a', label: 'Intenso' }, { color: '#b9312a', label: 'Congestionato' }] },
   { id: 'incidents', label: 'Incidenti, cantieri e chiusure', category: 'traffic', mapLayers: ['incidents-line', 'incidents-circle', 'incidents-label'], defaultVisible: true, source: 'HERE Traffic v7 (live)',
     legend: [{ color: '#b9312a', label: 'Strada chiusa / incidente' }, { color: '#e1703a', label: 'Lavori, corsia chiusa' }, { color: '#d9a441', label: 'Altro evento' }] },
+  { id: 'pedestrians', label: 'Pedoni simulati', category: 'traffic', mapLayers: ['pedestrians-points'], defaultVisible: true, source: 'DRIP Flow — domanda pedonale sintetica dichiarata', legend: [{color:'#5587a2',label:'In cammino'},{color:'#d9a441',label:'In attesa'}] },
   { id: 'vehicles', label: 'Veicoli simulati', category: 'traffic', mapLayers: ['vehicles-fill', 'vehicles-extrude'], defaultVisible: true, source: 'DRIP Flow (simulazione)' },
   { id: 'route', label: 'Percorso', category: 'mobility', mapLayers: ['route-line', 'route-casing', 'compare-line'], defaultVisible: true, source: 'Navigatore DRIP sullo scenario' },
   { id: 'iso', label: 'Accessibilità / isocrone', category: 'analysis', mapLayers: ['iso-line'], defaultVisible: true, source: 'Analisi DRIP',
@@ -63,6 +64,8 @@ export const LAYERS: readonly LayerDef[] = [
   { id: 'plan-constraints', label: 'Vincoli e fasce di rispetto', category: 'official', mapLayers: ['plan-constraints-fill', 'plan-constraints-line'], defaultVisible: false, source: 'PUC/PRG importato o generato' },
   { id: 'func-class', label: 'Classificazione funzionale (PGTU)', category: 'traffic', mapLayers: ['func-class-line'], defaultVisible: false, source: 'Direttive 12/4/1995' },
   { id: 'islands', label: 'Isole ambientali proposte', category: 'traffic', mapLayers: ['islands-fill', 'islands-line'], defaultVisible: false, source: 'PGTU (proposta DRIP)' },
+  {id:'works',label:'Cantieri attivi alla data',category:'design',mapLayers:['works-area','works-outline'],defaultVisible:true,source:'Piano lavori e calendario di progetto'},
+  {id:'utilities',label:'Sottoservizi e reti estese',category:'design',mapLayers:['utility-lines','utility-nodes'],defaultVisible:true,source:'Reti di progetto con quote e datum dichiarati'},
   { id: 'water', label: 'Rete acquedotto', category: 'design', mapLayers: ['water-pipes-line', 'water-nodes-circle', 'water-label'], defaultVisible: true, source: 'Progetto (gradiente globale, Hazen–Williams)' },
   { id: 'drainage', label: 'Rete di drenaggio', category: 'design', mapLayers: ['drain-pipes-line', 'drain-nodes-circle', 'drain-pipes-label'], defaultVisible: true, source: 'Progetto (metodo razionale)' },
   { id: 'norms', label: 'Verifiche normative', category: 'analysis', mapLayers: ['norms-circle'], defaultVisible: true, source: 'Normativa e verifiche (DRIP)',
@@ -106,11 +109,11 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'buildings-removed-line', type: 'line', source: 'buildings', filter: ['get', 'removed'], paint: { 'line-color': '#d0614f', 'line-width': 1.2, 'line-dasharray': [3, 2] } });
   L({ id: 'buildings-hatch', type: 'fill', source: 'buildings', filter: ['!', ['get', 'removed']], layout: { visibility: 'none' }, paint: { 'fill-pattern': 'ctr-hatch' } });
   L({ id: 'buildings-line', type: 'line', source: 'buildings', minzoom: 15, filter: ['!', ['get', 'removed']], paint: { 'line-color': dark ? '#3a3e44' : '#b9b3a7', 'line-width': 0.6 } });
-  L({ id: 'structures-shadow', type: 'fill', source: 'structures', filter: ['all', ['!=', ['get', 'kind'], 'pier'], ['!=', ['get', 'kind'], 'tunnel']], paint: { 'fill-color': '#000000', 'fill-opacity': 0.22, 'fill-translate': [5, 5], 'fill-translate-anchor': 'viewport' } });
+  L({ id: 'structures-shadow', type: 'fill', source: 'structures', filter: ['all', ['!=', ['get', 'kind'], 'pier'], ['!=', ['get', 'kind'], 'tunnel'], ['!=', ['get', 'kind'], 'covered']], paint: { 'fill-color': '#000000', 'fill-opacity': 0.22, 'fill-translate': [5, 5], 'fill-translate-anchor': 'viewport' } });
   L({ id: 'structures-casing', type: 'line', source: 'structures', filter: ['!=', ['get', 'kind'], 'pier'], paint: { 'line-color': dark ? '#8d949c' : '#5b5f64', 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1, 20, 3], 'line-dasharray': ['case', ['==', ['get', 'kind'], 'tunnel'], ['literal', [2, 2]], ['literal', [1, 0]]] } });
   L({ id: 'surfaces-fill', type: 'fill', source: 'surfaces', layout: { 'fill-sort-key': ['get', 'z'] }, paint: { 'fill-color': mat, 'fill-opacity': ['case', ['==', ['get', 'kind'], 'area'], 0.92, 1], 'fill-antialias': false } });
   // Real-scale paving textures over the flat colour (one image per zoom step; see patterns.ts).
-  const patterned = materials.filter((m) => PATTERNS.has(m.pattern)).map((m) => m.id);
+  const patterned = materials.filter((m) => PATTERNS.has(m.pattern) || m.id.startsWith('custom.')).map((m) => m.id);
   const pat = (z: number): ExpressionSpecification => ['concat', 'mat:', ['get', 'material'], `:${z}`];
   L({ id: 'surfaces-pattern', type: 'fill', source: 'surfaces', minzoom: 17.5, filter: ['in', ['get', 'material'], ['literal', patterned]],
     layout: { 'fill-sort-key': ['get', 'z'] },
@@ -132,12 +135,16 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
     // Metres → pixels at ~41° N: 4.4 px/m at z19, doubling per zoom level.
     'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, ['*', ['get', 'widthM'], 0.14], 19, ['*', ['get', 'widthM'], 4.4], 22, ['*', ['get', 'widthM'], 35]],
     'line-offset': ['interpolate', ['exponential', 2], ['zoom'], 14, ['*', ['get', 'offM'], 0.14], 19, ['*', ['get', 'offM'], 4.4], 22, ['*', ['get', 'offM'], 35]] } });
-  L({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 } });
+  L({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['case', ['boolean', ['get', 'active'], true], 0.16, 0.035] } });
   L({ id: 'zones-line', type: 'line', source: 'zones', paint: { 'line-color': ['get', 'color'], 'line-width': 2, 'line-dasharray': [3, 2] } });
   L({ id: 'iso-line', type: 'line', source: 'iso', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['step', ['get', 'minutes'], '#2f7d5b', 5, '#79a84d', 7, '#d6a63b', 10, '#c4643a'], 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2, 18, 7], 'line-opacity': 0.85 } });
-  L({ id: 'traffic-line', type: 'line', source: 'traffic', layout: { 'line-cap': 'round' }, paint: {
+  for (const estimated of [false, true]) L({ id: estimated ? 'traffic-estimated-line' : 'traffic-line', type: 'line', source: 'traffic',
+    filter: ['==', ['in', ['coalesce', ['get', 'source'], ''], ['literal', ['estimated', 'simulated']]], estimated], layout: { 'line-cap': 'round' }, paint: {
     'line-color': ['step', ['get', 'ratio'], '#b9312a', 0.35, '#e1703a', 0.55, '#e2b13c', 0.8, '#3fae6b'],
-    'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 16, 4, 19, 8], 'line-offset': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 5], 'line-opacity': 0.9 } });
+    'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 16, 4, 19, 8],
+    'line-offset': ['interpolate', ['linear'], ['zoom'], 14, 1, 19, 5],
+    'line-opacity': estimated ? 0.65 : 0.95, ...(estimated ? { 'line-dasharray': [2, 2] } : {}) } });
+  L({ id: 'pedestrians-points', type: 'circle', source: 'pedestrians', minzoom: 14, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 2, 19, 5], 'circle-color': ['case', ['==', ['get', 'waiting'], 1], '#d9a441', '#5587a2'], 'circle-stroke-width': 1, 'circle-stroke-color': '#f5f3ef' } });
   const incColor = ['case', ['get', 'roadClosed'], '#b9312a', ['match', ['get', 'kind'], 'accident', '#b9312a', ['construction', 'laneRestriction'], '#e1703a', '#d9a441']];
   L({ id: 'incidents-line', type: 'line', source: 'incidents', filter: ['==', ['geometry-type'], 'LineString'], layout: { 'line-cap': 'round' }, paint: { 'line-color': incColor as never, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 18, 7], 'line-dasharray': [1, 1.4], 'line-opacity': 0.95 } });
   L({ id: 'incidents-circle', type: 'circle', source: 'incidents', filter: ['has', 'pin'], paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 9], 'circle-color': incColor as never, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
@@ -158,6 +165,10 @@ export function addProjectLayers(map: MLMap, materials: readonly MaterialItem[],
   L({ id: 'islands-line', type: 'line', source: 'islands', layout: { visibility: 'none' }, paint: { 'line-color': ['match', ['get', 'proposal'], 'ztl', '#d0614f', 'pedestrian', '#5f9d5a', '#e8a33d'], 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   L({ id: 'drain-pipes-line', type: 'line', source: 'drain-pipes', paint: { 'line-color': ['case', ['>', ['coalesce', ['get', 'fill'], 0], 0.7], '#b9312a', ['>', ['coalesce', ['get', 'fill'], 0], 0.5], '#d9a441', '#2f62b0'], 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 20, ['*', 6, ['coalesce', ['get', 'dn'], 0.3]]], 'line-dasharray': [3, 1] } });
   L({ id: 'drain-pipes-label', type: 'symbol', source: 'drain-pipes', minzoom: 17.5, layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'label'], 'text-size': 10.5, 'text-font': ['Noto Sans Regular'], 'text-offset': [0, -0.9] }, paint: { 'text-color': '#2f62b0', 'text-halo-color': '#ffffff', 'text-halo-width': 1.3 } });
+  L({id:'works-area',type:'fill',source:'works',paint:{'fill-color':'#e8772e','fill-opacity':.18}});
+  L({id:'works-outline',type:'line',source:'works',paint:{'line-color':'#e8772e','line-width':2,'line-dasharray':[3,2]}});
+  L({id:'utility-lines',type:'line',source:'utilities',filter:['==',['geometry-type'],'LineString'],paint:{'line-color':['get','color'],'line-width':3,'line-dasharray':[3,1]}});
+  L({id:'utility-nodes',type:'circle',source:'utilities',filter:['==',['geometry-type'],'Point'],paint:{'circle-color':['get','color'],'circle-radius':5,'circle-stroke-color':'#222','circle-stroke-width':1}});
   L({ id: 'water-pipes-line', type: 'line', source: 'water-pipes', paint: { 'line-color': ['case', ['get', 'closed'], '#8a8f96', ['>', ['coalesce', ['get', 'v'], 0], 2], '#b9312a', ['<', ['coalesce', ['get', 'v'], 1], 0.3], '#d9a441', '#1f8fb0'], 'line-width': ['interpolate', ['linear'], ['zoom'], 15, 2, 20, 5] } });
   L({ id: 'water-nodes-circle', type: 'circle', source: 'water-nodes', paint: { 'circle-radius': ['match', ['get', 'kind'], 'reservoir', 8, 'tank', 8, 'hydrant', 6, 4.5], 'circle-color': ['case', ['==', ['get', 'p'], null], '#1f8fb0', ['<', ['get', 'p'], 15], '#b9312a', ['>', ['get', 'p'], 70], '#d9a441', '#3e8e5a'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': ['match', ['get', 'kind'], 'hydrant', 2.5, 1.5] } });
   L({ id: 'water-label', type: 'symbol', source: 'water-nodes', minzoom: 17, layout: { 'text-field': ['get', 'label'], 'text-size': 10.5, 'text-font': ['Noto Sans Regular'], 'text-offset': [0, 1.2] }, paint: { 'text-color': '#1f8fb0', 'text-halo-color': '#ffffff', 'text-halo-width': 1.3 } });

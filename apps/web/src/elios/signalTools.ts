@@ -1,11 +1,12 @@
+import {captureEliosScope} from './scope';
 import { LocalFrame, rescalePlan, type CoordinationResult, type DetectedCorridor, type PlantDesign } from '@drip-urban/core';
 import { engine } from '../engine/engine';
 import type { JunctionResult } from '../panels/JunctionLab';
 import { planPayload } from '../panels/SignalStudio';
-import { commit, newId, openDock, select, useApp } from '../state/store';
+import { newId, openDock, select, useApp } from '../state/store';
 import { matchRoads, registerEliosTools } from './tools';
 import { optimizeAllSignals } from '../traffic/signals';
-import { refreshLive } from '../traffic/live';
+import { liveFreshness, refreshLive } from '../traffic/live';
 
 const OBJ = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'OBJECT', properties, required });
 
@@ -23,6 +24,7 @@ registerEliosTools([
     async run() {
       const s = await refreshLive({ archive: false });
       if (s.status !== 'ok') return { status: s.status, message: s.message ?? 'Chiave HERE non configurata (Impostazioni → Fornitori)' };
+      if (liveFreshness() !== 'fresh') return { status: 'unavailable', capturedAt: s.capturedAt, reason: 'Orario mancante o rilevazione scaduta; esclusa dai calcoli' };
       const jams = s.flow.filter((f) => Number(f.properties.jamFactor ?? 0) >= 6).length;
       return { status: 'ok', capturedAt: s.capturedAt, segments: s.flow.length, congestedSegments: jams,
         incidents: s.incidents.slice(0, 25).map((f) => ({ kind: f.properties.label, roadClosed: f.properties.roadClosed, description: f.properties.description, end: f.properties.end })) };
@@ -32,7 +34,8 @@ registerEliosTools([
     name: 'optimize_all_signals', kind: 'write', label: 'Semafori della rete ottimizzati',
     description: 'Ricalcola con Webster tutti i piani semaforici dello scenario sui flussi stimati, in un\'unica operazione annullabile; i corridoi coordinati mantengono offset e ciclo comune.',
     async run() {
-      const r = await optimizeAllSignals();
+      const guard=captureEliosScope();
+      const r = await optimizeAllSignals(true,guard.assert);
       if (!r.plans) throw new Error('Nessun incrocio semaforizzato nello scenario');
       return r;
     },
@@ -51,6 +54,7 @@ registerEliosTools([
     description: 'Progetta e applica il piano semaforico di un incrocio con il metodo di Webster (fasi senza conflitti, ciclo ottimo, verdi proporzionali ai flussi, verde pedonale a 1 m/s).',
     parameters: OBJ({ nodeId: { type: 'STRING', description: 'Id del nodo (predefinito: incrocio selezionato)' }, permissiveLeft: { type: 'BOOLEAN', description: 'Svolte a sinistra permesse (meno fasi)' } }),
     async run(a) {
+      const guard=captureEliosScope();
       const nodeId = nodeArg(a);
       const r = await engine.job<JunctionResult | null>('junction', { nodeId, permissiveLeft: !!a.permissiveLeft });
       if (!r) throw new Error('Il nodo non è un incrocio veicolare con almeno 3 bracci');
@@ -60,7 +64,7 @@ registerEliosTools([
       const plan = existing?.coordination
         ? { ...rescalePlan(proposed, existing.cycleS), offsetS: existing.offsetS, coordination: existing.coordination, mode: existing.mode, disabledHeads: existing.disabledHeads }
         : { ...proposed, disabledHeads: existing?.disabledHeads };
-      const ok = commit('signal.setPlan', planPayload(plan, r.analysis));
+      const ok = guard.commit('signal.setPlan', planPayload(plan, r.analysis));
       if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
       select({ kind: 'node', ids: [nodeId] });
       openDock('signals');
@@ -76,6 +80,7 @@ registerEliosTools([
       direction: { type: 'STRING', enum: ['oneway', 'twoway'], description: 'Banda in un senso o in entrambi' },
     }),
     async run(a) {
+      const guard=captureEliosScope();
       const { network: net, baseline } = useApp.getState();
       if (!net || !baseline) throw new Error('Nessun progetto aperto');
       let plans = ((a.planIds as string[] | undefined) ?? []).map((id) => net.signalPlans[id]!).filter(Boolean);
@@ -95,7 +100,7 @@ registerEliosTools([
       const speedKmh = Number(a.speedKmh) || 40;
       const direction = (a.direction as 'oneway' | 'twoway') || 'oneway';
       const r = await engine.job<CoordinationResult>('coordinate', { planIds: plans.map((p) => p.id), speedKmh, cycleS: Number(a.cycleS) || null, direction, allowHalfCycle: true });
-      const ok = commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${String(a.roadName ?? '')}`.trim(), speedKmh, direction }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) });
+      const ok = guard.commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${String(a.roadName ?? '')}`.trim(), speedKmh, direction }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) });
       if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
       return { junctions: plans.length, cycleS: r.cycleS, bandwidthS: r.bandwidthS, bandwidthBackS: r.bandwidthBackS, efficiency: r.efficiency, naiveBandwidthS: r.naiveBandwidthS, warnings: r.warnings, offsets: r.offsets };
     },
@@ -105,13 +110,14 @@ registerEliosTools([
     description: "Trova automaticamente i corridoi semaforizzati (stessa via o prosecuzione rettilinea, incroci entro 800 m) e applica a ciascuno l'onda verde ottimizzata (banda massima nei due sensi, doppio ciclo per gli incroci minori).",
     parameters: OBJ({ speedKmh: { type: 'NUMBER', description: 'Velocità di progressione (predefinita 40)' }, direction: { type: 'STRING', enum: ['oneway', 'twoway'], description: 'Banda in un senso o in entrambi (predefinito twoway)' } }),
     async run(a) {
+      const guard=captureEliosScope();
       const cs = await engine.job<DetectedCorridor[]>('detectCorridors', {});
       const taken = new Set<string>();
       const out = [];
       for (const c of cs) {
         if (c.planIds.some((id) => taken.has(id))) continue;
         const r = await engine.job<CoordinationResult>('coordinate', { planIds: c.planIds, speedKmh: Number(a.speedKmh) || 40, cycleS: null, direction: (a.direction as string) || 'twoway', allowHalfCycle: true });
-        const ok = commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${c.name}`, speedKmh: r.speedKmh, direction: r.direction }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) });
+        const ok = guard.commit('signal.coordinate', { coordination: { id: newId('coord'), name: `Onda verde ${c.name}`, speedKmh: r.speedKmh, direction: r.direction }, cycleS: r.cycleS, plans: r.offsets.map((o) => ({ planId: o.planId, offsetS: o.offsetS, halfCycle: o.halfCycle })) });
         if (ok.ok) { c.planIds.forEach((id) => taken.add(id)); out.push({ corridor: c.name, junctions: c.planIds.length, bandwidthS: r.bandwidthS, bandwidthBackS: r.bandwidthBackS }); }
       }
       if (!out.length) throw new Error('Nessun corridoio coordinabile: servono almeno due incroci semaforizzati sulla stessa via');
@@ -123,12 +129,13 @@ registerEliosTools([
     description: "Unisce incroci semaforizzati vicini (indicati per piano o per strada) in un unico impianto: un solo regolatore, ciclo comune, sfasamenti legati al tempo di percorrenza interno e verifica dell'accumulo delle code.",
     parameters: OBJ({ planIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Piani da unire (in ordine)' }, roadName: { type: 'STRING', description: 'In alternativa: strada su cui stanno gli incroci' } }),
     async run(a) {
+      const guard=captureEliosScope();
       const net = useApp.getState().network!;
       let ids = ((a.planIds as string[] | undefined) ?? []).filter((id) => net.signalPlans[id]);
       if (!ids.length && a.roadName) { const nodes = new Set(matchRoads(net, String(a.roadName)).flatMap((r) => [r.from, r.to])); ids = Object.values(net.signalPlans).filter((p) => nodes.has(p.nodeId)).map((p) => p.id); }
       if (ids.length < 2) throw new Error('Servono almeno due incroci semaforizzati');
       const d = await engine.job<PlantDesign>('designPlant', { planIds: ids, speedKmh: 30 });
-      const ok = commit('signal.mergePlant', { plant: { id: newId('plant'), name: `Impianto ${String(a.roadName ?? '')}`.trim(), speedKmh: 30 }, cycleS: d.cycleS, plans: d.plans });
+      const ok = guard.commit('signal.mergePlant', { plant: { id: newId('plant'), name: `Impianto ${String(a.roadName ?? '')}`.trim(), speedKmh: 30 }, cycleS: d.cycleS, plans: d.plans });
       if (!ok.ok) throw new Error(ok.issues.map((i) => i.message).join(' · '));
       return { cycleS: d.cycleS, plans: d.plans, links: d.links, warnings: d.warnings };
     },

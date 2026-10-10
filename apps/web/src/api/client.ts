@@ -20,7 +20,8 @@ async function request<T>(method: string, url: string, body?: unknown, init: Req
       body: body === undefined ? undefined : body instanceof FormData || body instanceof Blob ? body : JSON.stringify(body),
       ...init,
     });
-  } catch {
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
     throw new ApiError(0, 'Server DRIP Urban non raggiungibile. Verifica che il programma sia avviato.');
   }
   if (!res.ok) {
@@ -44,7 +45,7 @@ async function request<T>(method: string, url: string, body?: unknown, init: Req
 
 export const api = {
   get: <T>(url: string) => request<T>('GET', url),
-  post: <T>(url: string, body?: unknown) => request<T>('POST', url, body ?? {}),
+  post: <T>(url: string, body?: unknown, init?: RequestInit) => request<T>('POST', url, body ?? {}, init),
   put: <T>(url: string, body: unknown) => request<T>('PUT', url, body),
   patch: <T>(url: string, body: unknown) => request<T>('PATCH', url, body),
   del: <T>(url: string) => request<T>('DELETE', url),

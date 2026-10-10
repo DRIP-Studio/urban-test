@@ -64,6 +64,14 @@ Grafo di routing e geometria visiva delle rotatorie sono **separati**: l'anello 
 
 Ogni modifica passa da `commit(type, payload)`. Il comando viene validato dal registro core, aggiunto alla `ScenarioHistory`, rieseguito nel worker e salvato in autosave. Nessun pannello scrive la rete direttamente.
 
+### Invalidation e simulazione attiva
+
+Quando cambia la rete effettiva, il worker invalida la stima traffico di scenario. Un run DRIP Flow attivo viene ricostruito sulla rete nuova con domanda, seed, focus, velocità di playback e pausa conservati. Tempo e metriche ripartono da zero; `simRestarted` porta il frame iniziale e una notifica esplicita. `init` ferma timer e run del progetto precedente.
+
+`junction.set` verso controlli diversi da `signal` elimina nello stesso commit tutti i piani del nodo; `signal.removePlan` porta a non regolato un incrocio rimasto senza piano. Nascondere una lanterna (`signal.setHeads`) mantiene invece il controllo: sono azioni distinte.
+
+Le modifiche suggerite passano da `applySuggestion` a un batch validato; una scheda viene rimossa e il successo viene comunicato solo dopo un commit riuscito. Nessun percorso modifica direttamente il modello.
+
 ### `services/api` (FastAPI)
 
 | Modulo | Responsabilità |
@@ -88,3 +96,27 @@ Ogni modifica passa da `commit(type, payload)`. Il comando viene validato dal re
 Produzione: un solo processo uvicorn su `127.0.0.1:8765` serve sia l'API sia la build statica (Cesium in `/cesium`, worker MapLibre in `/maplibre`, glifi in `/glyphs`). Avvio: `Avvia DRIP Urban.bat` → `tools/windows/launcher.py`.
 
 Sviluppo: Vite sulla porta 5180, con proxy di `/api`, `/signs`, `/brand` e `/catalog` verso la 8765.
+
+### Flow: separazione scala fisica / scala grafica
+
+`frameData(SimView)` legge gli agenti senza mutarli e conserva le metriche complete; budget e bounds limitano solo il buffer di presentazione. Il worker invia un solo snapshot ordinario in transito, confermato da `simAck` nel main thread; i tick continuano durante backpressure. La simulazione vive in simulation.worker, separata dal worker di geometria/analisi; il worker Scenario Lab valuta alternative isolate. Microscopic e hybrid municipal condividono rete, clock, controlli e metriche; il routing riusa una banca deterministica limitata di percorsi, senza limitare gli agenti fisici. Il passo fisico rimane 0,25 s e un accumulatore conserva la velocità richiesta. Il run vive nel proxy, non nel pannello Traffico, e si interrompe alla chiusura/cambio progetto.
+
+
+### Modello nativo e upgrade 2026-10-09
+
+Clock, transit, bikeShare, utilities, works, presentation, materials, buildingStyles, cityModels e grading sono nella rete derivata dello stesso baseline + operations; non sono copie parallele editabili. Ogni modifica passa da operazioni registrate e ScenarioHistory. Proiezione cantieri per data conserva rete autoriale e undo. Il clock IANA governa Map, Twin, solver, restrizioni e lab.
+
+Civil conserva asse analitico tangent/arc/clothoid, vertical parabole, crossfall, assembly e quote. Asset.solid ospita estrusione e fori; road.structure.underpass conserva profilo e traffico precedenti per ripristino. Quotazioni senza rilievo dichiarate manuali; quantità e clash indicano dati mancanti. Mesh da geometrie native, materiali condivisi Map/Twin.
+
+TPL operational è nel solver con schedule, dwell, capacità e domanda passeggeri dichiarata. Navigatore TPL usa linee/fermate native, orari e rete pedonale; nessun realtime inventato. Routing motorizzato mantiene stato edge per rispettare svolte laneConnections e alternative di arrivo. Asset manager legge cataloghi e utilizzi nativi; tag/preferiti personali non duplicano il modello del progetto.
+
+AI: gli strumenti GIS/solver/civil/TPL applicano operazioni validate; scope progetto/scenario/revisione e AbortController proteggono richieste asincrone. Il Twin espone un lettore camera registrato senza import Cesium nel bundle iniziale. Valutazioni AI salvano scenari nativi con impostazioni e metriche prima dell'applicazione.
+
+Presentazione.set salva scene/camera/annotazioni/geografiche/grafici/loghi. Canvas compositor condiviso tra video acquisito su Cesium postRender ed export HTML offline; pacchetto .dripu necessario per la scena/solver nativi. .dripu v2 manifesta SHA e importa atomico in progetto nuovo.
+
+Platform: scope/expiry server per API keys, JWT issuer/audience/JWKS, policy deployment fidata con cache fail-closed. Contratto remoto DRIP centrale non inventato. Updater Windows staging SHA/backup/rollback verificato su directory isolate. Provider cache limitata a 128 risposte; meteo HTTP failure non è dato valido. GTFS-RT espone timestamp feed, retrieval time, age/freshness e valida coordinate; la validazione locale non certifica endpoint operatori non forniti.
+
+Rete autoriale mantenuta nel worker separata dalla proiezione alla data corrente: itinerari TPL dopo mezzanotte riproiettano le fasi dal modello originale. Cache routing temporale locale/limitata e alternative su servizi effettivi. Boundary delle viste non sostituisce store/history: retry smonta e ricrea solo il renderer. LAS/LAZ import DTM usa decoder lazrs reale e memorie numeriche compatte; nessuna supporto waveform implicito.
+
+
+Renderer municipale: edifici in celle ENU 200 m, superfici/segnaletica fisica in celle 400 m, oggetti conservati per riferimento nel payload condiviso. Materiali opachi e trasparenti degli arredi in passaggi distinti. Modelli vicini invariati riutilizzati per firma geometria/trasformazione/materiali; i fuori-budget restano geometria nativa batch o ingombro dichiarato per importati. Nessun limite nuovo agli agenti fisici. Regole LOD/adattamento dipendono dal renderer effettivo, non da finti stati hardware. Routing restituisce traversals ordinati roadId/forward per validare le corse TPL nelle direzioni e svolte effettive a ciascun confine temporale.

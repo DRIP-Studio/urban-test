@@ -1,4 +1,5 @@
-import { add, dot, leftNormal, lengthOf, mul, offset, project, sampleAt, sub, unit, type V } from '../geo/polyline';
+import polygonClipping from 'polygon-clipping';
+import { add, dot, leftNormal, lengthOf, mul, offset, project, sampleAt, slice, sub, unit, type V } from '../geo/polyline';
 import type { LngLat, Marking, MarkingColor, Network, Road, RoadFeature, TurnKind } from '../model/types';
 import { arrowRing, clearStation, dashes, MARKING, solid, zebra, type KeepOut } from './markings';
 import { layoutSection } from './section';
@@ -82,26 +83,16 @@ export function roadSymbol(symbol: string, c: V, u: V, size = 1.6): V[][] {
 }
 
 /** Stripes inside a polygon at `angleDeg` to `u`, every `spacing` m (zebratura), with the outline. */
-function hatch(poly: readonly V[], u: V, spacing = 1.0, angleDeg = 45, stripe = 0.3): V[][] {
-  const a = (angleDeg * Math.PI) / 180;
-  const d = add(mul(u, Math.cos(a)), mul(leftNormal(u), Math.sin(a)));
-  const nn = leftNormal(d);
-  const ps = poly.map((p) => dot(p, nn));
-  const out: V[][] = [];
-  for (let s = Math.min(...ps) + spacing / 2; s < Math.max(...ps); s += spacing) {
-    const xs: number[] = [];
-    for (let i = 0; i < poly.length; i++) {
-      const p = poly[i]!, q = poly[(i + 1) % poly.length]!;
-      const sp = dot(p, nn) - s, sq = dot(q, nn) - s;
-      if ((sp > 0) !== (sq > 0)) { const t = sp / (sp - sq); xs.push(dot(add(p, mul(sub(q, p), t)), d)); }
-    }
-    xs.sort((x, y) => x - y);
-    for (let k = 0; k + 1 < xs.length; k += 2) {
-      const a0 = add(mul(nn, s), mul(d, xs[k]!)), a1 = add(mul(nn, s), mul(d, xs[k + 1]!));
-      if (Math.hypot(a1[0] - a0[0], a1[1] - a0[1]) > 0.2) out.push(solid([a0, a1], stripe));
-    }
+export function hatch(poly: readonly V[], u: V, spacing = 1.0, angleDeg = 45, stripe = 0.3, border = .12): V[][] {
+  const a=angleDeg*Math.PI/180,d=add(mul(u,Math.cos(a)),mul(leftNormal(u),Math.sin(a))),nn=leftNormal(d);
+  const ps=poly.map((p)=>dot(p,nn)), along=poly.map((p)=>dot(p,d)), out:V[][]=[];
+  if(poly.length<3||spacing<=0||stripe<=0)return out;
+  for(let s=Math.min(...ps)+spacing/2;s<Math.max(...ps);s+=spacing) {
+    const candidate=quad([0,0],d,nn,Math.min(...along)-1,Math.max(...along)+1,s-stripe/2,s+stripe/2);
+    const clipped=polygonClipping.intersection([[...poly,poly[0]!].map((p)=>[p[0],p[1]] as [number,number])],[[...candidate,candidate[0]!].map((p)=>[p[0],p[1]] as [number,number])]);
+    for(const polygon of clipped) { const ring=polygon[0]!;if(ring.length>3)out.push(ring.slice(0,-1).map((p)=>[p[0],p[1]] as V)); }
   }
-  for (let i = 0; i < poly.length; i++) out.push(solid([poly[i]!, poly[(i + 1) % poly.length]!], 0.12));
+  if(border>0)for(let i=0;i<poly.length;i++)out.push(solid([poly[i]!,poly[(i+1)%poly.length]!],border));
   return out;
 }
 
@@ -171,19 +162,32 @@ function addCustomMarkings(net: Network, metric: MetricCache, toLL: ToLL, out: O
   const frame = metric.frame;
   for (const m of Object.values(net.markings ?? {})) {
     if (m.state === 'removed') continue;
-    const pts = m.geometry.map((q) => frame.toMetric(q) as V);
+    let pts = m.geometry.map((q) => frame.toMetric(q) as V);
+    if(m.binding) {
+      const road=net.roads[m.binding.roadId];if(!road)continue;
+      const lane=layoutSection(road).elements.find((el)=>el.el.laneId===m.binding?.laneId);
+      pts=slice(road.axis.map((q)=>frame.toMetric(q) as V),m.binding.fromS,m.binding.toS);
+      if(lane)pts=offset(pts,(lane.left+lane.right)/2);
+    }
+    if(m.offsetM)pts=offset(pts,m.offsetM);
+    if(m.reverse)pts.reverse();
+    if(m.scale && m.scale!==1) { const anchor=pts[0]!;pts=pts.map((p)=>add(anchor,mul(sub(p,anchor),m.scale!))); }
+
     const state: PhysState = m.state === 'project' ? 'project' : 'existing';
     const mat = MARKING_MATERIAL[m.color] ?? 'road_marking_white';
     const w = m.widthM ?? 0.12;
     let k = 0;
     const push = (ring: V[], material = mat) => out.markings.push({ id: `cm:${m.id}:${k++}`, kind: 'custom', ring: toLL(ring), state, material, z: 12, heightM: 0 });
     const dir = pts.length >= 2 ? unit(sub(pts[1]!, pts[0]!)) : ([0, 1] as V);
+    const placements = m.repeatM ? Array.from({length:Math.max(1,Math.floor(lengthOf(pts)/m.repeatM))},(_,i)=>sampleAt(pts,i*m.repeatM!)) : [{p:pts[0]!,t:dir}];
+    const glyph=(ring:V[],anchor:V)=>push(m.scale ? ring.map((p)=>add(anchor,mul(sub(p,anchor),m.scale!))) : ring);
+
     switch (m.kind) {
       case 'line_solid': case 'line_yellow': case 'stop_line': push(solid(pts, m.kind === 'stop_line' ? MARKING.stopWidthM : w), m.kind === 'line_yellow' ? MARKING_MATERIAL.yellow : mat); break;
-      case 'line_dashed': for (const r of dashes(pts, { widthM: w, dashM: 3, gapM: 4.5 })) push(r); break;
+      case 'line_dashed': for (const r of dashes(pts, { widthM: w, dashM: m.dashM ?? 3, gapM: m.gapM ?? 4.5 })) push(r); break;
       case 'give_way_line': for (const r of dashes(pts, MARKING.giveWayDash)) push(r); break;
-      case 'line_double': push(solid(offset(pts, 0.12), w)); push(solid(offset(pts, -0.12), w)); break;
-      case 'line_mixed': push(solid(offset(pts, 0.12), w)); for (const r of dashes(offset(pts, -0.12), { widthM: w, dashM: 3, gapM: 4.5 })) push(r); break;
+      case 'line_double': push(solid(offset(pts, (m.doubleSpacingM ?? .24)/2), w)); push(solid(offset(pts, -(m.doubleSpacingM ?? .24)/2), w)); break;
+      case 'line_mixed': push(solid(offset(pts, (m.doubleSpacingM ?? .24)/2), w)); for (const r of dashes(offset(pts, -(m.doubleSpacingM ?? .24)/2), { widthM: w, dashM: m.dashM ?? 3, gapM: m.gapM ?? 4.5 })) push(r); break;
       case 'zigzag': for (const r of zigzag(pts)) push(r); break;
       case 'give_way_triangle': {
         // Fig. II.433 (triangolo): base 1,0 m, height 1,5 m (urban reference), apex towards the driver.
@@ -193,12 +197,12 @@ function addCustomMarkings(net: Network, metric: MetricCache, toLL: ToLL, out: O
       }
       case 'arrow': {
         const turns = (m.symbol ?? 'through').split('+') as TurnKind[];
-        for (const tk of turns) push(arrowRing(pts[0]!, dir, tk));
+        for(const pose of placements)for (const tk of turns) glyph(arrowRing(pose.p, pose.t, tk),pose.p);
         break;
       }
-      case 'text': for (const r of roadText(m.text ?? '', pts[0]!, dir, m.widthM ?? 2.8)) push(r); break;
-      case 'symbol': for (const r of roadSymbol(m.symbol ?? 'bike', pts[0]!, dir)) push(r); break;
-      case 'hatch': for (const r of hatch(pts, dir, 1.0, 45, 0.3)) push(r); break;
+      case 'text': for(const pose of placements)for (const r of roadText(m.text ?? '', pose.p, pose.t, m.widthM ?? 2.8)) glyph(r,pose.p); break;
+      case 'symbol': for(const pose of placements)for (const r of roadSymbol(m.symbol ?? 'bike', pose.p, pose.t)) glyph(r,pose.p); break;
+      case 'hatch': for (const r of hatch(pts, [0,1], m.hatch?.spacingM ?? 1, m.hatch?.angleDeg ?? 45, m.hatch?.stripeWidthM ?? .3, m.hatch?.borderM ?? .12)) push(r); break;
       case 'chevrons': {
         for (const r of hatch(pts, dir, 1.6, 45, 0.4)) push(r);
         for (const r of hatch(pts, dir, 1.6, -45, 0.4)) push(r);
@@ -226,6 +230,7 @@ function addCustomMarkings(net: Network, metric: MetricCache, toLL: ToLL, out: O
         break;
       }
       case 'zebra': {
+        if(pts.length>=3) { for(const r of hatch(pts,[0,1],m.hatch?.spacingM ?? 1,m.hatch?.angleDeg ?? 0,m.hatch?.stripeWidthM ?? .5,m.hatch?.borderM ?? 0))push(r);break; }
         // Fig. II.434: stripes 50 cm every 1 m across the carriageway, depth ≥ 2,5 m (4 m on main roads).
         const a = pts[0]!, b = pts[pts.length - 1]!, across = unit(sub(b, a)), along = leftNormal(across), depth = m.widthM && m.widthM > 1 ? m.widthM : 4;
         const L0 = Math.hypot(b[0] - a[0], b[1] - a[1]);

@@ -150,7 +150,28 @@
      ],
      "mat": "tree_pit"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -3.0,
+     -2.85,
+     -0.02
+    ],
+    "boundsMax": [
+     3.21,
+     2.85,
+     9.0
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "vegetation.tree_small",
@@ -289,7 +310,28 @@
      ],
      "mat": "tree_pit"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.6,
+     -1.52,
+     -0.02
+    ],
+    "boundsMax": [
+     1.712,
+     1.52,
+     5.0
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "vegetation.citrus",
@@ -416,16 +458,37 @@
      ],
      "mat": "tree_pit"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.6,
+     -1.6,
+     -0.02
+    ],
+    "boundsMax": [
+     1.6,
+     1.6,
+     4.1
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "vegetation.palm",
    "label": "Palma",
    "category": "vegetation",
    "dims": {
-    "w": 4.9,
-    "d": 4.866,
-    "h": 8.25
+    "w": 4.768,
+    "d": 4.559,
+    "h": 7.365
    },
    "material": "foliage",
    "model": [
@@ -634,7 +697,28 @@
      ],
      "mat": "foliage_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -2.18,
+     -2.28,
+     0.0
+    ],
+    "boundsMax": [
+     2.384,
+     2.187,
+     7.365
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "vegetation.shrub",
@@ -689,16 +773,37 @@
      ],
      "mat": "foliage"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.6,
+     -0.55,
+     0.0
+    ],
+    "boundsMax": [
+     0.63,
+     0.55,
+     0.92
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.bench",
    "label": "Panchina",
    "category": "seating",
    "dims": {
-    "w": 1.912,
-    "d": 2.364,
-    "h": 1.661
+    "w": 1.8,
+    "d": 0.65,
+    "h": 0.823
    },
    "material": "wood",
    "model": [
@@ -1021,7 +1126,28 @@
       0.0
      ]
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.9,
+     -0.325,
+     0.0
+    ],
+    "boundsMax": [
+     0.9,
+     0.31,
+     0.823
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.seat_module",
@@ -1132,7 +1258,28 @@
      ],
      "mat": "wood"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.6,
+     -0.3,
+     0.0
+    ],
+    "boundsMax": [
+     0.6,
+     0.3,
+     0.43
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.outdoor_seating",
@@ -1359,16 +1506,37 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.75,
+     -1.0,
+     0.0
+    ],
+    "boundsMax": [
+     1.75,
+     1.0,
+     2.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.light_pole",
    "label": "Lampione stradale",
    "category": "lighting",
    "dims": {
-    "w": 1.122,
-    "d": 3.193,
-    "h": 8.411
+    "w": 0.36,
+    "d": 3.124,
+    "h": 7.984
    },
    "material": "steel",
    "model": [
@@ -1478,7 +1646,28 @@
       0.0
      ]
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.18,
+     -0.18,
+     0.0
+    ],
+    "boundsMax": [
+     0.18,
+     1.562,
+     7.984
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.light_pedestrian",
@@ -1487,7 +1676,7 @@
    "dims": {
     "w": 0.48,
     "d": 0.48,
-    "h": 4.54
+    "h": 4.536
    },
    "material": "steel",
    "model": [
@@ -1559,16 +1748,37 @@
      ],
      "mat": "cast_iron"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.24,
+     -0.24,
+     0.0
+    ],
+    "boundsMax": [
+     0.24,
+     0.24,
+     4.536
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.smart_pole",
    "label": "Palo smart (luce + sensori)",
    "category": "lighting",
    "dims": {
-    "w": 1.158,
+    "w": 0.4,
     "d": 2.95,
-    "h": 8.229
+    "h": 7.73
    },
    "material": "steel",
    "model": [
@@ -1691,7 +1901,28 @@
      ],
      "mat": "glass"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.2,
+     -0.2,
+     0.0
+    ],
+    "boundsMax": [
+     0.2,
+     1.475,
+     7.73
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.bollard",
@@ -1700,7 +1931,7 @@
    "dims": {
     "w": 0.2,
     "d": 0.2,
-    "h": 0.92
+    "h": 0.914
    },
    "material": "steel",
    "model": [
@@ -1759,7 +1990,28 @@
      ],
      "mat": "cast_iron"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.1,
+     -0.1,
+     0.0
+    ],
+    "boundsMax": [
+     0.1,
+     0.1,
+     0.914
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.fence",
@@ -1971,7 +2223,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.005,
+     -0.025,
+     0.0
+    ],
+    "boundsMax": [
+     1.005,
+     0.025,
+     1.0
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.barrier",
@@ -2068,7 +2341,28 @@
      ],
      "mat": "road_marking_white"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.95,
+     -0.225,
+     0.0
+    ],
+    "boundsMax": [
+     0.95,
+     0.225,
+     1.0
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.guardrail",
@@ -2165,7 +2459,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -2.0,
+     -0.14,
+     0.0
+    ],
+    "boundsMax": [
+     2.0,
+     0.13,
+     0.79
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.jersey",
@@ -2248,7 +2563,28 @@
      ],
      "mat": "road_marking_white"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.0,
+     -0.3,
+     0.0
+    ],
+    "boundsMax": [
+     1.0,
+     0.3,
+     0.8
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.bus_shelter",
@@ -2480,7 +2816,28 @@
      ],
      "mat": "steel"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -2.02,
+     -0.92,
+     0.0
+    ],
+    "boundsMax": [
+     2.51,
+     0.72,
+     2.59
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.green_shelter",
@@ -2740,7 +3097,28 @@
      ],
      "mat": "foliage"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -2.02,
+     -0.92,
+     0.0
+    ],
+    "boundsMax": [
+     2.51,
+     0.72,
+     2.75
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.transit_display",
@@ -2823,7 +3201,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.375,
+     -0.1,
+     0.0
+    ],
+    "boundsMax": [
+     0.375,
+     0.1,
+     2.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "transit.stop",
@@ -2889,7 +3288,28 @@
      ],
      "mat": "slab_light"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.2,
+     -0.04,
+     0.0
+    ],
+    "boundsMax": [
+     0.2,
+     0.05,
+     2.6
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.bike_rack",
@@ -2897,8 +3317,8 @@
    "category": "mobility",
    "dims": {
     "w": 2.5,
-    "d": 1.263,
-    "h": 0.963
+    "d": 0.648,
+    "h": 0.804
    },
    "material": "steel",
    "model": [
@@ -3236,7 +3656,28 @@
       90.0
      ]
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.25,
+     -0.324,
+     0.0
+    ],
+    "boundsMax": [
+     1.25,
+     0.324,
+     0.804
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.bike_station",
@@ -3627,7 +4068,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -3.0,
+     -0.6,
+     0.0
+    ],
+    "boundsMax": [
+     3.0,
+     0.7,
+     1.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.ev_charger",
@@ -3635,7 +4097,7 @@
    "category": "mobility",
    "dims": {
     "w": 0.5,
-    "d": 0.48,
+    "d": 0.44,
     "h": 1.46
    },
    "material": "steel",
@@ -3728,7 +4190,28 @@
       0.0
      ]
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.25,
+     -0.175,
+     0.0
+    ],
+    "boundsMax": [
+     0.25,
+     0.22,
+     1.46
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.parking_meter",
@@ -3825,15 +4308,36 @@
      ],
      "mat": "sign_blue"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.2,
+     -0.15,
+     0.0
+    ],
+    "boundsMax": [
+     0.2,
+     0.15,
+     1.6
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.hydrant",
    "label": "Idrante",
    "category": "utility",
    "dims": {
-    "w": 0.485,
-    "d": 0.52,
+    "w": 0.42,
+    "d": 0.42,
     "h": 0.9
    },
    "material": "plastic_red",
@@ -3940,7 +4444,28 @@
       0.0
      ]
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.16,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.21,
+     0.9
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.storm_inlet",
@@ -4051,7 +4576,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.3,
+     -0.2,
+     -0.02
+    ],
+    "boundsMax": [
+     0.3,
+     0.2,
+     0.017
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.bin",
@@ -4109,7 +4655,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.25,
+     -0.25,
+     0.0
+    ],
+    "boundsMax": [
+     0.25,
+     0.25,
+     1.03
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.drinking_fountain",
@@ -4118,7 +4685,7 @@
    "dims": {
     "w": 0.44,
     "d": 0.96,
-    "h": 1.11
+    "h": 1.104
    },
    "material": "cast_iron",
    "model": [
@@ -4196,7 +4763,28 @@
      ],
      "mat": "cast_iron"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.22,
+     -0.22,
+     0.0
+    ],
+    "boundsMax": [
+     0.22,
+     0.48,
+     1.104
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.planter",
@@ -4265,7 +4853,28 @@
      ],
      "mat": "foliage_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.5,
+     -0.5,
+     0.0
+    ],
+    "boundsMax": [
+     0.5,
+     0.5,
+     1.12
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.planter_linear",
@@ -4334,7 +4943,28 @@
      ],
      "mat": "foliage_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.2,
+     -0.4,
+     0.0
+    ],
+    "boundsMax": [
+     1.2,
+     0.4,
+     1.08
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.fountain",
@@ -4415,7 +5045,28 @@
      ],
      "mat": "travertine"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -2.0,
+     -2.0,
+     0.0
+    ],
+    "boundsMax": [
+     2.0,
+     2.0,
+     1.2
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.info_board",
@@ -4498,7 +5149,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.625,
+     -0.075,
+     0.0
+    ],
+    "boundsMax": [
+     0.625,
+     0.075,
+     2.2
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.kiosk",
@@ -4595,16 +5267,37 @@
      ],
      "mat": "corten"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.6,
+     -1.35,
+     0.0
+    ],
+    "boundsMax": [
+     1.6,
+     1.38,
+     2.85
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.play",
    "label": "Gioco bimbi",
    "category": "public_space",
    "dims": {
-    "w": 4.763,
-    "d": 3.763,
-    "h": 2.902
+    "w": 3.05,
+    "d": 2.0,
+    "h": 2.39
    },
    "material": "wood",
    "model": [
@@ -4772,7 +5465,28 @@
      ],
      "mat": "rubber"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.525,
+     -1.0,
+     0.0
+    ],
+    "boundsMax": [
+     1.5,
+     1.0,
+     2.39
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.vehicle",
@@ -4780,7 +5494,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.4
    },
    "material": "steel_dark",
@@ -4958,7 +5672,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.vehicle_left",
@@ -4966,7 +5701,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.4
    },
    "material": "steel_dark",
@@ -5144,7 +5879,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.vehicle_right",
@@ -5152,7 +5908,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.4
    },
    "material": "steel_dark",
@@ -5330,7 +6086,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.vehicle_straight",
@@ -5338,7 +6115,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.4
    },
    "material": "steel_dark",
@@ -5516,7 +6293,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.pedestrian",
@@ -5524,7 +6322,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.0
    },
    "material": "steel_dark",
@@ -5667,7 +6465,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.0
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.cycle",
@@ -5675,7 +6494,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.0
    },
    "material": "steel_dark",
@@ -5853,7 +6672,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.0
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "signal.bus",
@@ -5861,7 +6701,7 @@
    "category": "signals",
    "dims": {
     "w": 0.42,
-    "d": 0.741,
+    "d": 0.581,
     "h": 3.2
    },
    "material": "steel_dark",
@@ -6039,7 +6879,28 @@
      ],
      "mat": "signal_housing"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.21,
+     -0.08,
+     0.0
+    ],
+    "boundsMax": [
+     0.21,
+     0.29,
+     3.2
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "ztl.gate",
@@ -6047,7 +6908,7 @@
    "category": "ztl",
    "dims": {
     "w": 1.55,
-    "d": 0.654,
+    "d": 0.56,
     "h": 4.18
    },
    "material": "steel_dark",
@@ -6152,6 +7013,27 @@
    ],
    "led": {
     "kind": "ztl"
+   },
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.775,
+     -0.2,
+     0.0
+    ],
+    "boundsMax": [
+     0.775,
+     0.28,
+     4.18
+    ],
+    "pbrDistanceM": 500
    }
   },
   {
@@ -6207,6 +7089,27 @@
    ],
    "led": {
     "kind": "ztl"
+   },
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.62,
+     -0.07,
+     0.0
+    ],
+    "boundsMax": [
+     0.62,
+     0.165,
+     3.6
+    ],
+    "pbrDistanceM": 500
    }
   },
   {
@@ -6214,9 +7117,9 @@
    "label": "Telecamera di controllo varco",
    "category": "ztl",
    "dims": {
-    "w": 0.624,
-    "d": 2.01,
-    "h": 4.655
+    "w": 0.35,
+    "d": 1.93,
+    "h": 4.458
    },
    "material": "steel_dark",
    "model": [
@@ -6318,7 +7221,28 @@
       0.0
      ]
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.175,
+     -0.175,
+     0.0
+    ],
+    "boundsMax": [
+     0.175,
+     0.965,
+     4.458
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "traffic.vms",
@@ -6401,6 +7325,27 @@
    ],
    "led": {
     "kind": "vms"
+   },
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -1.225,
+     -0.3,
+     0.0
+    ],
+    "boundsMax": [
+     1.225,
+     0.4,
+     5.13
+    ],
+    "pbrDistanceM": 500
    }
   },
   {
@@ -6412,9 +7357,9 @@
     "kind": "ztl"
    },
    "dims": {
-    "w": 4.206,
-    "d": 8.406,
-    "h": 7.503
+    "w": 0.6,
+    "d": 8.4,
+    "h": 5.72
    },
    "model": [
     {
@@ -6574,7 +7519,28 @@
      ],
      "mat": "sign_blue"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.3,
+     -0.3,
+     0.0
+    ],
+    "boundsMax": [
+     0.3,
+     4.2,
+     5.72
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "ztl.totem",
@@ -6660,7 +7626,28 @@
      ],
      "mat": "led_amber"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.35,
+     -0.2,
+     0.0
+    ],
+    "boundsMax": [
+     0.35,
+     0.2,
+     2.4
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "traffic.crossing_beacon",
@@ -6670,7 +7657,7 @@
    "dims": {
     "w": 0.78,
     "d": 0.4,
-    "h": 3.54
+    "h": 3.531
    },
    "model": [
     {
@@ -6774,7 +7761,28 @@
      ],
      "mat": "steel"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.39,
+     -0.2,
+     0.0
+    ],
+    "boundsMax": [
+     0.39,
+     0.2,
+     3.531
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "traffic.speed_display",
@@ -6854,7 +7862,28 @@
      ],
      "mat": "slab_light"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.3,
+     -0.18,
+     0.0
+    ],
+    "boundsMax": [
+     0.3,
+     0.18,
+     2.96
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.manhole",
@@ -6948,7 +7977,28 @@
      ],
      "mat": "steel_dark"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.4,
+     -0.4,
+     -0.02
+    ],
+    "boundsMax": [
+     0.4,
+     0.4,
+     0.016
+    ],
+    "pbrDistanceM": 500
+   }
   },
   {
    "id": "furniture.street_name",
@@ -7000,7 +8050,28 @@
      ],
      "mat": "sign_blue"
     }
-   ]
+   ],
+   "placement": {
+    "units": "m",
+    "pivot": [
+     0,
+     0,
+     0
+    ],
+    "forward": "+Y",
+    "up": "+Z",
+    "boundsMin": [
+     -0.04,
+     -0.04,
+     0.0
+    ],
+    "boundsMax": [
+     0.82,
+     0.04,
+     2.8
+    ],
+    "pbrDistanceM": 500
+   }
   }
  ]
 }

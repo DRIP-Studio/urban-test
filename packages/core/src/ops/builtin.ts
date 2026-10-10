@@ -1,3 +1,5 @@
+import {underpassDesign} from '../analysis/underpass';
+import {solidErrors} from '../analysis/solid';
 import type { Asset, Network, Oneway, Road, RoadRestrictions, VerticalProfile } from '../model/types';
 import { defineOperation, type Issue } from './registry';
 
@@ -138,7 +140,13 @@ export const roadSetVertical = defineOperation<RoadSetVerticalPayload>({
   validate(net, p) {
     const issues: Issue[] = [];
     if (!net.roads[p.roadId]) return [err('road.missing', `Strada ${p.roadId} inesistente`, [p.roadId])];
+    const road=net.roads[p.roadId]!,passage=road.structure?.underpass;
     const v = p.vertical;
+    if(passage){
+      if(!v||v.pvis.length!==4)return [err('vertical.underpass','Modifica il profilo dal progetto sottopasso; per tornare a raso rimuovi prima la struttura')];
+      const expected=underpassDesign(road,{...passage,depthM:road.structure!.heightM,entryElevationM:v.pvis[0]!.elevation,exitElevationM:v.pvis.at(-1)!.elevation});
+      if(expected.errors.length||v.pvis.some((q,i)=>Math.abs(q.station-expected.vertical.pvis[i]!.station)>.01||Math.abs(q.elevation-expected.vertical.pvis[i]!.elevation)>.01||(q.curveLength??0)>0))return [err('vertical.underpass','Profilo incompatibile con le rampe e la luce del sottopasso: usa il relativo editor')];
+    }
     if (v) {
       if (v.pvis.length < 2) issues.push(err('vertical.pvis', 'Servono almeno due vertici altimetrici'));
       v.pvis.forEach((q, i) => {
@@ -172,6 +180,9 @@ export const assetAdd = defineOperation<AssetAddPayload>({
       if (net.assets[a.id] || seen.has(a.id)) issues.push(err('asset.duplicateId', `Id già in uso: ${a.id}`, [a.id]));
       if (!finiteLngLat(a.at)) issues.push(err('asset.anchor', `Ancoraggio geografico non valido per ${a.id}`, [a.id]));
       if (!Number.isFinite(a.rotationDeg)) issues.push(err('asset.rotation', `Rotazione non valida per ${a.id}`, [a.id]));
+      if (a.elevationM !== undefined && !Number.isFinite(a.elevationM)) issues.push(err('asset.elevation', 'Quota non valida', [a.id]));
+      if (a.scale !== undefined && (!Number.isFinite(a.scale) || a.scale <= 0 || a.scale > 100)) issues.push(err('asset.scale', 'Scala fuori intervallo 0–100', [a.id]));
+      if(a.solid)issues.push(...solidErrors(a.solid).map(message=>err('asset.solid',message,[a.id])));
       seen.add(a.id);
     }
     return issues;
@@ -196,6 +207,8 @@ export const assetUpdate = defineOperation<AssetUpdatePayload>({
     if (!net.assets[p.assetId]) issues.push(err('asset.missing', `Oggetto ${p.assetId} inesistente`, [p.assetId]));
     if (p.changes.at !== undefined && !finiteLngLat(p.changes.at)) issues.push(err('asset.anchor', 'Ancoraggio geografico non valido', [p.assetId]));
     if (p.changes.rotationDeg !== undefined && !Number.isFinite(p.changes.rotationDeg)) issues.push(err('asset.rotation', 'Rotazione non valida', [p.assetId]));
+    if (p.changes.elevationM !== undefined && !Number.isFinite(p.changes.elevationM)) issues.push(err('asset.elevation', 'Quota non valida', [p.assetId]));
+    if (p.changes.scale !== undefined && (!Number.isFinite(p.changes.scale) || p.changes.scale <= 0 || p.changes.scale > 100)) issues.push(err('asset.scale', 'Scala fuori intervallo 0–100', [p.assetId]));
     return issues;
   },
   apply(net, p) {

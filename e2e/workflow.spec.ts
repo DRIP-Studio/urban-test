@@ -53,7 +53,9 @@ test('design flow persists and exports', async ({ page, request }) => {
   // --- simulation in the visible area produces vehicles.
   await page.getByRole('button', { name: 'Traffico', exact: true }).click();
   await page.getByRole('radio', { name: 'Simulazione' }).click();
-  await page.getByRole('button', { name: "Avvia nell'area visibile" }).click();
+  await page.getByRole('button', { name: 'Ambito simulazione' }).click();
+  await page.getByRole('option', { name: 'Area visibile', exact: true }).click();
+  await page.getByRole('button', { name: 'Avvia nell’ambito scelto', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Ferma' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => {
     const map = (window as unknown as { __dripMap: { getMap(): { querySourceFeatures(s: string): unknown[] } } }).__dripMap.getMap();

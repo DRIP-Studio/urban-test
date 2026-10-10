@@ -1,3 +1,6 @@
+import type {PresentationScene,PresentationGraphic} from '@drip-urban/core';
+import {commit,useApp,newId} from '../state/store';
+import {getProjectClock} from '../state/projectTime';
 import { api } from '../api/client';
 
 export interface TwinCamera { lon: number; lat: number; height: number; heading: number; pitch: number }
@@ -9,7 +12,11 @@ export const takePendingTwinCamera = (): TwinCamera | null => { const c = pendin
 
 /** Saves a 3D keyframe as a Present scene in the project's presentation document. */
 export async function saveTwinKeyframe(projectId: string, cam: TwinCamera): Promise<void> {
-  const doc = (await api.get<{ scenes?: unknown[] } | null>(`/api/projects/${encodeURIComponent(projectId)}/docs/presentation`)) ?? {};
-  const scenes = [...(doc.scenes ?? []), { id: `sc-${crypto.randomUUID().slice(0, 8)}`, title: 'Vista 3D', text: '', camera: null, twin: cam }];
-  await api.put(`/api/projects/${encodeURIComponent(projectId)}/docs/presentation`, { ...doc, scenes });
+  const state=useApp.getState();if(state.project?.id!==projectId)throw Error('Progetto cambiato');
+  const doc=state.network?.presentation??(await api.get<{scenes?:unknown[]}|null>(`/api/projects/${encodeURIComponent(projectId)}/docs/presentation`))??{};
+  if(useApp.getState().project?.id!==projectId)throw Error('Progetto cambiato');
+  const result=commit('presentation.set',{document:{...doc,scenes:[...(doc.scenes??[]),{id:newId('scene'),title:'Vista 3D',text:'',camera:null,twin:cam,clock:getProjectClock(),durationS:12}]}});if(!result.ok)throw Error(result.issues.map(i=>i.message).join(' · '));
 }
+let pendingPath:{points:readonly TwinCamera[];durationS:number;caption:string;annotations:NonNullable<PresentationScene['annotations']>;graphics?:readonly PresentationGraphic[]}|null=null;
+export const setPendingCameraPath=(path:NonNullable<typeof pendingPath>)=>{pendingPath=path;};
+export const takePendingCameraPath=()=>{const path=pendingPath;pendingPath=null;return path;};

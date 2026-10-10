@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import json
 import time
 import uuid
@@ -10,7 +11,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import civic, collab, elios, jobs, providers, terrain, transit, urbanplan, wms
+from app import textures, civic, collab, elios, jobs, providers, terrain, transit, urbanplan, wms
 from app.city.legacy_city import convert_city
 from app.projects import service as ps
 from app.projects.migrate53 import legacy_summary, load_seed, migrate
@@ -22,6 +23,7 @@ from app.settings import SETTINGS, VERSION
 app = FastAPI(title="DRIP Urban", version=VERSION, description="API di DRIP Urban. Autenticazione: sessione DRIP ID / locale, oppure `Authorization: Bearer drip_…` (chiave API) o token DRIP ID.")
 app.add_middleware(AuthMiddleware)
 app.include_router(platform_router)
+app.include_router(textures.router)
 
 
 @app.on_event("startup")
@@ -238,7 +240,7 @@ def package(pid: str) -> Response:
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
     safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)[:60]
-    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{safe}.drip-urban.zip"'})
+    return Response(data, media_type="application/vnd.drip-urban.project+zip", headers={"Content-Disposition": f'attachment; filename="{safe}.drip-urban.dripu"'})
 
 
 @app.post("/api/projects/import")
@@ -267,6 +269,21 @@ def baseline(pid: str, bbox: str | None = None) -> Response:
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
     return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip", "Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@app.get("/api/projects/{pid}/simulation-network")
+def simulation_network(pid: str) -> Response:
+    """Complete municipal topology, without buildings or decorative geometry. Never clamps to the work area."""
+    import gzip
+    import json
+    try:
+        city = ps.read_baseline(pid)
+        city["buildings"] = {}
+        city["features"] = {}
+        data = gzip.compress(json.dumps(city, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), compresslevel=5)
+    except Exception as exc:  # noqa: BLE001
+        raise _err(exc) from exc
+    return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip", "Cache-Control": "no-store"})
 
 
 @app.patch("/api/projects/{pid}/baseline/roads")
@@ -337,7 +354,7 @@ def get_presence(pid: str) -> dict:
 @app.post("/api/projects/{pid}/scenarios")
 def new_scenario(pid: str, body: dict = Body(...)) -> dict:
     try:
-        return ps.create_scenario(pid, str(body.get("name") or "Nuovo scenario"), _author(), body.get("copyFrom"), body.get("description"))
+        return ps.create_scenario(pid, str(body.get("name") or "Nuovo scenario"), _author(), body.get("copyFrom"), body.get("description"), body.get("operations"))
     except Exception as exc:  # noqa: BLE001
         raise _err(exc) from exc
 
@@ -468,13 +485,15 @@ def provider_test(name: str) -> dict:
 def traffic_live(bbox: str) -> dict:
     try:
         b = [float(x) for x in bbox.split(",")]
-        assert len(b) == 4 and (b[2] - b[0]) * (b[3] - b[1]) < 0.05
+        assert len(b) == 4 and all(math.isfinite(x) for x in b) and -180 <= b[0] < b[2] <= 180 and -90 <= b[1] < b[3] <= 90 and (b[2] - b[0]) * (b[3] - b[1]) < 0.05
     except (ValueError, AssertionError) as exc:
         raise HTTPException(400, "bbox non valido o troppo grande") from exc
-    flow = providers.here_flow(b)
+    flow = dict(providers.here_flow(b))
     if flow.get("status") == "ok":
         inc = providers.here_incidents(b)
         flow["incidents"] = inc.get("features", []) if inc.get("status") == "ok" else []
+        flow["incidentsStatus"] = inc.get("status")
+        flow["incidentsMessage"] = inc.get("message")
     return flow
 
 
@@ -604,8 +623,8 @@ async def terrain_upload(pid: str, epsg: int = 32633, spacing: float = 2.0, file
         bbox = [float(x) for x in meta["bbox"]]
         sp = max(0.5, float(spacing))
         if name.endswith(".laz"):
-            raise ValueError("LAZ compresso non supportato: decomprimi in LAS")
-        if name.endswith(".las"):
+            grid = terrain.grid_from_points(*terrain.read_laz(raw), epsg, bbox, sp, label="LAZ")
+        elif name.endswith(".las"):
             grid = terrain.grid_from_points(*terrain.read_las(raw), epsg, bbox, sp, label="LAS")
         elif name.endswith((".asc", ".txt", ".xyz", ".csv")):
             text = raw.decode("utf-8", errors="replace")
@@ -615,7 +634,7 @@ async def terrain_upload(pid: str, epsg: int = 32633, spacing: float = 2.0, file
             else:
                 grid = terrain.grid_from_points(*terrain.read_xyz(text), epsg, bbox, sp, label="XYZ")
         else:
-            raise ValueError("Formato non supportato: ESRI ASCII Grid (.asc), nuvola LAS (.las) o punti XYZ (.xyz, .txt, .csv)")
+            raise ValueError("Formato non supportato: ESRI ASCII Grid (.asc), nuvola LAS/LAZ (.las, .laz) o punti XYZ (.xyz, .txt, .csv)")
         ps.put_doc(pid, "terrain", {"grid": grid}, _author())
         return {"nx": grid["nx"], "ny": grid["ny"], "resolutionM": grid["resolutionM"], "coverage": grid["coverage"], "min": min(grid["z"]), "max": max(grid["z"]), "source": grid["source"]}
     except Exception as exc:  # noqa: BLE001
@@ -691,10 +710,21 @@ async def upload_model(pid: str, request: Request, file: UploadFile = File(...))
             raise HTTPException(400, "Il file .gltf non è JSON valido") from exc
         if any(not str(b.get("uri", "")).startswith("data:") for b in doc.get("buffers", [])):
             raise HTTPException(400, "Il .gltf usa file esterni: esportalo come .glb (binario unico)")
+    try:
+        from app.model_audit import audit_model
+        audit = audit_model(data, ext)
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError, RecursionError) as exc:
+        raise HTTPException(400, str(exc)) from exc
     form = await request.form()
     try:
-        dims = {k: max(0.05, min(500.0, float(form.get(k) or 1))) for k in ("w", "d", "h")}
-        scale = max(0.001, min(1000.0, float(form.get("scale") or 1)))
+        import math
+        dims = {k: float(form.get(k) or 1) for k in ("w", "d", "h")}
+        scale = float(form.get("scale") or 1)
+        if any(not math.isfinite(v) or not 0.05 <= v <= 500 for v in dims.values()) or not math.isfinite(scale) or not 0.001 <= scale <= 1000:
+            raise ValueError("Dimensioni o scala fuori intervallo")
+        pivot = _json.loads(str(form.get("pivot") or "[0,0,0]"))
+        if not isinstance(pivot, list) or len(pivot) != 3 or any(not isinstance(v, (int, float)) or not math.isfinite(v) or abs(v) > 1_000_000 for v in pivot):
+            raise ValueError("Pivot non valido")
     except ValueError as exc:
         raise HTTPException(400, "Dimensioni non valide") from exc
     try:
@@ -705,7 +735,7 @@ async def upload_model(pid: str, request: Request, file: UploadFile = File(...))
         atomic_write_bytes(target, data)
         models = ps.get_doc(pid, "models") or []
         rec = {"id": mid, "name": str(form.get("name") or name.rsplit(".", 1)[0])[:80], "file": target.name, "format": ext[1:], "sizeBytes": len(data),
-               "dims": dims, "scale": scale, "uploadedBy": _author()}
+               "dims": dims, "scale": scale, "pivot": pivot, "audit": audit, "uploadedBy": _author()}
         models.append(rec)
         ps.put_doc(pid, "models", models, _author())
         return rec
@@ -735,6 +765,14 @@ def delete_model(pid: str, mid: str) -> dict:
         rec = next((m for m in models if m["id"] == mid), None)
         if not rec:
             raise HTTPException(404, "Modello inesistente")
+        def references(value):
+            if isinstance(value, dict):
+                return any(references(v) for v in value.values())
+            if isinstance(value, list):
+                return any(references(v) for v in value)
+            return value == f"model:{mid}"
+        if references(ps.read_baseline(pid)) or any(references(ps.get_scenario(pid, s["id"])) for s in ps.list_scenarios(pid)):
+            raise HTTPException(409, "Modello utilizzato dalla rete o dalla cronologia di uno scenario: conservarlo per consentire undo e replay")
         (ps.project_dir(pid) / "models" / rec["file"]).unlink(missing_ok=True)
         ps.put_doc(pid, "models", [m for m in models if m["id"] != mid], _author())
         return {"ok": True}

@@ -114,6 +114,7 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         const maxLeft = 0.45 * gapTo(ai, 1), maxRight = 0.45 * gapTo(ai, -1);
         const spec = rb.arms.find((a) => a.roadId === arm.road.id);
         const entryR = spec?.entryRadiusM ?? Math.max(6, rb.outerDiameterM * 0.35);
+        const exitR = spec?.exitRadiusM ?? Math.max(8, rb.outerDiameterM * 0.45);
         // Everything is measured in the arm's own frame (s along its axis from the ring node, w to its
         // left), so oblique arms of a freely placed ring line up with their road strip.
         const axis = arm.axis;
@@ -136,7 +137,7 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         const wl = arm.cwLeft, wr = arm.cwRight;
         const edge0 = along(0);
         const wanted = spec?.splitter ? splitterShape(spec.splitterLengthM, spec.splitterWidthM) : null;
-        const S = Math.max(along(wl), along(wr), wanted ? edge0 + wanted.reach : 0) + entryR;
+        const S = Math.max(along(wl), along(wr), wanted ? edge0 + wanted.reach : 0) + Math.max(entryR, exitR);
         const setback = Math.max(0, Math.min(S, arm.length * 0.6));
         // Short arm: the road strip (and its lane lines) starts earlier, so the island and its hatch must
         // end before it: shorter hatch first, then a shorter island; below 4 m there is no room for one.
@@ -151,7 +152,9 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
         const tangent = (w: number, side: 1 | -1): V[] => {
           const hit = P(along(w), w);
           const edgeAng = Math.atan2(hit[1] - c[1], hit[0] - c[0]);
-          const spread = Math.min(side > 0 ? maxLeft : maxRight, Math.max(0, (edgeAng - angle) * side) + Math.min(0.9, entryR / Ro));
+          // In the outward arm frame, right-hand inbound traffic is on the left.
+          const radius = side > 0 ? entryR : exitR;
+          const spread = Math.min(side > 0 ? maxLeft : maxRight, Math.max(0, (edgeAng - angle) * side) + Math.min(0.9, radius / Ro));
           const ang = angle + side * spread;
           const tp = pointAt(outer, thetaFor(outer, ang));
           const tdir: V = [-Math.sin(ang) * side, Math.cos(ang) * side];
@@ -224,7 +227,8 @@ export function buildRoundabouts(net: Network, metric: MetricCache): RoundaboutB
           }
         }
         // Give-way line across the inbound lanes at the ring edge (yield control is the legal default).
-        if (rb.control === 'yield') {
+        const activePlan = Object.values(net.signalPlans).some((p) => p.nodeId === (arm.atStart ? arm.road.from : arm.road.to));
+        if (rb.control === 'yield' || !activePlan) {
           const lay = layoutSection(arm.road);
           const inbound = arm.road.lanes.filter((l) => (arm.atStart ? l.direction === 'backward' : l.direction !== 'backward'));
           const offs = lay.elements.filter((e) => inbound.some((l) => l.id === e.el.laneId)).flatMap((e) => (arm.atStart ? [e.left, e.right] : [-e.left, -e.right]));

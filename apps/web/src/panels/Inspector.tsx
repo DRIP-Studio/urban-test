@@ -1,4 +1,7 @@
-import { LocalFrame, dmCategory, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road } from '@drip-urban/core';
+import { ScheduleEditor } from '../ui/ScheduleEditor';
+import { GradingEditor } from './GradingEditor';
+import { useProjectClock } from '../state/projectTime';
+import { LocalFrame, dmCategory, geom, layoutSection, localDayMinutes, zoneActiveAt, type Area, type Asset, type Oneway, type Road, type TimeWindow } from '@drip-urban/core';
 import { FunctionalClassField } from './PlansSheet';
 import { BuildingInspector, FeatureInspector, MarkingInspector, PreselectionSection, StructureSection } from './StreetscapePanels';
 import { ztlZones } from '../ztl/link';
@@ -30,6 +33,7 @@ function RoadInspector({ road }: { road: Road }) {
   const prov = (k: string) => road.provenance[k]?.kind ?? road.provenance.geometry?.kind;
   return (
     <>
+      <Button icon="profile" onClick={()=>openDock('civil')}>Civil · tracciato e assembly</Button>
       <Section title="Strada">
         <Field label="Nome" prov={prov('name')}><TextField value={road.name} ariaLabel="Nome strada" onCommit={(v) => commit('road.update', { roadId: road.id, changes: { name: v } })} /></Field>
         <div className="grid-2">
@@ -136,17 +140,21 @@ const PICTOS: { value: VmsPictogram; label: string }[] = [
 /** PMV: manual text (up to 4 pages of 3 × 16 characters) or automatic from live traffic (incidents, closures, queues). */
 function VmsSection({ asset }: { asset: Asset }) {
   const live = useLive();
-  const mode = asset.properties.vmsMode === 'live' ? 'live' : 'manual';
+  const mode = String(asset.properties.vmsMode ?? 'manual');
+  const network = useApp(s => s.network);
+  useProjectClock();
   const set = (props: Record<string, unknown>) => commit('asset.update', { assetId: asset.id, changes: { properties: { ...asset.properties, ...props } } });
   return (
     <Section title="Pannello a messaggio variabile">
-      <Segmented<string> label="Modalità PMV" value={mode} onChange={(v) => set({ vmsMode: v })} options={[{ value: 'manual', label: 'Testo manuale' }, { value: 'live', label: 'Da traffico live' }]} />
+      <Segmented<string> label="Modalità PMV" value={mode} onChange={(v) => set({ vmsMode: v })} options={[{ value: 'manual', label: 'Testo manuale' }, { value: 'live', label: 'Traffico live' }, { value: 'scheduled', label: 'Programma' }, { value: 'simulation', label: 'Simulazione' }]} />
       {mode === 'manual' ? (
         <Field label="Messaggi pronti">
           <Select value="" ariaLabel="Messaggi pronti" options={[{ value: '', label: 'Scegli un messaggio…' }, ...VMS_PRESETS.map((p) => ({ value: p.label, label: p.label }))]}
             onChange={(v) => { const p = VMS_PRESETS.find((x) => x.label === v); if (p) set({ vmsText: sanitizeVms(p.text), vmsPictogram: p.pic }); }} />
         </Field>
       ) : null}
+      {mode === 'scheduled' && <><ScheduleEditor value={(asset.properties.vmsSchedule as TimeWindow[]) ?? []} onChange={vmsSchedule => set({vmsSchedule})} /><Field label="Fuori programma"><TextField multiline ariaLabel="Messaggio fuori programma" value={String(asset.properties.vmsOutsideText ?? '')} onCommit={v => set({vmsOutsideText:sanitizeVms(v)})} /></Field></>}
+      {mode === 'simulation' && <Field label="Strada monitorata"><Select ariaLabel="Strada PMV" value={String(asset.properties.vmsRoadId ?? '')} options={[{value:'',label:'Scegli strada'},...Object.values(network?.roads ?? {}).map(r=>({value:r.id,label:r.name || r.id}))]} onChange={vmsRoadId=>set({vmsRoadId})} /></Field>}
       <FieldGroup label="Pittogramma"><Segmented<VmsPictogram> label="Pittogramma" size="sm" value={(asset.properties.vmsPictogram as VmsPictogram) ?? 'none'} options={PICTOS} onChange={(v) => set({ vmsPictogram: v })} /></FieldGroup>
       <Field label={mode === 'live' ? 'Testo di riserva (se il live non è disponibile)' : 'Messaggio: 3 righe × 16 caratteri; una riga vuota separa le pagine (max 4)'}>
         <TextField multiline value={String(asset.properties.vmsText ?? '')} ariaLabel="Messaggio PMV" onCommit={(v) => set({ vmsText: sanitizeVms(v) })} placeholder={'ZTL ATTIVA\nDALLE 8 ALLE 20'} />
@@ -163,8 +171,8 @@ function ZtlLinkSection({ asset }: { asset: Asset }) {
   const net = useApp((s) => s.network)!;
   const zones = ztlZones(net);
   const zone = net.zones[String(asset.properties.zoneId ?? '')];
-  const now = localDayMinutes(new Date());
-  const active = zone ? zoneActiveAt(zone, now.day, now.minutes) : null;
+  const {time:now} = useProjectClock();
+  const active = zone ? zoneActiveAt(zone, now.holiday?6:now.day, now.minutes) : null;
   const set = (zoneId: string) => commit('asset.update', { assetId: asset.id, changes: { properties: { ...asset.properties, zoneId: zoneId || undefined } } });
   return (
     <Section title="ZTL collegata">
@@ -260,6 +268,7 @@ function AreaInspector({ area }: { area: Area }) {
           <Stat label="Drenante" value={catalogs?.materials.items.find((x) => x.id === area.material)?.permeable ? 'sì' : 'no'} />
         </div>
       </Section>
+      {area.kind!=='crossing'&&<GradingEditor key={area.id} area={area}/>}
       <div className="inspector-actions"><Button icon="duplicate" onClick={() => duplicateSelection()}>Duplica</Button><Button icon="trash" variant="danger" onClick={deleteSelection}>Elimina</Button></div>
     </>
   );
