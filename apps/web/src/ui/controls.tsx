@@ -144,7 +144,7 @@ export function Select<T extends string>({ value, options, onChange, ariaLabel, 
         <ul className="select-list" role="listbox" id={id} aria-label={ariaLabel}>
           {options.map((o, i) => (
             <li key={o.value} role="option" aria-selected={o.value === value} className={`${i === hi ? 'is-hi' : ''} ${o.value === value ? 'is-sel' : ''}`}
-              onMouseEnter={() => setHi(i)} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); choose(i); }}>
+              onMouseEnter={() => setHi(i)} onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); e.stopPropagation(); choose(i); }}>
               <span>{o.label}</span>{o.hint ? <span className="hint">{o.hint}</span> : null}
             </li>
           ))}

@@ -92,6 +92,8 @@ describe('junction lab and signals', () => {
     const [x, y] = a.incompatible[0]!;
     const bad = { ...plan, phases: plan.phases.map((p, i) => (i === 0 ? { ...p, greenGroups: [...new Set([...p.greenGroups, x, y])] } : p)) };
     expect(() => h.commit({ type: 'signal.setPlan', payload: { plan: bad, conflicts: a.incompatible } })).toThrow(OperationRejected);
+    expect(() => h.commit({ type: 'signal.setPlan', payload: { plan: bad, conflicts: [] } })).toThrow(OperationRejected);
+    expect(() => h.commit({ type: 'signal.setPlan', payload: { plan } })).toThrow(OperationRejected);
     // Every group sees green, yellow and red within one cycle.
     for (const g of a.groups) {
       const states = new Set(Array.from({ length: plan.cycleS }, (_, t) => signalState(plan, g.id, t)));

@@ -1,3 +1,4 @@
+import {startProjectSimulation} from '../traffic/startSimulation';
 import { engine } from '../engine/engine';
 import { getProjectClock, useProjectClock } from '../state/projectTime';
 import type { TransitMetrics } from '@drip-urban/core';
@@ -95,6 +96,7 @@ function LineEditor({ sel, upd, onDelete }: { sel: TransitRouteDesign; upd: (p: 
   const m = useMemo(() => lineMetrics(sel, baseline), [sel, baseline]);
   const spec = MODES[sel.mode];
   const {time} = useProjectClock();
+  const [simulationStarting,setSimulationStarting]=useState(false);
   const [runtime,setRuntime]=useState<readonly TransitMetrics[]>(engine.lastSim?.metrics.transit??[]);
   useEffect(()=>engine.onSim(frame=>setRuntime(frame?.metrics.transit??[])),[]);
   const authoredLines=useApp(s=>s.network?.transit);
@@ -126,7 +128,7 @@ function LineEditor({ sel, upd, onDelete }: { sel: TransitRouteDesign; upd: (p: 
       <div className="stats-row"><Stat label="Vett·km/giorno" value={n0(m.vehKmDay)} /><Stat label="Costo esercizio" value={fmtEur(m.costYear)} unit="/anno" prov="estimated" /><Stat label="CO₂ evitata" value={n0(m.co2SavedTYear)} unit="t/anno" prov="estimated" /></div>
       {m.loadFactorPeak > 1 ? <p className="warn-line"><Icon name="warning" size={14} />Domanda stimata oltre la capacità in punta: aumenta la frequenza o la capacità dei veicoli.</p> : null}
       <Field label="Sosta alle fermate"><NumberField ariaLabel="Sosta TPL" value={sel.dwellS??spec.dwellS} min={0} max={600} unit="s" onCommit={dwellS=>upd({dwellS})}/></Field>
-      <Button icon="play" onClick={()=>engine.simStart({mode:'microscopic',day:time.day,hour:time.hour,clock:getProjectClock(),dailyTrips:60000,scale:1,seed:42,scopeName:'Intero comune · TPL operativo'})}>Simula traffico e TPL</Button>
+      <Button icon="play" busy={simulationStarting} onClick={async()=>{setSimulationStarting(true);try{await startProjectSimulation({mode:'microscopic',dailyTrips:60000,seed:42,scopeName:'Intero comune · TPL operativo'});}catch(error){toast.error('Simulazione TPL',String(error));}finally{setSimulationStarting(false);}}}>Simula traffico e TPL</Button>
       {operational && <><div className="stats-row"><Stat label="Mezzi attivi" value={operational.active}/><Stat label="Corse completate" value={operational.completed}/><Stat label="Saliti" value={operational.boarded}/><Stat label="In attesa" value={operational.waiting}/></div><div className="stats-row"><Stat label="Ritardo partenza" value={operational.meanDepartureDelayS.toFixed(1)} unit="s"/><Stat label="Attesa passeggeri" value={operational.passengerWaitS.toFixed(1)} unit="s"/><Stat label="Percorrenza effettiva" value={operational.meanTravelS.toFixed(1)} unit="s"/></div>{operational.issue&&<p role="alert" className="warn-line">{operational.issue}</p>}</>}
       <p className="muted">Esercizio sul tracciato A → B. Domanda alle fermate: ipotesi esplicita in pax/h, zero se non inserita. I mezzi stradali rispettano traffico e semafori; i tracciati su sede propria usano velocità e soste impostate.</p>
       <ol className="steps">{sel.stops.map((s, i) => (

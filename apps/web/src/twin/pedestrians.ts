@@ -16,7 +16,8 @@ function sprite(phase: number): HTMLCanvasElement {
   return canvas;
 }
 export function createPedestrianRenderer(viewer: C.Viewer, ground: (lon: number, lat: number) => number) {
-  const sprites = [0, 1, 2, 3].map(phase => sprite(phase).toDataURL()), collection = viewer.scene.primitives.add(new C.BillboardCollection()) as C.BillboardCollection;
+  const sprites = [0, 1, 2, 3].map(phase => sprite(phase).toDataURL());
+  let collection: C.BillboardCollection | undefined;
   const pool: C.Billboard[] = [];
   const models: { model?: C.Model; pending?: boolean; matrix: C.Matrix4; id: number; visible: boolean; angle: number }[] = [];
   let alive = true;
@@ -46,7 +47,7 @@ export function createPedestrianRenderer(viewer: C.Viewer, ground: (lon: number,
         const lon = data![i * 5]!, lat = data![i * 5 + 1]!, id = data![i * 5 + 3]!;
         const phase = data![i * 5 + 4] || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : Math.floor(seconds * 5 + id) % 4;
         let billboard = pool[i];
-        if (!billboard) { billboard = collection.add({ position: C.Cartesian3.fromDegrees(lon, lat, ground(lon, lat) + 1.1), width: .85, height: 1.7, sizeInMeters: true, verticalOrigin: C.VerticalOrigin.CENTER, distanceDisplayCondition: new C.DistanceDisplayCondition(0, 1400) }); pool.push(billboard); }
+        if (!billboard) { collection ??= viewer.scene.primitives.add(new C.BillboardCollection()) as C.BillboardCollection; billboard = collection.add({ position: C.Cartesian3.fromDegrees(lon, lat, ground(lon, lat) + 1.1), width: .85, height: 1.7, sizeInMeters: true, verticalOrigin: C.VerticalOrigin.CENTER, distanceDisplayCondition: new C.DistanceDisplayCondition(0, 1400) }); pool.push(billboard); }
         billboard.id = {kind:'pedestrian',id};
         billboard.position = C.Cartesian3.fromDegrees(lon, lat, ground(lon, lat) + 1.1); billboard.image = sprites[phase]!; billboard.show = true;
         if (detailed < 32 && C.Cartesian3.distance(viewer.camera.positionWC, billboard.position) < 160) {
@@ -72,7 +73,7 @@ export function createPedestrianRenderer(viewer: C.Viewer, ground: (lon: number,
       for (let i = count; i < pool.length; i++) pool[i]!.show = false;
       if (count) viewer.scene.requestRender();
     },
-    destroy() { alive=false; offCamera(); if (!viewer.isDestroyed()) { viewer.scene.primitives.remove(collection); for(const slot of models) if(slot.model) viewer.scene.primitives.remove(slot.model); } },
+    destroy() { alive=false; offCamera(); if (!viewer.isDestroyed()) { if (collection) viewer.scene.primitives.remove(collection); for(const slot of models) if(slot.model) viewer.scene.primitives.remove(slot.model); } },
   };
   const offCamera = viewer.camera.changed.addEventListener(() => renderer.update(lastSnapshot, lastSeconds));
   return renderer;

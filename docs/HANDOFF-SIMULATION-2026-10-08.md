@@ -274,3 +274,14 @@ Regressione: 153 core e 99 frontend passati. Timeout test building LOD dovuto a 
 Twin: pedoni vicini con modelli procedurali articolati (pool massimo 32), lontani con billboard (budget 500), senza alterare popolazione simulata. QA browser pedoni passata. Matrice dawn/noon/sunset/blue-hour/night/rain/heavy-rain passata; screenshot ispezionati. Preset solari calcolati per origine, data e fuso; notte e intensità pioggia corrette.
 
 La regressione ordinaria da 56 casi è in esecuzione: sono emersi errori Navigator (locator ambiguo), ricerca (nome accessibile obsoleto), grading (attesa indiscriminata di primitive), sottoservizi (rapporto assente, causa ancora da isolare). Nessuna certificazione finale per questa patch: correggere e ripetere prima dello stress cumulativo.
+
+
+### Ripresa 11 ottobre — regressioni e integrazione
+
+Repository ripreso dal checkpoint 7b3e835, senza reset o commit automatici. La suite precedente ha registrato sette fallimenti. Ripetizione mirata dopo correzioni: 8/9 passati, ultimo caso presentazione passato nella verifica isolata successiva insieme a nuovo test lifecycle baseline. Il controllo di proprietà camera viene ora caricato prima del playback; la ripetizione integrata resta in corso, non si attribuisce un difetto applicativo non riprodotto.
+
+Cause corrette: Select dentro label riattivava il trigger per azione predefinita; annullata tale azione. BillboardCollection pedoni creata solo al primo agente, eliminando primitive vuote mai ready. Reload baseline mantiene il worker comunale indipendente e la stessa cronologia nativa, inclusa redo; test unitario ed E2E passati. Rapporto utility ricalcolato se la rete cambia durante import marciapiedi, senza risultati obsoleti. Screenshot clash e grading Twin ispezionati.
+
+Integrazione successiva: renderer degli agenti posseduto dalla mappa anziché dal pannello Traffico, con view bounds e cleanup propri. Avvii TPL e scene live tramite startProjectSimulation condiviso. Aggiornamento live scollega il listener dalla vecchia mappa e usa intervallo limitato effettivo; archivio usa il fuso progetto. Test browser integrati in corso.
+
+Validazione signal.setPlan ora rifiuta payload incompleti con Issue e confronta anche conflitti derivati dalla geometria, evitando bypass con matrice vuota. Suite core completa:157 passati. Typecheck passato. Stato master ancora attivo.

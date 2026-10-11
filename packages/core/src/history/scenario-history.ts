@@ -26,7 +26,7 @@ export class ScenarioReadOnly extends Error {
  */
 export class ScenarioHistory {
   private scenarioValue: Scenario;
-  private readonly baseline: CityBaseline;
+  private baseline: CityBaseline;
   private readonly replayer = new NetworkReplayer();
   private redoStack: Operation[] = [];
   private result: ReplayResult;
@@ -41,6 +41,13 @@ export class ScenarioHistory {
     this.baseline = baseline;
     this.scenarioValue = scenario;
     this.result = this.replayer.derive(baseline, scenario.operations);
+  }
+
+  /** Replay on refreshed existing geometry while retaining authored operations and redo. */
+  rebaseBaseline(baseline: CityBaseline): void {
+    const result = this.replayer.derive(baseline, this.scenarioValue.operations);
+    this.baseline = baseline;
+    this.result = result;
   }
 
   get scenario(): Scenario { return this.scenarioValue; }

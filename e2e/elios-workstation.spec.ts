@@ -20,6 +20,9 @@ test('agent tools use native clock, weather, presentation and municipal solver',
   expect(state.environment.weather).toBe('rain');
   await expect(page.getByLabel('Ora progetto',{exact:true})).toHaveValue('13:00');
   await expect.poll(()=>page.evaluate(async()=>{const p='/src/elios/tools.ts';return (await (await import(p)).toolByName('control_simulation').run({action:'inspect'})).metrics?.t??0;})).toBeGreaterThan(1);
+  await expect.poll(()=>page.evaluate(async()=>(await (window as any).__dripMap.getMap().getSource('vehicles').getData()).features?.length??0)).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'Analizza',exact:true}).click();
+  await expect.poll(()=>page.evaluate(async()=>(await (window as any).__dripMap.getMap().getSource('vehicles').getData()).features?.length??0)).toBeGreaterThan(0);
   const metrics=await page.evaluate(async()=>{const p='/src/elios/tools.ts';return (await import(p)).toolByName('control_simulation').run({action:'pause'});});
   expect(metrics.paused).toBe(true);
   expect(metrics.pedestrians.demandPerHour).toBe(7200);

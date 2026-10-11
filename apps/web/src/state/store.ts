@@ -141,7 +141,7 @@ export async function openProject(pid: string, preserveSimulation = false): Prom
 /**
  * The existing state changed on the server (e.g. sidewalks imported): reloads only the city baseline and
  * replays the scenario in memory on it. Mode, tool, panel, selection and any edit made meanwhile are kept;
- * only the undo stack restarts, because its entries were recorded on the previous baseline.
+ * operation history and redo are retained and replayed on the refreshed baseline.
  */
 export async function reloadBaseline(): Promise<void> {
   const { project: current } = get();
@@ -151,9 +151,11 @@ export async function reloadBaseline(): Promise<void> {
   const baseline = await api.get<CityBaseline>(`/api/projects/${encodeURIComponent(project.id)}/baseline?rev=${project.baselineRevision ?? 0}${area}`);
   const now = get();
   if (now.project?.id !== project.id || !now.scenario) return; // closed or switched meanwhile
-  await engine.init(baseline);
-  const sc = get().scenario!;
-  const history = new ScenarioHistory(baseline, sc, get().user?.name ?? 'Utente locale', () => newId('op'));
+  await engine.init(baseline, true);
+  const latest = get();
+  if (latest.project?.id !== project.id || latest.scenario?.id !== now.scenario.id || !latest.history) return;
+  const history = latest.history;
+  history.rebaseBaseline(baseline);
   const sel = get().selection;
   set({ project, baseline, history });
   syncFromHistory();

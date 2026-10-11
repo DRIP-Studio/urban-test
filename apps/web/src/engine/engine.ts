@@ -13,6 +13,7 @@ export class Engine {
   simPaused = false;
   simSeeking: { elapsedS: number; targetS: number } | null = null;
   playbackSpeed = 4;
+  simRenderBudget = 2000;
   simPerformance = { tickMs: 0, latencyMs: 0, solverHz: 0, renderingMs: 0 };
   private worker: Worker;
   private simulationWorker: Worker;
@@ -139,7 +140,7 @@ export class Engine {
   simPause(paused: boolean): void { this.simPaused = paused; this.send({ type: 'sim', cmd: paused ? 'pause' : 'resume' }); }
   simSpeed(speed: number): void { this.playbackSpeed = speed; this.send({ type: 'sim', cmd: 'speed', speed }); }
   simSeek(elapsedS: number): void { this.simPaused = true; this.simSeeking = { elapsedS: 0, targetS: elapsedS }; this.send({ type: 'simSeek', elapsedS }); }
-  simView(view: SimView): void { this.send({ type: 'simView', view }); }
+  simView(view: SimView): void { this.simRenderBudget=view.budget; this.send({ type: 'simView', view }); }
   simFocus(bounds?: readonly [number, number, number, number]): void { this.send({ type: 'simFocus', bounds }); }
   simTrack(vehicleId?: number): void { this.send({ type: 'simTrack', vehicleId }); }
 

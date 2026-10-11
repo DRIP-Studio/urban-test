@@ -1,3 +1,4 @@
+import {installMapSimulation} from './simulation';
 import {drawWorks} from './works';
 import {drawUtilities} from './utilities';
 import { getProjectTime, useProjectTime } from '../state/projectTime';
@@ -108,6 +109,7 @@ export function MapView() {
       boxZoom: false, doubleClickZoom: false, dragRotate: true, pitchWithRotate: true, canvasContextAttributes: { antialias: true },
     });
     setMapInstance(map);
+    const offSimulation=installMapSimulation(map);
     installImageLoader(map, catalogs.materials.items, () => useApp.getState().catalogs?.furniture.items ?? []);
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
@@ -289,7 +291,7 @@ export function MapView() {
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(el.current);
     return () => {
-      offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); offClock(); clearInterval(vmsTimer); offLive();
+      offSimulation(); offPhys(); offApp(); offUi(); offWms(); ro.disconnect(); offClock(); clearInterval(vmsTimer); offLive();
       canvas.removeEventListener('wheel', onWheel, { capture: true });
       useMapUi.setState({ ready: false });
       setMapInstance(null);

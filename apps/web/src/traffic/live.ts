@@ -1,11 +1,11 @@
-import {windowActive,type TimeWindow,type TrafficState,type TrafficObservation,type TrafficSourceMode,type Asset,type LngLat} from '@drip-urban/core';
-import {getProjectTime} from '../state/projectTime';
+import {projectLocalTime,windowActive,type TimeWindow,type TrafficState,type TrafficObservation,type TrafficSourceMode,type Asset,type LngLat} from '@drip-urban/core';
+import {getProjectClock,getProjectTime} from '../state/projectTime';
 import {engine} from '../engine/engine';
 import {create} from 'zustand';
 import {VMS_CHARS,vmsPages} from '../map/ledPanels';
 import {api} from '../api/client';
 import {fc,type Feature} from '../engine/geojson';
-import {getMap,setSource,toggleLayer} from '../map/mapStore';
+import {getMap,setSource,toggleLayer,useMapUi} from '../map/mapStore';
 import {commit,useApp} from '../state/store';
 
 export interface LiveState {
@@ -55,8 +55,8 @@ export async function refreshLive(opts:{archive?:boolean}={}):Promise<LiveState>
   await refreshTrafficState();toggleLayer('traffic',true);toggleLayer('incidents',true);
   if(opts.archive!==false&&r.status==='ok'&&liveFreshness()==='fresh'&&r.features.length){
    const valid=r.features.map(ratio).filter(Number.isFinite),doc=await api.get<TrafficDoc|null>(`/api/projects/${project.id}/docs/traffic`)??{};if(request!==generation||useApp.getState().project?.id!==project.id)return useLive.getState();
-   const at=r.capturedAt!,date=new Date(at),saved=observations(useLive.getState()).filter(o=>o.speedKmh!==null).map(o=>({...o,source:'historical' as const}));
-   const old=(doc.observations??[]).filter(o=>o.capturedAt!==at),captures=[...(doc.captures??[]).filter(c=>c.at!==at),{at,day:(date.getDay()+6)%7,hour:date.getHours(),meanRatio:valid.reduce((a,b)=>a+b,0)/Math.max(1,valid.length),segments:valid.length}].slice(-2000);
+   const at=r.capturedAt!,time=projectLocalTime({...getProjectClock(),anchor:at},0),saved=observations(useLive.getState()).filter(o=>o.speedKmh!==null).map(o=>({...o,source:'historical' as const}));
+   const old=(doc.observations??[]).filter(o=>o.capturedAt!==at),captures=[...(doc.captures??[]).filter(c=>c.at!==at),{at,day:time.day,hour:time.minutes/60,meanRatio:valid.reduce((a,b)=>a+b,0)/Math.max(1,valid.length),segments:valid.length}].slice(-2000);
    await api.put(`/api/projects/${project.id}/docs/traffic`,{...doc,captures,observations:[...old,...saved].slice(-20000)});
   }
  }catch(error){if(request===generation){useLive.setState({status:'error',message:error instanceof Error?error.message:String(error),flow:[],incidents:[]});await refreshTrafficState();}}
@@ -64,7 +64,22 @@ export async function refreshLive(opts:{archive?:boolean}={}):Promise<LiveState>
 }
 export async function loadTrafficHistory(at?:string){const pid=useApp.getState().project?.id;if(!pid)return[];const doc=await api.get<TrafficDoc|null>(`/api/projects/${pid}/docs/traffic`);if(useApp.getState().project?.id!==pid)return[];const all=doc?.observations??[],times=[...new Set(all.map(o=>o.capturedAt).filter((t):t is string=>!!t))].sort(),selected=at??times.at(-1)??null;useLive.setState({history:all.filter(o=>o.capturedAt===selected),historyAt:selected});await refreshTrafficState();return times;}
 const onMove=()=>{clearTimeout(moveTimer);moveTimer=window.setTimeout(()=>void refreshLive({archive:false}),1500);};
-export function setLiveAuto(on:boolean,intervalMin=useLive.getState().intervalMin){clearInterval(timer);getMap()?.off('moveend',onMove);useLive.setState({auto:on,intervalMin:Math.max(1,Math.min(30,intervalMin))});if(!on)return;timer=window.setInterval(()=>{if(!document.hidden)void refreshLive();},intervalMin*60000);getMap()?.on('moveend',onMove);void refreshLive();}
+let observedMap:ReturnType<typeof getMap>=null;
+function bindLiveMap(){
+ const next=useLive.getState().auto&&useMapUi.getState().ready?getMap():null;
+ if(next===observedMap)return;
+ observedMap?.off('moveend',onMove);clearTimeout(moveTimer);observedMap=next;
+ observedMap?.on('moveend',onMove);
+}
+useMapUi.subscribe((state,previous)=>{if(state.ready!==previous.ready)bindLiveMap();});
+export function setLiveAuto(on:boolean,intervalMin=useLive.getState().intervalMin){
+ clearInterval(timer);clearTimeout(moveTimer);
+ const minutes=Math.max(1,Math.min(30,Number.isFinite(intervalMin)?intervalMin:3));
+ useLive.setState({auto:on,intervalMin:minutes});bindLiveMap();
+ if(!on)return;
+ timer=window.setInterval(()=>{if(!document.hidden)void refreshLive();},minutes*60000);
+ void refreshLive();
+}
 export function stopLive(){setLiveAuto(false);clearTimeout(moveTimer);setSource('incidents',null);}
 useApp.subscribe((state,previous)=>{
  if(state.project?.id!==previous.project?.id){generation++;calculation++;stopLive();useLive.setState({status:'idle',flow:[],incidents:[],traffic:null,history:[],historyAt:null,busy:false,computing:false,capturedAt:null,retrievedAt:undefined,lastSuccess:undefined,message:undefined});}

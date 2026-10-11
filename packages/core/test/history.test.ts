@@ -119,3 +119,19 @@ describe('LocalFrame', () => {
     expect(bearingDeg([14.27, 40.94], [14.271, 40.94])).toBeCloseTo(90, 6);
   });
 });
+
+ it('baseline refresh retains native edits and redo while updating existing geometry', () => {
+  const h = new ScenarioHistory(baseline, scenario(), 'tester', ids);
+  h.commit({type:'road.update',payload:{roadId:'r1',changes:{speedKmh:30}}});
+  h.commit({type:'road.update',payload:{roadId:'r1',changes:{name:'Future name'}}});
+  h.undo();
+  const operations=h.scenario.operations;
+  h.rebaseBaseline({...baseline,roads:{r1:{...baseline.roads.r1!,name:'Updated existing name'}}});
+  expect(h.scenario.operations).toBe(operations);
+  expect(h.network.roads.r1!.speedKmh).toBe(30);
+  expect(h.network.roads.r1!.name).toBe('Updated existing name');
+  expect(h.canRedo).toBe(true);
+  h.redo();expect(h.network.roads.r1!.name).toBe('Future name');
+  h.undo();h.undo();expect(h.network.roads.r1!.speedKmh).toBe(50);
+  expect(h.network.roads.r1!.name).toBe('Updated existing name');
+ });

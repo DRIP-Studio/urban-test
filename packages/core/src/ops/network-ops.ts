@@ -7,7 +7,7 @@ import { add, dist, lengthOf, mul, project, slice, sub, type V } from '../geo/po
 import type {
   ApproachControl, Area, JunctionSpec, LngLat, Network, Oneway, Road, RoadNode, Roundabout, SignalPlan, TurnKind, Zone,
 } from '../model/types';
-import { analyzeJunction, planIssues, rescalePlan } from '../analysis/junction';
+import { analyzeSignalJunction, analyzeJunction, planIssues, rescalePlan } from '../analysis/junction';
 import { defineOperation, operationSpec, type Issue } from './registry';
 import { makeLanes } from './road-factory';
 import { extractRoundabout, insertRoundabout, planRoundabout } from './roundabout-insert';
@@ -409,6 +409,18 @@ export const signalPlanSet = defineOperation<SignalPlanSetPayload>({
   label: (p) => `Piano semaforico ${p.plan.name}`,
   validate(net, p) {
     const issues: Issue[] = [];
+    if (!p?.plan || !Array.isArray(p.plan.phases) || !Array.isArray(p.conflicts) ||
+      p.conflicts.some(pair => !Array.isArray(pair) || pair.length !== 2 || pair.some(id => typeof id !== 'string')) ||
+      p.plan.phases.some(ph => !ph || !Array.isArray(ph.greenGroups) || !Array.isArray(ph.pedestrianRoadIds))) {
+      return [err('signal.payload', 'Piano, fasi e matrice dei conflitti validi sono richiesti')];
+    }
+    const node = net.nodes[p.plan.nodeId];
+    if (node) {
+      const actual = analyzeSignalJunction(net, node.at, p.plan);
+      if (actual) for (const issue of planIssues(p.plan, actual)) {
+        if (issue.kind === 'conflict') issues.push(err('signal.conflict', issue.message));
+      }
+    }
     if (p.plan.programmes?.length) {
       if (new Set(p.plan.programmes.map((v) => v.id)).size !== p.plan.programmes.length) issues.push(err('signal.programme.id', 'Identificativi programmi duplicati'));
       for (const programme of p.plan.programmes) {

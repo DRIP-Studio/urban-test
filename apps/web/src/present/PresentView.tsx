@@ -1,3 +1,4 @@
+import {startProjectSimulation} from '../traffic/startSimulation';
 import {presentationHtml,presentationImageSources} from './interactiveExport';
 import {SceneGraphics,SceneGraphicsEditor,type GraphicDataset} from './SceneGraphics';
 import {useProjectClock,getProjectClock,getProjectTime,configureProjectClock} from '../state/projectTime';
@@ -76,12 +77,12 @@ export function PresentView() {
   };
   const scenes = doc.scenes ?? [];
   const civic = !!doc.civic;
-  const go = (i: number) => {
+  const go = async (i: number) => {
     const s = scenes[i];
     if (!s) return;
     setActive(i);
     if(s.clock)configureProjectClock(s.clock);
-    if(s.liveSimulation){const time=getProjectTime();engine.simStart({...s.liveSimulation,day:time.day,hour:time.hour,clock:getProjectClock(),scale:1,scopeName:'Scena live · comune'});}
+    if(s.liveSimulation){try{await startProjectSimulation({...s.liveSimulation,scopeName:'Scena live · comune'});}catch(error){toast.error('Simulazione della scena',String(error));return;}}
     if (s.twin) { setPendingTwinCamera(s.twin);if(s.path){setPendingCameraPath({points:s.path,durationS:s.durationS??12,caption:s.text,annotations:s.annotations??[],graphics:s.graphics});useTwinUi.setState({cameraMode:'cinematic',following:false});}setMode('twin'); return; }
     if (s.camera) setGoto({ ...s.camera });
   };

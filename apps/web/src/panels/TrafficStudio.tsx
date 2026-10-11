@@ -9,8 +9,6 @@ import { flyTo, getMap, setSource, toggleLayer } from '../map/mapStore';
 import { optimizeAllSignals, type OptimizeSummary } from '../traffic/signals';
 import { drawLive, refreshLive, refreshTrafficState, trafficSourceMode, liveFreshness, setLiveAuto, useLive, vmsMessage } from '../traffic/live';
 import { Icon } from '../ui/Icon';
-import { vehiclesFC } from '../map/sources';
-import type { GeoJSONSource } from 'maplibre-gl';
 import { commit, select, setTool, useApp } from '../state/store';
 import { toast } from '../state/toasts';
 import { Button, Empty, Field, NumberField, ProvBadge, Section, Segmented, Select, Slider, Stat, Toggle, FieldGroup } from '../ui/controls';
@@ -256,27 +254,13 @@ function Simulation() {
     return () => cancelAnimationFrame(raf);
   }, []);
   useEffect(() => {
-    toggleLayer('vehicles', true);
-    const off = engine.onSim((f) => {
-      if (!f) { last.current = 0; setSource('vehicles', null); setSource('pedestrians', null); drawLive(); setFrame(null); setRunning(false); setPaused(false); return; }
+    return engine.onSim((f) => {
+      if (!f) { last.current=0; setFrame(null); setRunning(false); setPaused(false); return; }
       setRunning(true);
-      const pedestrians = f.pedestrians?.data ?? new Float32Array();
-      setSource('pedestrians', fc(Array.from({length:pedestrians.length/5},(_,i):Feature=>({type:'Feature',geometry:{type:'Point',coordinates:[pedestrians[i*5]!,pedestrians[i*5+1]!]},properties:{id:pedestrians[i*5+3],waiting:pedestrians[i*5+4]}}))));
-      const now = performance.now();
-      const source = getMap()?.getSource('vehicles') as GeoJSONSource | undefined;
-      const drawing = baseline && source ? source.setData(vehiclesFC(f, baseline.origin, (getMap()?.getZoom() ?? 0) >= 18 ? 32 : 0) as never) : undefined;
-      if (trafficSourceMode() === 'simulated' && f.aggregates?.length) {
-        const net = useApp.getState().network;
-        setSource('traffic', fc(f.aggregates.flatMap((a): Feature[] => {
-          const road = net?.roads[a.roadId];
-          return road ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates: road.axis.map((p) => [...p]) }, properties: { id: a.roadId, ratio: a.speedKmh / Math.max(1, road.speedKmh), vol: a.vehicles, source: 'hybrid_simulation' } }] : [];
-        })));
-      } else if (trafficSourceMode() === 'simulated') setSource('traffic', null);
-      if (last.current === 0 || f.metrics.t === 0 || now - last.current > 400) { setFrame(f); last.current = now; }
-      return drawing;
+      const now=performance.now();
+      if(last.current===0||f.metrics.t===0||now-last.current>400){setFrame(f);last.current=now;}
     });
-    return () => { off(); setSource('vehicles', null); };
-  }, [baseline]);
+  }, []);
   useEffect(() => {
     const update = () => {
       const bounds = viewBbox();

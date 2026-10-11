@@ -1,5 +1,5 @@
 import {useUtilityFocus} from '../state/utilityFocus';
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {LocalFrame,geom,sampleTerrain,utilityGeometry,utilityMetrics,UTILITY_COLORS,type UtilitySystem,type UtilityNode,type UtilityLink,type detectUtilityClashes} from '@drip-urban/core';
 import {toast} from '../state/toasts';
 import {engine} from '../engine/engine';
@@ -14,8 +14,18 @@ export function UtilitiesSheet(){
  const [system,setSystem]=useState<UtilitySystem>('electricity'),[depth,setDepth]=useState(1.2),[diameter,setDiameter]=useState(100),[clearance,setClearance]=useState(.3),[selectedNode,setSelectedNode]=useState(''),[selectedLink,setSelectedLink]=useState(''),[from,setFrom]=useState(''),[to,setTo]=useState(''),[busy,setBusy]=useState(false),[cover,setCover]=useState(.5),[foundationDepth,setFoundationDepth]=useState(2),[report,setReport]=useState<ReturnType<typeof detectUtilityClashes>|null>(null);
  const focus=useUtilityFocus();
  useEffect(()=>{if(focus.kind==='node')setSelectedNode(focus.id);else if(focus.kind==='link')setSelectedLink(focus.id);},[focus]);
- const revision=useRef(net);revision.current=net;
- useEffect(()=>setReport(null),[net,grid,cover,foundationDepth]);
+ const [requested,setRequested]=useState(0);
+ useEffect(()=>{
+  setReport(null);
+  if(!requested||!net)return;
+  let active=true;
+  setBusy(true);
+  void engine.job<ReturnType<typeof detectUtilityClashes>>('utilityClashes',{terrain:grid,foundationDepthM:foundationDepth,roadCoverM:cover})
+   .then(result=>{if(active)setReport(result);})
+   .catch(error=>{if(active)toast.error('Clash detection',String(error));})
+   .finally(()=>{if(active)setBusy(false);});
+  return()=>{active=false;};
+ },[requested,net,grid,cover,foundationDepth]);
  const metrics=useMemo(()=>net&&baseline?utilityMetrics(net,baseline.origin):[],[net,baseline]);
  if(!net||!baseline)return null;
  const frame=new LocalFrame(baseline.origin),nodes=Object.values(net.utilityNodes??{}),node=net.utilityNodes?.[selectedNode],link=net.utilityLinks?.[selectedLink],road=selection?.kind==='road'?net.roads[selection.ids[0]!]:undefined;
@@ -24,7 +34,7 @@ export function UtilitiesSheet(){
  const createAlongRoad=()=>{if(!road)return;const elevations=road.axis.map(at=>grid?sampleTerrain(grid,at[0],at[1]):NaN),absolute=elevations.every(Number.isFinite),id=newId('ul'),aId=newId('un'),bId=newId('un'),a:UtilityNode={id:aId,name:`${system} A`,system,kind:'chamber',at:road.axis[0]!,elevationM:(absolute?elevations[0]!:0)-depth,datum:absolute?'orthometric':'relative'},b:UtilityNode={...a,id:bId,name:`${system} B`,at:road.axis.at(-1)!,elevationM:(absolute?elevations.at(-1)!:0)-depth},pipe:UtilityLink={id,name:road.name||id,from:aId,to:bId,diameterMm:diameter,clearanceM:clearance,material:'Da specificare',path:road.axis.slice(1,-1).map((at,i)=>({at,elevationM:(absolute?elevations[i+1]!:0)-depth}))};
   if(commit('batch',{label:'Sottoservizio lungo asse selezionato',ops:[{type:'utility.node',payload:{node:a}},{type:'utility.node',payload:{node:b}},{type:'utility.link',payload:{link:pipe}}]}).ok)setSelectedLink(id);
  };
- const check=async()=>{setBusy(true);setReport(null);try{const source=revision.current;const result=await engine.job<ReturnType<typeof detectUtilityClashes>>('utilityClashes',{terrain:grid,foundationDepthM:foundationDepth,roadCoverM:cover});if(revision.current===source)setReport(result);else toast.error('Rete modificata','Ripeti il controllo sul progetto aggiornato.');}catch(e){toast.error('Clash detection',String(e));}finally{setBusy(false);}};
+ const check=()=>setRequested(value=>value+1);
  const metric=metrics.find(m=>m.id===link?.id);
  return <>
  <Section title="Rete estensibile"><div className="grid-2"><Select ariaLabel="Sistema sottoservizi" value={system} options={SYSTEMS} onChange={setSystem}/><Field label="Profondità rispetto DTM"><NumberField ariaLabel="Profondità sottoservizi" value={depth} unit="m" min={0} max={30} onCommit={setDepth}/></Field><Field label="Diametro"><NumberField ariaLabel="Diametro nuovo sottoservizio" value={diameter} unit="mm" min={10} max={5000} onCommit={setDiameter}/></Field><Field label="Franco"><NumberField ariaLabel="Franco nuovo sottoservizio" value={clearance} unit="m" min={0} max={20} onCommit={setClearance}/></Field></div>
